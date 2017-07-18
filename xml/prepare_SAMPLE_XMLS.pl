@@ -39,11 +39,12 @@ my %p=(
 );
 
 ## the table that is loaded are key value pairs
-my ($table)=@ARGV;
+my ($table,$outdir)=@ARGV;
 
-die "no sample table provided" unless($table and -e $table);
+die "no sample table provided" unless($table && -e $table);
 my %samples=load_sample_attributes($table);
 
+die "cannot find output dire" unless($outdir && -d $outdir);
 
 ### load the registered samples, this will be a resource to look for reuse of aliases
 my @recs=`cat EGA_Samples.txt`;chomp @recs;
@@ -62,7 +63,7 @@ for my $sid(sort keys %samples){
 	print "generating xml for $sid\n";
 	
 	my $xml=sample_xml($sid,$samples{$sid},\%p);
-	my $fn="XML/${sid}.xml";
+	my $fn="$outdir/${sid}.xml";
 	(open my $XML,">",$fn) || die "unable to open sample xml";
 	print $XML $xml->toString(1);
 	close $XML;
