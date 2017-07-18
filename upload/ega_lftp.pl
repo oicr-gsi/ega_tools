@@ -36,6 +36,7 @@ GetOptions(
 	"next=s"		=> \$opts{next},
 	"help" 			=> \$opts{help},
 	"keys"			=> \$opts{keys},          ### comma separated list of public encryption keys
+	"xfer"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca			
 );
 %opts=validate_options(%opts);
 
@@ -76,7 +77,7 @@ print STDERR "Preparing upload script under $workdir\n";
 
 my $script_upload="$workdir/upload.sh";
 (open my $UP,">",$script_upload) || die "unable to open $script_upload";
-print $UP "ssh xfer.hpc.oicr.on.ca \"lftp -u $opts{box},$opts{pw} -e \\\"set ftp:ssl-allow false; mput $workdir/$fn.gpg $workdir/$fn*.md5 -O $opts{boxpath}; bye;\\\" ftp://ftp-private.ebi.ac.uk\"";
+print $UP "ssh $opts{xfer} \"lftp -u $opts{box},$opts{pw} -e \\\"set ftp:ssl-allow false; mput $workdir/$fn.gpg $workdir/$fn*.md5 -O $opts{boxpath}; bye;\\\" ftp://ftp-private.ebi.ac.uk\"";
 close $UP;
 
 
@@ -138,6 +139,8 @@ sub validate_options{
 	}else{
 		$opts{next}="True";
 	}
+	
+    $opts{xfer}="xfer.sftp.oicr.on.ca" unless($opts{xfer});   ## set the default
 
 	return %opts;
 
@@ -155,6 +158,7 @@ sub usage{
 	print "\t--delete. True/False.  Should encrypted data be deleted after upload?  Default = True\n";
 	print "\t--next. True/False.  Should the next file be processed once this one has completed.  Default = True.\n";
 	print "\t--keys. String. A comma separated list of public gpg encryption keys..\n";
+	print "\t--xfer. String.  The oicr xfer system to use for data upload.  Default : xfer.sftp.oicr.on.ca";
 	print "\t--help displays this usage message.\n";
 
 	die "\n@_\n\n";
