@@ -51,7 +51,7 @@ usage("$workdir already exists.  Upload of this file has completed.") if(-d $wor
 mkdir $workdir;
 
 print STDERR "Moving $file to $workdir for processing\n";
-`mv to_upload/$file $workdir/$fn`;
+`mv $opts{qdir}/$file $workdir/$fn`;
 
 print STDERR "Preparing process script under $workdir\n";
 
