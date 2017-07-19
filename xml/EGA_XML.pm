@@ -3,7 +3,7 @@ use warnings;
 use Data::Dumper;
 
 
-use lib "/u/lheisler/PERL/lib/perl5/x86_64-linux";
+#use lib "/u/lheisler/PERL/lib/perl5/x86_64-linux";
 use XML::LibXML;
 #use XML::Simple;
 use File::Basename;
@@ -18,11 +18,25 @@ $VERSION        =       1.00;
 
 
 sub init_parameters{
+
 	my %p;
 	$p{xml}={
 		xmlns		=> "http://www.w3.org/2001/XMLSchema-instance",
 		xsi			=> "ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd",
 	};
+
+	$p{sample}={
+		taxon_id		=> 9606,
+		scientific_name	=> "homo sapiens",
+		common_name		=> "human",
+	},
+	
+	$p{study}={
+		center_name		=>	"OICR",
+		run_center		=>	"OICR",
+		broker_name		=> 	"EGA",
+	},	
+
 	return %p;
 }
 

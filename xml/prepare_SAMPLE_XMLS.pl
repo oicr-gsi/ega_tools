@@ -73,7 +73,7 @@ for my $sid(sort keys %samples){
 		print $XML $xml->toString(1);
 		close $XML;
 	
-		if($opts{merge}){
+		if($opts{merge_xml}){
 			my $xmlstring=$xml->toString(1);
 			my @lines=split /\n/,$xmlstring;
 			shift @lines;
@@ -85,6 +85,8 @@ for my $sid(sort keys %samples){
 	
 	
 }
+
+
 
 
 if($opts{merge_xml}){

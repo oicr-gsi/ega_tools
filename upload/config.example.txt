@@ -1,0 +1,9 @@
+qdir:/path/to/queue/dir
+wdir:/path/to/work/dir
+box:ega-box-XX
+pw:XXXXXX
+boxpath:/path/on/egabox
+keys:EGA_Public_key,SeqProdBio
+next:True
+delete:True
+xfer:xfer.res.oicr.on.ca
