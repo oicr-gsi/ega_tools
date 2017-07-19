@@ -27,17 +27,18 @@ use Getopt::Long;
 my %opts = ();
 GetOptions(
 	"config=s" 		=> \$opts{configfile},   ### configuration file where options are stored
-	"qdir=s" 	=> \$opts{qdir},         ### folder with links to files that need encryption/upload
-	"wdir=s" 	=> \$opts{wdir},         ### folder where work should be done, usually in scratch
+	"qdir=s" 		=> \$opts{qdir},         ### folder with links to files that need encryption/upload
+	"wdir=s" 		=> \$opts{wdir},         ### folder where work should be done, usually in scratch
 	"box=s" 		=> \$opts{box},  
-	"pw=s" 		=> \$opts{pw},
-	"boxpath=s"	=> \$opts{boxpath},  
+	"pw=s" 			=> \$opts{pw},
+	"boxpath=s"		=> \$opts{boxpath},  
 	"delete=s"		=> \$opts{delete},
 	"next=s"		=> \$opts{next},
 	"help" 			=> \$opts{help},
 	"keys"			=> \$opts{keys},          ### comma separated list of public encryption keys
 	"xfer"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca			
 	"xfer_method"   => \$opts{xfer_method},   ### lftp or aspera
+	"aspera_pw"		=> \$opts{aspera_pw},
 );
 %opts=validate_options(%opts);
 
@@ -82,8 +83,8 @@ my $script_upload="$workdir/upload.sh";
 
 if($opts{xfer_method} eq "lftp"){
 	print $UP "ssh $opts{xfer} \"lftp -u $opts{box},$opts{pw} -e \\\"set ftp:ssl-allow false; mput $workdir/$fn.gpg $workdir/$fn*.md5 -O $opts{boxpath}; bye;\\\" ftp://ftp-private.ebi.ac.uk\"";
-}elsif($opts{$xfer_method} eq "aspera"){
-	print $UP "ssh $opts{xfer} \"export ASPERA_SCP_PASS=$PASS;".
+}elsif($opts{xfer_method} eq "aspera"){
+	print $UP "ssh $opts{xfer} \"export ASPERA_SCP_PASS=$opts{aspera_pw};".
 	          "~/.aspera/connect/bin/ascp -QT -l300M -L- -k2 $workdir/$fn*.md5 $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};".
 	          "~/.aspera/connect/bin/ascp -QT -l300M -L- -k2 $workdir/$fn.gpg $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};\"";
 }	
