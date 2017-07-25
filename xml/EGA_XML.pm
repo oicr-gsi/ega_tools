@@ -295,17 +295,18 @@ sub experiment_xml{
 ### 1. reference to a hash describing the bam file
 ### 2. reference to a hash describing the readgroups
 sub analysis_bam_xml{
-	my($bamid,$baminfo)=@_;
+	my($bamfile,$baminfo)=@_;
+	
 	
 	my $XML=XML::LibXML::Document->new('1.0','utf-8');
 	my $ANALYSIS=$XML->createElement("ANALYSIS");
 	
 	
 	### INFORMATION ABOUT THE STUDY CENTRE AND SUBMISSION
-	$ANALYSIS->setAttribute(alias        	=>$bamid);
+	$ANALYSIS->setAttribute(alias        	=>$$baminfo{file}{alias});
 	$ANALYSIS->setAttribute(center_name  	=>$$baminfo{study}{center_name});
 	$ANALYSIS->setAttribute(broker_name  	=>$$baminfo{study}{broker_name});
-	$ANALYSIS->setAttribute(analysis_center =>$$baminfo{study}{analysis_center});
+	$ANALYSIS->setAttribute(analysis_center =>$$baminfo{analysis}{center});
 	#$ANALYSIS->setAttribute(analysis_date	=>$samples{$id}{$samp}{analysis_date});
 	
 	
@@ -324,8 +325,10 @@ sub analysis_bam_xml{
 	$STUDY_REF->setAttribute(refcenter=>$$baminfo{study}{center_name});
 	$ANALYSIS->appendChild($STUDY_REF);
 	
+	
+	
 	### for each sample in teh readgroups information
-	my $EGAN=$$baminfo{sample}{accession} || "noacc";
+	my $EGAN=$$baminfo{file}{sample} || "noacc";
 	my $SAMPLE_REF=$XML->createElement("SAMPLE_REF");
 	#$SAMPLE_REF->setAttribute(accession=>$EGAS);      ### accession is only available if previousl generated
 	$SAMPLE_REF->setAttribute(accession=>$EGAN);
@@ -355,10 +358,10 @@ sub analysis_bam_xml{
 
 	my $FILES=$XML->createElement("FILES");
 	my $FILE=$XML->createElement("FILE");
-	$FILE->setAttribute(filename=>$$baminfo{file}{stage_path} . "/". $$baminfo{file}{encrypted_bam});
+	$FILE->setAttribute(filename=>$$baminfo{file}{stage_path} . "/". $$baminfo{file}{encrypted_file});
 	$FILE->setAttribute(filetype=>"bam");
 	$FILE->setAttribute(checksum_method=>"MD5");
-	$FILE->setAttribute(checksum=>$$baminfo{file}{encrypted_bam_md5});
+	$FILE->setAttribute(checksum=>$$baminfo{file}{encrypted_md5});
 	$FILE->setAttribute(unencrypted_checksum=>$$baminfo{file}{md5});
 	$FILES->appendChild($FILE);
 	$ANALYSIS->appendChild($FILES);
