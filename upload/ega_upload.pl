@@ -70,7 +70,7 @@ print $QSUB "qsub -cwd -b y -N ega.$fn.rmgpg   -hold_jid ega.$fn.upload   \"rm $
 
 if($opts{next} eq "True"){
 	#### need to run the same command, is there way of echoing this in the program
-	print $QSUB "qsub -cwd -b y  -N ega.$fn.startnext -hold_jid ega.$fn.upload  \"sleep 5m;cd $pwd;$commandline\"\n";
+	print $QSUB "qsub -cwd -b y  -N ega.$fn.startnext -hold_jid ega.$fn.upload  \"sleep 5m;cd $pwd;./$commandline\"\n";
 }
 close $QSUB;
 
@@ -156,7 +156,7 @@ sub validate_options{
 		$opts{next}="True";
 	}
 	
-    $opts{xfer}="xfer.sftp.oicr.on.ca" unless($opts{xfer});   ## set the default
+    	$opts{xfer}="xfer.res.oicr.on.ca" unless($opts{xfer});   ## set the default
 	$opts{xfer_method}="lftp" unless($opts{xfer_method});
 
 	return %opts;
