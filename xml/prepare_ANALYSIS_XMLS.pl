@@ -232,7 +232,11 @@ if($opts{submission_xml}){
 	print $SUB '	<SUBMISSION alias="'.$opts{submission_alias} .'" center_name="' .$p{study}{center_name} . '" broker_name="' . $p{study}{broker_name} . '">' . "\n";
 	print $SUB '		<ACTIONS>' . "\n";
 	print $SUB '			<ACTION>' . "\n";
-	print $SUB '				<ADD source="' . $opts{merge_xml} . '" schema="analysis"/>' . "\n";
+
+	### submission xml should contain only the name of the merge file, NOT the full path
+	my $merge_xml=basename($opts{merge_xml});
+
+	print $SUB '				<ADD source="' . $merge_xml . '" schema="analysis"/>' . "\n";
 	print $SUB '			</ACTION>' . "\n";
 	print $SUB '			<ACTION>' . "\n";
 	print $SUB '				<PROTECT/>' . "\n";
