@@ -273,9 +273,11 @@ sub validate_options{
 	if(! $opts{out} || ! -d $opts{out}){
 		usage("Directory to save XML output not indicated or not found.");
 	}
-	if($opts{merge_xml} && $opts{merge_xml}!~/xml$/){
-		usage("merge file should have and xml extension");
+	if($opts{merge_xml}){
+		$opts{merge_xml}=basename($opts{merge_xml});
+		usage("merge file should have and xml extension") if($opts{merge_xml}!~/xml$/);
 	}
+	
 	
 	if($opts{submission_xml} && $opts{submission_xml}!~/xml$/){
 		usage("submission xml file should have and xml extension");
