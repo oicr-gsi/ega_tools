@@ -197,6 +197,102 @@ sub sample_xml{
 }
 
 sub experiment_xml{
+	my ($alias,$p)=@_;    ### the alias and a hash with information
+
+
+	#print Dumper($p);<STDIN>;
+	
+
+	###  EXPERIMENT XML 
+	my $XML=XML::LibXML::Document->new('1.0','utf-8');
+	
+	my $EXPERIMENT=$XML->createElement("EXPERIMENT");
+	$EXPERIMENT->setAttribute(alias        =>$alias);
+	$EXPERIMENT->setAttribute(center_name  =>$$p{study}{center_name});
+
+	### ADD TITLE IF AVAILABLE
+	if($$p{experiment}{title}){
+		my $TITLE=$XML->createElement("TITLE");
+		$TITLE->appendTextNode($$p{experiment}{title});
+		$EXPERIMENT->appendChild($TITLE);
+	}
+		
+	## REQUIRED	
+	my $STUDY_REF=$XML->createElement("STUDY_REF");
+	$STUDY_REF->setAttribute(accession => $$p{experiment}{study_id});
+	$EXPERIMENT->appendChild($STUDY_REF);
+	
+	
+	## DESIGN SECTION
+	my $DESIGN=$XML->createElement("DESIGN");
+	
+	## MANDATORY
+	my $DESIGN_DESCRIPTION=$XML->createElement("DESIGN_DESCRIPTION");
+	$DESIGN_DESCRIPTION->appendTextNode($$p{experiment}{description});
+	$DESIGN->appendChild($DESIGN_DESCRIPTION);
+	
+	## REQUIRED, must reference a sample used for the experiment/library prep
+	my $SAMPLE_DESCRIPTOR=$XML->createElement("SAMPLE_DESCRIPTOR");
+	$SAMPLE_DESCRIPTOR->setAttribute(accession=>$$p{experiment}{EGAN});
+	$DESIGN->appendChild($SAMPLE_DESCRIPTOR);
+	
+	my $LIBRARY_DESCRIPTOR=$XML->createElement("LIBRARY_DESCRIPTOR");
+	my $LIBRARY_NAME=$XML->createElement("LIBRARY_NAME");
+	$LIBRARY_NAME->appendTextNode($$p{experiment}{lib});
+	$LIBRARY_DESCRIPTOR->appendChild($LIBRARY_NAME);
+
+	
+	if($$p{experiment}{lib_strategy}){
+		my $LIBRARY_STRATEGY=$XML->createElement("LIBRARY_STRATEGY");
+		$LIBRARY_STRATEGY->appendTextNode($$p{experiment}{lib_strategy});
+		$LIBRARY_DESCRIPTOR->appendChild($LIBRARY_STRATEGY);
+	}
+	
+	if($$p{experiment}{lib_source}){
+		my $LIBRARY_SOURCE=$XML->createElement("LIBRARY_SOURCE");
+		$LIBRARY_SOURCE->appendTextNode($$p{experiment}{lib_source});
+		$LIBRARY_DESCRIPTOR->appendChild($LIBRARY_SOURCE);
+	}
+	
+	## REQUIRED
+	if($$p{experiment}{lib_selection}){
+		my $LIBRARY_SELECTION=$XML->createElement("LIBRARY_SELECTION");
+		$LIBRARY_SELECTION->appendTextNode($$p{experiment}{lib_selection});
+		$LIBRARY_DESCRIPTOR->appendChild($LIBRARY_SELECTION);
+	}
+	
+	### REQUIRED
+	if(my $length=$$p{experiment}{insertsize}){
+		my $LIBRARY_LAYOUT=$XML->createElement("LIBRARY_LAYOUT");
+		my $PAIRED=$XML->createElement("PAIRED");
+		$PAIRED->setAttribute(NOMINAL_LENGTH=>$length);
+		$LIBRARY_LAYOUT->appendChild($PAIRED);
+		$LIBRARY_DESCRIPTOR->appendChild($LIBRARY_LAYOUT);
+	}
+			
+			
+	$DESIGN->appendChild($LIBRARY_DESCRIPTOR);
+    $EXPERIMENT->appendChild($DESIGN);
+
+    my $PLATFORM=$XML->createElement("PLATFORM");
+    my $PLATFORM_NAME=$XML->createElement("ILLUMINA");
+
+    my $INSTRUMENT_MODEL=$XML->createElement("INSTRUMENT_MODEL");
+    $INSTRUMENT_MODEL->appendTextNode($$p{experiment}{instrument_model});
+	$PLATFORM_NAME->appendChild($INSTRUMENT_MODEL);
+    $PLATFORM->appendChild($PLATFORM_NAME);
+    		
+			
+	$EXPERIMENT->appendChild($PLATFORM);
+	$XML->setDocumentElement($EXPERIMENT);
+
+	
+	return($XML);
+}
+
+
+
+sub experiment_xml_older{
 	my ($EGAN,$lib,$alias,$p)=@_;
 
 	###  EXPERIMENT XML 
