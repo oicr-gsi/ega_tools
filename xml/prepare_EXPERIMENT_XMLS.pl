@@ -94,7 +94,7 @@ if($opts{merge_xml}){
 	for my $sid(sort keys %xmlmerge){
 		print $MERGE $xmlmerge{$sid} . "\n";
 	}
-	print $MERGE '</ANALYSIS_SET>' . "\n";
+	print $MERGE '</EXPERIMENT_SET>' . "\n";
 	close $MERGE;
 }
 
