@@ -305,7 +305,7 @@ sub validate_options{
 sub usage{
 	print "\nprepare_SAMPLE_XMLS.pl [options]\n";
 	print "Options are as follows:\n";
-	print "\t--file_table String/filename. Required. A file with a table describing files to be uploaded\n";  
+	print "\t--file_table String/filename. Required. A file with a table describing files that have been uploaded and are ready to register\n";  
 	print "\t\tTable header must include : 'sample (EGAN accession or registered Alias), alias (for the analysis object),file,md5,encrypteed_file,encrypted_md5\n";  
 	print "\t--file_type String/filename. Required.  Either bam or vcf\n";
 	print "\t--analysis String/filename. Required. A file with a table describing analysis parameters.  Key:value pairs\n";  

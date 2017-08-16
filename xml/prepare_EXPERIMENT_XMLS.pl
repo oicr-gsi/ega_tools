@@ -51,7 +51,7 @@ $p{experiment}={
 	study_id=>$opts{study_id},	
 };
 
-for my $key(qw/lib_strategy lib_source lib_selection intsrument_model description/){
+for my $key(qw/lib_strategy lib_source lib_selection instrument_model description/){
 	$p{experiment}{$key}=$opts{$key} || 0;
 }
 
@@ -137,7 +137,7 @@ sub load_experiment_table{
 	#### validate the table, ensure that the right columns are present
 	
 	my %headings;map{$headings{$_}++}@headings;
-	for my $key(qw/EGAN alias insertsize lib/){
+	for my $key(qw/sample alias insertsize lib/){
 		usage("experiment table must include column $key") unless($headings{$key});
 	}
 	for my $key(qw/description lib_strategy lib_source lib_selection instrument_model/){

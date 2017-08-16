@@ -40,7 +40,53 @@ sub init_parameters{
 	return %p;
 }
 
-sub run_xml{
+sub run_xml_fastq{
+	my($alias,$p)=@_;
+	### validate components of $p
+
+	my $XML=XML::LibXML::Document->new('1.0','utf-8');
+
+	my $RUN=$XML->createElement("RUN");
+	$RUN->setAttribute(alias        =>$alias);
+	$RUN->setAttribute(center_name  =>$$p{study}{center_name});
+	$RUN->setAttribute(run_center   =>$$p{study}{run_center});
+	$RUN->setAttribute(run_date     =>$$p{run}{rundate});
+
+	my $EXPERIMENT_REF=$XML->createElement("EXPERIMENT_REF");
+	$EXPERIMENT_REF->setAttribute(accession=>$$p{run}{egax});
+	$RUN->appendChild($EXPERIMENT_REF);
+				
+	my $FILES=$XML->createElement("FILES");
+	my $fc=0;
+	
+	for my $R(qw/R1 R2/){
+		my $FILE=$XML->createElement("FILE");
+      	$FILE->setAttribute(filename             =>$$p{run}{stage_path}."/".$$p{run}{$R}{gpg});  ### indicate an encrypted file
+      	$FILE->setAttribute(filetype             =>"Illumina_native_fastq");
+      	$FILE->setAttribute(checksum_method      =>"MD5");
+      	$FILE->setAttribute(checksum             =>$$p{run}{$R}{md5_encrypted});
+      	$FILE->setAttribute(unencrypted_checksum =>$$p{run}{$R}{md5_unencrypted});
+        
+		$FILES->appendChild($FILE);
+  			
+		$fc++;
+	}
+    			
+	#print "no files for run $alias\n" unless($fc);
+	### DO NOT ADD THIS BLOCK UNLESS THERE ARE FILES
+	next unless($fc);
+				
+	my $DATA_BLOCK=$XML->createElement("DATA_BLOCK");
+   	$DATA_BLOCK->appendChild($FILES);
+    $RUN->appendChild($DATA_BLOCK);
+    $XML->setDocumentElement($RUN);
+	return($XML);
+}
+
+
+
+
+sub run_xml_older{
 	my($alias,$p)=@_;
 	### validate components of $p
 
@@ -233,7 +279,7 @@ sub experiment_xml{
 	
 	## REQUIRED, must reference a sample used for the experiment/library prep
 	my $SAMPLE_DESCRIPTOR=$XML->createElement("SAMPLE_DESCRIPTOR");
-	$SAMPLE_DESCRIPTOR->setAttribute(accession=>$$p{experiment}{EGAN});
+	$SAMPLE_DESCRIPTOR->setAttribute(accession=>$$p{experiment}{sample});
 	$DESIGN->appendChild($SAMPLE_DESCRIPTOR);
 	
 	my $LIBRARY_DESCRIPTOR=$XML->createElement("LIBRARY_DESCRIPTOR");
