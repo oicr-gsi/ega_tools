@@ -44,32 +44,47 @@ sub run_xml_fastq{
 	my($alias,$p)=@_;
 	### validate components of $p
 
+	#print Dumper($p);<STDIN>;
+
 	my $XML=XML::LibXML::Document->new('1.0','utf-8');
 
 	my $RUN=$XML->createElement("RUN");
 	$RUN->setAttribute(alias        =>$alias);
 	$RUN->setAttribute(center_name  =>$$p{study}{center_name});
-	$RUN->setAttribute(run_center   =>$$p{study}{run_center});
-	$RUN->setAttribute(run_date     =>$$p{run}{rundate});
+	$RUN->setAttribute(run_center   =>$$p{run}{run_center});
+	
+	
+	### run date has to be in this format 2013-06-11T00:00:00
+	## provided in this format YYMMDD
+	my($YY,$MM,$DD)=$$p{run}{run_date}=~/(\d\d)(\d\d)(\d\d)/;
+	my $run_date="20$YY-$MM-$DD" . "T00:00:00";
+	$RUN->setAttribute(run_date     =>$run_date);
 
 	my $EXPERIMENT_REF=$XML->createElement("EXPERIMENT_REF");
-	$EXPERIMENT_REF->setAttribute(accession=>$$p{run}{egax});
+	if($$p{run}{EGAX}){
+		$EXPERIMENT_REF->setAttribute(accession=>$$p{run}{EGAX});
+	}else{
+		die "EGAX not supplied, need to handle experiment alias";
+	}
 	$RUN->appendChild($EXPERIMENT_REF);
 				
 	my $FILES=$XML->createElement("FILES");
 	my $fc=0;
 	
+	
 	for my $R(qw/R1 R2/){
-		my $FILE=$XML->createElement("FILE");
-      	$FILE->setAttribute(filename             =>$$p{run}{stage_path}."/".$$p{run}{$R}{gpg});  ### indicate an encrypted file
-      	$FILE->setAttribute(filetype             =>"Illumina_native_fastq");
-      	$FILE->setAttribute(checksum_method      =>"MD5");
-      	$FILE->setAttribute(checksum             =>$$p{run}{$R}{md5_encrypted});
-      	$FILE->setAttribute(unencrypted_checksum =>$$p{run}{$R}{md5_unencrypted});
+		if($$p{run}{$R}){
+			my $FILE=$XML->createElement("FILE");
+      		$FILE->setAttribute(filename             =>$$p{run}{stage_path}."/".$$p{run}{$R}{encrypted_file});  ### indicate an encrypted file
+      		$FILE->setAttribute(filetype             =>"Illumina_native_fastq");
+      		$FILE->setAttribute(checksum_method      =>"MD5");
+      		$FILE->setAttribute(checksum             =>$$p{run}{$R}{encrypted_md5});
+      		$FILE->setAttribute(unencrypted_checksum =>$$p{run}{$R}{md5});
         
-		$FILES->appendChild($FILE);
+			$FILES->appendChild($FILE);
   			
-		$fc++;
+			$fc++;
+		}	
 	}
     			
 	#print "no files for run $alias\n" unless($fc);
