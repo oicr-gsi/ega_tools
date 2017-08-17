@@ -44,7 +44,7 @@ sub run_xml_fastq{
 	my($alias,$p)=@_;
 	### validate components of $p
 
-	#print Dumper($p);<STDIN>;
+	print Dumper($p);<STDIN>;
 
 	my $XML=XML::LibXML::Document->new('1.0','utf-8');
 
