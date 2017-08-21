@@ -34,6 +34,7 @@ GetOptions(
 %opts=validate_options(%opts);
 
 $p{study}{center_name}=$opts{study_center} if($opts{study_center});
+$p{run}{run_center}=$opts{run_center} if($opts{run_center});
 $p{run}{stage_path}=$opts{stage_path};
 
 
