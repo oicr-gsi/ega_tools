@@ -33,12 +33,12 @@ GetOptions(
 
 %opts=validate_options(%opts);
 
+
 $p{study}{center_name}=$opts{study_center} if($opts{study_center});
 $p{run}{run_center}=$opts{run_center} if($opts{run_center});
 $p{run}{stage_path}=$opts{stage_path};
 
-
-my %runs=load_run_table($opts{file_table});
+my %runs=load_run_table($opts{file_table},\%p);
 
 
 
@@ -103,7 +103,10 @@ sub load_run_table{
 	for my $key(@req_keys){
 			usage("experiment table must include column $key") unless($headings{$key});
 	}
+	
+	
 	for my $key(qw/run_center/){
+
 		usage("sample table must include the column $key if not provided as a global argument") unless($headings{$key} || $$p{run}{$key});
 	}
 	### check that required headings are available
@@ -228,8 +231,8 @@ sub usage{
 	print "Options are as follows:\n";
 	print "\t--file_table String/filename. Required. A file with a table describing files that have been uploaded and are ready to register\n";  
 	print "\t\tTable header must include : \n";
-	print "\t\tfastq : 'experiment (EGAX accession or registered Alias), alias (for the run object),run_date,readid (R1/R2), file,md5,encrypted_file,encrypted_md5\n";  
-	print "\t\tbam : 'experiment (EGAX accession or registered Alias), alias (for the run object),run_date,file,md5,encrypted_file,encrypted_md5\n";  
+	print "\t\tfastq : 'experiment (EGAX accession or registered Alias), alias (for the run object),run_date (YYMMDD),readid (R1/R2), file,md5,encrypted_file,encrypted_md5\n";  
+	print "\t\tbam : 'experiment (EGAX accession or registered Alias), alias (for the run object),run_date (YYMMDD),file,md5,encrypted_file,encrypted_md5\n";  
 	
 	print "\t--file_type String/filename. Required.  Either fastq or bam\n";
 	print "\t--stage_path String. Required.  Path on the staging server where files have been uploaded\n";  
