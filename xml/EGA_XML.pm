@@ -43,9 +43,7 @@ sub init_parameters{
 sub run_xml_fastq{
 	my($alias,$p)=@_;
 	### validate components of $p
-
-	#print Dumper($p);<STDIN>;
-
+	
 	my $XML=XML::LibXML::Document->new('1.0','utf-8');
 
 	my $RUN=$XML->createElement("RUN");
@@ -95,6 +93,10 @@ sub run_xml_fastq{
    	$DATA_BLOCK->appendChild($FILES);
     $RUN->appendChild($DATA_BLOCK);
     $XML->setDocumentElement($RUN);
+	
+	
+	
+	
 	return($XML);
 }
 

@@ -34,6 +34,7 @@ GetOptions(
 %opts=validate_options(%opts);
 
 
+
 $p{study}{center_name}=$opts{study_center} if($opts{study_center});
 $p{run}{run_center}=$opts{run_center} if($opts{run_center});
 $p{run}{stage_path}=$opts{stage_path};
@@ -41,21 +42,23 @@ $p{run}{stage_path}=$opts{stage_path};
 my %runs=load_run_table($opts{file_table},\%p);
 
 
-
 my %xmlmerge;
 for my $alias(sort keys %runs){
 	
 	print "$alias\n";
+	
 	my %p2=%p;
 	map{$p2{run}{$_}=$runs{$alias}{$_}} keys %{$runs{$alias}};
 	
-	
-	$p2{run}{EGAX}=$p2{run}{experiment} if($p2{run}{experiment}=~/EGAX/);
 	
 	my $xml;
 	if($opts{file_type} eq "fastq"){
 		$xml=run_xml_fastq($alias,\%p2);
 	}
+	
+	
+		
+	
 	(open my $XML,">","$opts{out}/${alias}.xml") || die "unable to open run xml";
 	print $XML $xml->toString(1);
 	close $XML;
@@ -123,12 +126,9 @@ sub load_run_table{
 
 		if($opts{file_type} eq "fastq"){
 			my $readid=$h{readid};
-			
-			
-			
 			### rais an error if the alias ifnormation does not match
 			map{
-				if($table{$alias}{$_}){
+				if($h{$_} && $table{$alias}{$_}){  ### the key is in the loaded has, and alredy in the table
 					usage("inconsistent values for $_ in file table for alias $alias") unless($table{$alias}{$_} eq $h{$_});
 				}else{
 					$table{$alias}{$_}=$h{$_};
@@ -136,6 +136,14 @@ sub load_run_table{
 			} qw/experiment run_center run_date/;
 			
 			map{$table{$alias}{$readid}{$_}=$h{$_}} qw/file md5 encrypted_file encrypted_md5/;
+			
+			
+			### if run_center is undefined, use the global vlue
+			$table{$alias}{run_center}=$$p{run}{run_center} unless($h{run_center});
+			
+			$table{$alias}{EGAX}=$table{$alias}{experiment};
+			
+			
 		}else{
 			### not paired data, therefore bam?
 
