@@ -90,9 +90,10 @@ sub dataset_xml{
 	$dataset->appendChild($datasettype);
 
 	for my $acc(@accessions){
-		my $analysis_ref	= $xml->createElement("ANALYSIS_REF");
-		$analysis_ref->setAttribute(accession=>$acc);
-		$dataset->appendChild($analysis_ref);
+		my $obj_type=$acc=~/EGAR/ ? "RUN_REF" : $acc=~/EGAX/ ? "ANALYSIS_REF" : "UNKNOWN";
+		my $obj_ref	= $xml->createElement($obj_type);
+		$obj_ref->setAttribute(accession=>$acc);
+		$dataset->appendChild($obj_ref);
 	}
 	my $policy_ref		= $xml->createElement("POLICY_REF");
 	$policy_ref->setAttribute(refname=>$$p{policy}{acc});
