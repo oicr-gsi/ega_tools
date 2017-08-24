@@ -96,7 +96,7 @@ sub dataset_xml{
 		$dataset->appendChild($obj_ref);
 	}
 	my $policy_ref		= $xml->createElement("POLICY_REF");
-	$policy_ref->setAttribute(refname=>$$p{policy}{acc});
+	$policy_ref->setAttribute(accession=>$$p{policy}{acc});
 	$policy_ref->setAttribute(refcenter=>$$p{policy}{center});
 	$dataset->appendChild($policy_ref);
 
