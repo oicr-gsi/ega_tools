@@ -108,6 +108,7 @@ if($p{prep}{xfer_method} eq "lftp"){
 }
 
 print STDERR "uploading files\n";
+print STDERR "$upload_cmd\n";
 $rv=`$upload_cmd`;
 print STDERR "rv=$rv\n";
 
@@ -216,9 +217,9 @@ sub validate_options{
 	$param{run}{run_center}=$opts{run_center} || "OICR";
 
 	
-    $param{prep}{xfer}="xfer.res.oicr.on.ca" unless($opts{xfer});   ## set the default
-	$param{prep}{xfer_method}="lftp" unless($opts{xfer_method});
-
+    $param{prep}{xfer}=$opts{xfer} || "xfer.res.oicr.on.ca";
+	$param{prep}{xfer_method}=$opts{xfer_method} || "lftp";
+	
 	return %param;
 
 }
