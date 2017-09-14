@@ -445,6 +445,120 @@ sub experiment_xml_older{
 }
 
 
+sub analysis_xml{
+	my($file,$info,$type)=@_;
+	
+	
+	my $XML=XML::LibXML::Document->new('1.0','utf-8');
+	my $ANALYSIS=$XML->createElement("ANALYSIS");
+	
+	
+	### INFORMATION ABOUT THE STUDY CENTRE AND SUBMISSION
+	$ANALYSIS->setAttribute(alias        	=>$$info{file}{alias});
+	$ANALYSIS->setAttribute(center_name  	=>$$info{study}{center_name});
+	$ANALYSIS->setAttribute(broker_name  	=>$$info{study}{broker_name});
+	$ANALYSIS->setAttribute(analysis_center =>$$info{analysis}{center});
+	#$ANALYSIS->setAttribute(analysis_date	=>$samples{$id}{$samp}{analysis_date});
+	
+	
+	### INFORMATION ABOUT THE ANALYSIS
+	my $TITLE=$XML->createElement("TITLE");
+	$TITLE->appendTextNode($$info{analysis}{title});
+	$ANALYSIS->appendChild($TITLE);
+	
+	my $DESCRIPTION=$XML->createElement("DESCRIPTION");
+	$DESCRIPTION->appendTextNode($$info{analysis}{description});
+	$ANALYSIS->appendChild($DESCRIPTION);
+	
+	### INFORMATION ABOUT THE STUDY
+	my $STUDY_REF=$XML->createElement("STUDY_REF");
+	$STUDY_REF->setAttribute(accession=>$$info{study}{study_id});
+	$STUDY_REF->setAttribute(refcenter=>$$info{study}{center_name});
+	$ANALYSIS->appendChild($STUDY_REF);
+	
+	
+	
+	### for each sample in teh readgroups information
+	my $EGAN=$$info{file}{sample} || "noacc";
+	my $SAMPLE_REF=$XML->createElement("SAMPLE_REF");
+	#$SAMPLE_REF->setAttribute(accession=>$EGAS);      ### accession is only available if previousl generated
+	$SAMPLE_REF->setAttribute(accession=>$EGAN);
+	$SAMPLE_REF->setAttribute(refcenter=>$$info{study}{center_name});
+	$ANALYSIS->appendChild($SAMPLE_REF);
+		
+	
+	my $ANALYSIS_TYPE=$XML->createElement("ANALYSIS_TYPE");
+	
+	my $analysis_type=$type eq "bam" ? "REFERENCE_ALIGNMENT" : $type eq "vcf" ? "SEQUENCE_VARIATION" : "UNKNOWN";
+	
+	my $ATYPE=$XML->createElement("$analysis_type");
+	my $ASSEMBLY=$XML->createElement("ASSEMBLY");
+	my $STANDARD=$XML->createElement("STANDARD");
+	$STANDARD->setAttribute(refname=>$$info{analysis}{ref}{name});
+	$STANDARD->setAttribute(accession=>$$info{analysis}{ref}{accession});
+	$ASSEMBLY->appendChild($STANDARD);
+	$ATYPE->appendChild($ASSEMBLY);
+
+	for my $seqid(sort keys %{$$info{analysis}{ref}{chromosomes}}){
+		my $acc=$$info{analysis}{ref}{chromosomes}{$seqid};
+		my $SEQUENCE=$XML->createElement("SEQUENCE");
+		$SEQUENCE->setAttribute(accession=>$acc);
+		$SEQUENCE->setAttribute(label=>$seqid);
+		$ATYPE->appendChild($SEQUENCE);
+	}
+	
+	$ANALYSIS_TYPE->appendChild($ATYPE);
+	$ANALYSIS->appendChild($ANALYSIS_TYPE);
+
+	my $FILES=$XML->createElement("FILES");
+	my $FILE=$XML->createElement("FILE");
+	$FILE->setAttribute(filename=>$$info{file}{stage_path} . "/". $$info{file}{encrypted_file});
+	$FILE->setAttribute(filetype=>$type);
+	$FILE->setAttribute(checksum_method=>"MD5");
+	$FILE->setAttribute(checksum=>$$info{file}{encrypted_md5});
+	$FILE->setAttribute(unencrypted_checksum=>$$info{file}{md5});
+	$FILES->appendChild($FILE);
+	$ANALYSIS->appendChild($FILES);
+
+	my $ANALYSIS_ATTRIBUTES=$XML->createElement("ANALYSIS_ATTRIBUTES");
+	for my $key(sort keys %{$$info{analysis}{attributes}}){
+		my $val=$$info{analysis}{attributes}{$key};
+		my $ANALYSIS_ATTRIBUTE=$XML->createElement("ANALYSIS_ATTRIBUTE");
+		my $TAG=$XML->createElement("TAG");
+		$TAG->appendTextNode($key);
+		$ANALYSIS_ATTRIBUTE->appendChild($TAG);
+		my $VALUE=$XML->createElement("VALUE");
+		$VALUE->appendTextNode($val);
+		$ANALYSIS_ATTRIBUTE->appendChild($VALUE);
+		$ANALYSIS_ATTRIBUTES->appendChild($ANALYSIS_ATTRIBUTE);
+	}
+	
+	### add in an analysis attribute indicating which sample it was co processed with
+#	my $ANALYSIS_ATTRIBUTE=$XML->createElement("ANALYSIS_ATTRIBUTE");
+#	my $TAG=$XML->createElement("TAG");
+#	$TAG->appendTextNode("GATK preprocessed with");
+#	$ANALYSIS_ATTRIBUTE->appendChild($TAG);
+	
+#	my $co_sid;
+#	if($bamid=~/F1/){
+#		($co_sid=$bamid)=~s/F1/B1/;
+#	}else{
+#		my ($co)=$bamid=~/_(.*)/;
+#		($co_sid=$bamid)=~s/B1/$co/;
+#	}
+#
+#	my $VALUE=$XML->createElement("VALUE");
+#	$VALUE->appendTextNode($co_sid);
+#	$ANALYSIS_ATTRIBUTE->appendChild($VALUE);
+#	$ANALYSIS_ATTRIBUTES->appendChild($ANALYSIS_ATTRIBUTE);
+	
+	$ANALYSIS->appendChild($ANALYSIS_ATTRIBUTES);
+	$XML->setDocumentElement($ANALYSIS);
+	
+	return($XML);
+}
+
+
 #### THIS IS DESIGNED AROUND BRCA, needs to be generalized
 
 ### analysis XML for a bam file

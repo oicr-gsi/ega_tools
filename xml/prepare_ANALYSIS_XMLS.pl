@@ -174,12 +174,13 @@ for my $file(sort keys %analysis_files){
 #	}
 	my $xml;
 		
+	$xml=analysis_xml($file,\%info,$opts{file_type});
 	
-	if($opts{file_type} eq "bam"){
-		$xml=analysis_bam_xml($file,\%info);
-	}elsif($opts{file_type} eq "vcf"){
-		$xml=analysis_vcf_xml($file,\%info);
-	}
+	#if($opts{file_type} eq "bam"){
+	#	$xml=analysis_bam_xml($file,\%info);
+	#}elsif($opts{file_type} eq "vcf"){
+	#	$xml=analysis_vcf_xml($file,\%info);
+	#}
 	
 	my $xmlfile=$opts{out} . "/" . "$file.xml";
 	(open my $XML,">",$xmlfile) || die "unable to open xml file $xmlfile";
