@@ -11,19 +11,22 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 import pymysql
+import sys
 
 # This script is used to pull metadata from the EGA API and store it into a database 
-# usage: python EGAMetDataToDB.py 
+# usage: python EGAMetDataToDB.py UserName MyPassWord DbHost DbName DbUser DbPasswd
+
+# get arguments from command line
+UserName = sys.argv[1]
+MyPassWord = sys.argv[2]
+DbHost = sys.argv[3]
+DbName = sys.argv[4]
+DbUser = sys.argv[5]
+DbPasswd = sys.argv[6]
+
 
 ### 1) set up credentials
 URL = "https://ega.crg.eu/submitterportal/v1"
-
-DbName = '****'
-UserName = "****"
-MyPassWord = "****"
-DbHost = '****'
-DbUser = '****'
-DbPasswd = "****"
 
 ### 2) Functions used in this script
 
