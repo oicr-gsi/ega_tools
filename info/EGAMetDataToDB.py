@@ -12,21 +12,51 @@ import time
 import xml.etree.ElementTree as ET
 import pymysql
 import sys
+import getopt
+
 
 # This script is used to pull metadata from the EGA API and store it into a database 
-# usage: python EGAMetDataToDB.py UserName MyPassWord DbHost DbName DbUser DbPasswd
-
-# get arguments from command line
-UserName = sys.argv[1]
-MyPassWord = sys.argv[2]
-DbHost = sys.argv[3]
-DbName = sys.argv[4]
-DbUser = sys.argv[5]
-DbPasswd = sys.argv[6]
-
+# usage: python EGAMetDataToDB.py [-h|--Help] --UserName --MyPassWord --DbHost --DbName --DbUser --DbPasswd
 
 ### 1) set up credentials
 URL = "https://ega.crg.eu/submitterportal/v1"
+
+longopts = ['Help', 'UserName=', 'MyPassWord=', 'DbHost=', 'DbName=', 'DbUser=', 'DbPasswd=']
+def Usage():
+    print("""
+    usage: EGAMetDataToDB.py [--Help|--UserName|--MyPassWord|--DbHost|--DbName|--DbUser|--DbPasswd]
+    -h, --Help: help
+    --UserName: ega user name
+    --MyPassword: ega password
+    --DbHost: database server host
+    --DbName: database name
+    --DbUser: database user name
+    --DbPaasswd: database password
+    """)
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:], 'h', longopts)
+except getopt.GetoptError:
+    Usage()
+    sys.exit(2)
+else:
+    for opt, val in opts:
+        if opt in ('-h', '--Help'):
+            Usage()
+            sys.exit(2)
+        elif opt == '--UserName':
+            UserName = val
+        elif opt == '--MyPassWord':
+            MyPassWord = val
+        elif opt == '--DbHost':
+            DbHost = val
+        elif opt == '--DbName':
+            DbName = val
+        elif opt == '--DbUser':
+            DbUser = val
+        elif opt == '--DbPasswd':
+            DbPasswd = val
+   
 
 ### 2) Functions used in this script
 
@@ -258,6 +288,7 @@ DatasetToAnalysis = RetrieveObjectRef(DataSetInfo, './DATASET/ANALYSIS_REF', Mat
 
 print('extracted metadata of interest')
 
+
 ### 7) connect to database
 
 #reorder fields so that primary key is first
@@ -341,7 +372,7 @@ print('Inserted data into all tables')
 # close connection
 conn.close()
 
-  
+ 
 ### 8) log out
 LogOutCmd = "curl -X DELETE -H \"X-Token: " + Token + "\" " + URL + "/logout"
 logout = subprocess.call(LogOutCmd, shell=True)
