@@ -16,26 +16,20 @@ import getopt
 
 
 # This script is used to pull metadata from the EGA API and store it into a database 
-# usage: python EGAMetDataToDB.py [-h|--Help] --UserName --MyPassWord --DbHost --DbName --DbUser --DbPasswd
+# usage: python EGAMetDataToDB.py [-h|--Help] -c|--Credentials
 
 ### 1) set up credentials
 URL = "https://ega.crg.eu/submitterportal/v1"
 
-longopts = ['Help', 'UserName=', 'MyPassWord=', 'DbHost=', 'DbName=', 'DbUser=', 'DbPasswd=']
 def Usage():
     print("""
-    usage: EGAMetDataToDB.py [--Help|--UserName|--MyPassWord|--DbHost|--DbName|--DbUser|--DbPasswd]
+    usage: EGAMetDataToDB.py [-h|--Help|-c|--Credentials]
     -h, --Help: help
-    --UserName: ega user name
-    --MyPassword: ega password
-    --DbHost: database server host
-    --DbName: database name
-    --DbUser: database user name
-    --DbPaasswd: database password
+    -c, --Credentials: file with database credentials
     """)
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], 'h', longopts)
+    opts, args = getopt.getopt(sys.argv[1:], 'hc:', ['Help', 'Credentials='])
 except getopt.GetoptError:
     Usage()
     sys.exit(2)
@@ -44,19 +38,22 @@ else:
         if opt in ('-h', '--Help'):
             Usage()
             sys.exit(2)
-        elif opt == '--UserName':
-            UserName = val
-        elif opt == '--MyPassWord':
-            MyPassWord = val
-        elif opt == '--DbHost':
-            DbHost = val
-        elif opt == '--DbName':
-            DbName = val
-        elif opt == '--DbUser':
-            DbUser = val
-        elif opt == '--DbPasswd':
-            DbPasswd = val
-   
+        elif opt in ('-c', '--Credentials'):
+            CredentialFile = val
+
+# open the dot file, and retrieve the credentials
+Credentials = {}            
+infile = open(CredentialFile)            
+for line in infile:
+    if line.rstrip() != '':
+        line = line.rstrip().split('=')
+        Credentials[line[0]] = line[1]
+infile.close()        
+
+# extract credential values
+UserName, MyPassWord = Credentials['UserName'], Credentials['MyPassWord']
+DbHost, DbName = Credentials['DbHost'], Credentials['DbName']
+DbUser, DbPasswd = Credentials['DbUser'], Credentials['DbPasswd']
 
 ### 2) Functions used in this script
 
