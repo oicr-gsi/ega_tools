@@ -11,19 +11,49 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 import pymysql
+import sys
+import getopt
+
 
 # This script is used to pull metadata from the EGA API and store it into a database 
-# usage: python EGAMetDataToDB.py 
+# usage: python EGAMetDataToDB.py [-h|--Help] -c|--Credentials
 
 ### 1) set up credentials
 URL = "https://ega.crg.eu/submitterportal/v1"
 
-DbName = '****'
-UserName = "****"
-MyPassWord = "****"
-DbHost = '****'
-DbUser = '****'
-DbPasswd = "****"
+def Usage():
+    print("""
+    usage: EGAMetDataToDB.py [-h|--Help|-c|--Credentials]
+    -h, --Help: help
+    -c, --Credentials: file with database credentials
+    """)
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:], 'hc:', ['Help', 'Credentials='])
+except getopt.GetoptError:
+    Usage()
+    sys.exit(2)
+else:
+    for opt, val in opts:
+        if opt in ('-h', '--Help'):
+            Usage()
+            sys.exit(2)
+        elif opt in ('-c', '--Credentials'):
+            CredentialFile = val
+
+# open the dot file, and retrieve the credentials
+Credentials = {}            
+infile = open(CredentialFile)            
+for line in infile:
+    if line.rstrip() != '':
+        line = line.rstrip().split('=')
+        Credentials[line[0]] = line[1]
+infile.close()        
+
+# extract credential values
+UserName, MyPassWord = Credentials['UserName'], Credentials['MyPassWord']
+DbHost, DbName = Credentials['DbHost'], Credentials['DbName']
+DbUser, DbPasswd = Credentials['DbUser'], Credentials['DbPasswd']
 
 ### 2) Functions used in this script
 
@@ -255,6 +285,7 @@ DatasetToAnalysis = RetrieveObjectRef(DataSetInfo, './DATASET/ANALYSIS_REF', Mat
 
 print('extracted metadata of interest')
 
+
 ### 7) connect to database
 
 #reorder fields so that primary key is first
@@ -338,7 +369,7 @@ print('Inserted data into all tables')
 # close connection
 conn.close()
 
-  
+ 
 ### 8) log out
 LogOutCmd = "curl -X DELETE -H \"X-Token: " + Token + "\" " + URL + "/logout"
 logout = subprocess.call(LogOutCmd, shell=True)
