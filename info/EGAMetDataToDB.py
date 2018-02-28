@@ -94,10 +94,18 @@ def GetObjectFields(L, Data):
                 # check if value is string or None
                 if item[field] == None:
                     D[field] = item[field]
+                # check that value is list
+                elif type(item[field]) == list:
+                    # replace empty lists with None value
+                    if len(item[field]) == 0:
+                        D[field] = None
+                    else:
+                        D[field] = item[field]
                 else:
                     D[field] = str(item[field])
         Entries.append(D)
     return Entries
+
 
 # use this function to match egaAccessionId to id
 def MatchIds(D):
