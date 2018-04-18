@@ -94,10 +94,18 @@ def GetObjectFields(L, Data):
                 # check if value is string or None
                 if item[field] == None:
                     D[field] = item[field]
+                # check that value is list
+                elif type(item[field]) == list:
+                    # replace empty lists with None value
+                    if len(item[field]) == 0:
+                        D[field] = None
+                    else:
+                        D[field] = item[field]
                 else:
                     D[field] = str(item[field])
         Entries.append(D)
     return Entries
+
 
 # use this function to match egaAccessionId to id
 def MatchIds(D):
@@ -304,25 +312,29 @@ Columns = []
 for i in range(len(Fields)):
     Columns.append(SpecifyColumnType(Fields[i]))
 
-
 # connect to the database
 conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = DbName, charset = "utf8")
-cur = conn.cursor()
 
 # Drop existing tables if present and create new ones
 SqlCommand = ['DROP TABLE IF EXISTS Experiments', 'DROP TABLE IF EXISTS Runs', 'DROP TABLE IF EXISTS Samples',
               'DROP TABLE IF EXISTS Analyses', 'DROP TABLE IF EXISTS Datasets', 'DROP TABLE IF EXISTS Studies',
               'DROP TABLE IF EXISTS Datasets_Runs', 'DROP TABLE IF EXISTS Datasets_Analyses', 
-              'CREATE TABLE Studies ({0})', 'CREATE TABLE Runs ({1})', 'CREATE TABLE Samples ({2})',
-              'CREATE TABLE Experiments ({3})', 'CREATE TABLE Datasets ({4})', 'CREATE TABLE Analyses ({5})',
+              'CREATE TABLE Studies ({0})'.format(Columns[0]), 'CREATE TABLE Runs ({0})'.format(Columns[1]),
+              'CREATE TABLE Samples ({0})'.format(Columns[2]), 'CREATE TABLE Experiments ({0})'.format(Columns[3]),
+              'CREATE TABLE Datasets ({0})'.format(Columns[4]), 'CREATE TABLE Analyses ({0})'.format(Columns[5]),
               'CREATE TABLE Datasets_Runs (datasetId VARCHAR(100), runId VARCHAR(100), PRIMARY KEY (datasetId, runId))',
               'CREATE TABLE Datasets_Analyses (datasetId VARCHAR(100), analysisId VARCHAR(100), PRIMARY KEY (datasetId, analysisId))']
-SqlCommand = '; '.join(SqlCommand).format(Columns[0], Columns[1], Columns[2], Columns[3], Columns[4], Columns[5])
 
-cur.execute(SqlCommand)
-conn.commit()
-            
+# execute each sql command in turn with a new cursor
+for i in range(len(SqlCommand)):
+    with conn.cursor() as cur:
+        cur.execute(SqlCommand[i])
+        conn.commit()
+
 print('Dropped existing tables and created new tables')
+
+# open new cursor to instert data into tables
+cur = conn.cursor()
 
 # make a list of lists with object info parallel to field list
 AllInfo = [StudyInfo, RunInfo, SampleInfo, ExperimentInfo, DataSetInfo, AnalysisInfo]     
