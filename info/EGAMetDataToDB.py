@@ -18,9 +18,7 @@ import getopt
 # This script is used to pull metadata from the EGA API and store it into a database 
 # usage: python EGAMetDataToDB.py [-h|--Help] -c|--Credentials
 
-### 1) set up credentials
-URL = "https://ega.crg.eu/submitterportal/v1"
-
+# define script usage
 def Usage():
     print("""
     usage: EGAMetDataToDB.py [-h|--Help|-c|--Credentials]
@@ -41,21 +39,6 @@ else:
         elif opt in ('-c', '--Credentials'):
             CredentialFile = val
 
-# open the dot file, and retrieve the credentials
-Credentials = {}            
-infile = open(CredentialFile)            
-for line in infile:
-    if line.rstrip() != '':
-        line = line.rstrip().split('=')
-        Credentials[line[0]] = line[1]
-infile.close()        
-
-# extract credential values
-UserName, MyPassWord = Credentials['UserName'], Credentials['MyPassWord']
-DbHost, DbName = Credentials['DbHost'], Credentials['DbName']
-DbUser, DbPasswd = Credentials['DbUser'], Credentials['DbPasswd']
-
-### 2) Functions used in this script
 
 # use this function to capture the information of a given object
 def GetObjectFields(L, Data):
@@ -107,6 +90,39 @@ def GetObjectFields(L, Data):
     return Entries
 
 
+# use this function to add sampleID field to the analysis object
+def AddSampleIdToAnalysis(AnalysisInfo):
+    '''
+    (list) -> list
+    Take a list of dictionaries of analysis object and return a modified list
+    in which a 'sampleId: accession_id key: value pair is added to each dictionary
+    '''
+    
+    # sampleId is not a field for EGA analysis but can be found in the xml
+    for i in range(len(AnalysisInfo)):
+        # extract sampleId from xml
+        assert AnalysisInfo[i]['xml'].count('SAMPLE_REF') == 2
+        tree = ET.ElementTree(ET.fromstring(AnalysisInfo[i]['xml']))
+        sample_ref = tree.find('.//SAMPLE_REF')
+        accession = sample_ref.attrib['accession']
+        assert 'ERS' in accession, 'not a valid sample Id'
+        # populate dict
+        AnalysisInfo[i]['sampleId'] = accession
+    return AnalysisInfo
+
+
+# use this function to add box of origin to an object
+def AddBoxOrigin(Info, BoxName):
+    '''
+    (list, str) -> list
+    Take a list of dictionaries for a given ega object and return a modified list
+    in which a 'egaBox: BoxName key: value pair is added to each dictionary
+    '''
+    for i in range(len(Info)):
+        Info[i]['egaBox'] = BoxName
+    return Info
+
+
 # use this function to match egaAccessionId to id
 def MatchIds(D):
     '''
@@ -146,8 +162,8 @@ def RetrieveObjectRef(Info, TagPath, MatchingIDs):
         for run in tree.findall(TagPath):
             ega_id = run.get('accession')
             # convert ega_id to id
-            assert ega_id in MatchingIDs, 'no id match of ega_id'
-            IDs.append(MatchingIDs[ega_id])
+            if ega_id in MatchingIDs:
+                IDs.append(MatchingIDs[ega_id])
         # populate dict with dataset id: [Object_2_ids]
         assert item['ebiId'] not in IdToId, 'id already recorded' 
         IdToId[item['ebiId']] = IDs
@@ -200,40 +216,87 @@ def SpecifyColumnType(L):
     return ' '.join(Cols)
 
 
-### 3) get the token
-LogInCmd = "curl -X POST " + URL + "/login -d username=" + UserName + " --data-urlencode password=\"" + MyPassWord + "\"" + " -d loginType=\"submitter\""
-# extract data from call and convert str to dict
-LogData = subprocess.check_output(LogInCmd, shell=True)
-LogData = json.loads(LogData)
-# get token
-Token = LogData['response']['result'][0]['session']['sessionToken']
+### 1) set up credentials
+URL = "https://ega.crg.eu/submitterportal/v1"
 
-### 4) extract metadata for all objects
+# open the dot file, and retrieve the credentials
+Credentials = {}            
+infile = open(CredentialFile)            
+for line in infile:
+    if line.rstrip() != '':
+        line = line.rstrip().split('=')
+        Credentials[line[0]] = line[1]
+infile.close()        
+
+# extract credential values
+UserNameBox12, MyPassWordBox12 = Credentials['UserNameBox12'], Credentials['MyPassWordBox12']
+UserNameBox137, MyPassWordBox137 = Credentials['UserNameBox137'], Credentials['MyPassWordBox137']
+DbHost, DbName = Credentials['DbHost'], Credentials['DbName']
+DbUser, DbPasswd = Credentials['DbUser'], Credentials['DbPasswd']
+
+### 2) Log in ega-box-12 ans ega-box-137
+
+LogInCmd1 = "curl -X POST " + URL + "/login -d username=" + UserNameBox12 + " --data-urlencode password=\"" + MyPassWordBox12 + "\"" + " -d loginType=\"submitter\""
+# extract data from call and convert str to dict
+LogData1 = subprocess.check_output(LogInCmd1, shell=True)
+LogData1 = json.loads(LogData1)
+# get token
+TokenBox12 = LogData1['response']['result'][0]['session']['sessionToken']
+
+LogInCmd2 = "curl -X POST " + URL + "/login -d username=" + UserNameBox137 + " --data-urlencode password=\"" + MyPassWordBox137 + "\"" + " -d loginType=\"submitter\""
+# extract data from call and convert str to dict
+LogData2 = subprocess.check_output(LogInCmd2, shell=True)
+LogData2 = json.loads(LogData2)
+# get token
+TokenBox137 = LogData2['response']['result'][0]['session']['sessionToken']
+
+
+### 3) extract metadata for all objects
 
 # make a list of objects of interest
 Objects = ["studies", "runs", "samples", "experiments", "datasets", "analyses"]
-# make a parallel list of dicts for each object
-MetaData = []
+
+# make a parallel list of dicts for each object in list Objects
+MetaDataBox12 = []
 for name in Objects:
     # build command
     # IMPORTANT: by default only 10 results are returned. Set both parameters skip and limit to 0
-    MyCommand = "curl -X GET -H \"X-Token: " + Token + "\" " + "\"" + URL + "/" + name + "?status=SUBMITTED&skip=0&limit=0\""
+    MyCommand = "curl -X GET -H \"X-Token: " + TokenBox12 + "\" " + "\"" + URL + "/" + name + "?status=SUBMITTED&skip=0&limit=0\""
     # convert str output to dict
     MyData = subprocess.check_output(MyCommand, shell=True)
     MyJsonData = json.loads(MyData)
     # do some QC by checking the number of entries
     assert MyJsonData['response']['numTotalResults'] == len(MyJsonData['response']['result']), "entries count does not match total # entries"
     # keep track of dicts
-    MetaData.append(MyJsonData)
+    MetaDataBox12.append(MyJsonData)
 
-# Do some QC, some id fields are not valid EGA object ID, use ebiId instead, check that ebiId is a valid EGA object ID
+
+# make a parallel list of dicts for each object in list Objects
+MetaDataBox137 = []
+for name in Objects:
+    # build command
+    # IMPORTANT: by default only 10 results are returned. Set both parameters skip and limit to 0
+    MyCommand = "curl -X GET -H \"X-Token: " + TokenBox137 + "\" " + "\"" + URL + "/" + name + "?status=SUBMITTED&skip=0&limit=0\""
+    # convert str output to dict
+    MyData = subprocess.check_output(MyCommand, shell=True)
+    MyJsonData = json.loads(MyData)
+    # do some QC by checking the number of entries
+    assert MyJsonData['response']['numTotalResults'] == len(MyJsonData['response']['result']), "entries count does not match total # entries"
+    # keep track of dicts
+    MetaDataBox137.append(MyJsonData)
+
+# Do some QC, some id fields are not valid EGA object ID, use ebiId instead,
+# check that ebiId is a valid EGA object ID
 IdCode = ['ERP', 'ERR', 'ERS', 'ERX', 'EGAD', 'ERZ']
-for i in range(len(MetaData)):
-    for item in MetaData[i]['response']['result']:
+for i in range(len(MetaDataBox12)):
+    for item in MetaDataBox12[i]['response']['result']:
+        assert str(item['ebiId']).startswith(IdCode[i])
+for i in range(len(MetaDataBox137)):
+    for item in MetaDataBox137[i]['response']['result']:
         assert str(item['ebiId']).startswith(IdCode[i])
 print('fetched metadata from the API')
 
-### 5) capture the fields of interest for each EGA object
+### 4) capture the fields of interest for each EGA object
 
 # make lists of fields of interest for each object
 StudyFields = ['alias', 'centerName', 'creationTime', 'egaAccessionId', 'ebiId',
@@ -258,25 +321,17 @@ DataSetFields = ['alias', 'attributes', 'centerName', 'creationTime', 'datasetTy
 Fields = [StudyFields, RunFields, SampleFields, ExperimentFields, DataSetFields, AnalysisFields]
 
 # capture the fields of interest for each object 
-StudyInfo = GetObjectFields(Fields[0], MetaData[0])
-RunInfo = GetObjectFields(Fields[1], MetaData[1])
-SampleInfo = GetObjectFields(Fields[2], MetaData[2])
-ExperimentInfo = GetObjectFields(Fields[3], MetaData[3])
-DataSetInfo = GetObjectFields(Fields[4], MetaData[4])
-AnalysisInfo = GetObjectFields(Fields[5], MetaData[5])         
+InfoBox12, InfoBox137 = [], []
+for i in range(len(Fields)):
+    InfoBox12.append(GetObjectFields(Fields[i], MetaDataBox12[i]))
+    InfoBox137.append(GetObjectFields(Fields[i], MetaDataBox137[i]))
 
-### 6) add fields to link tables that are found only in the xml
+
+### 5) add fields to link tables that are found only in the xml
 
 # sampleId is not a field for EGA analysis but can be found in the xml
-for i in range(len(AnalysisInfo)):
-    # extract sampleId from xml
-    assert AnalysisInfo[i]['xml'].count('SAMPLE_REF') == 2
-    tree = ET.ElementTree(ET.fromstring(AnalysisInfo[i]['xml']))
-    sample_ref = tree.find('.//SAMPLE_REF')
-    accession = sample_ref.attrib['accession']
-    assert 'ERS' in accession, 'not a valid sample Id'
-    # populate dict
-    AnalysisInfo[i]['sampleId'] = accession
+InfoBox12[5] = AddSampleIdToAnalysis(InfoBox12[5])
+InfoBox137[5] = AddSampleIdToAnalysis(InfoBox137[5])
 
 # add sampleId field to list of analysis fields
 Fields[-1].append('sampleId')
@@ -284,17 +339,29 @@ Fields[-1].append('sampleId')
 # runId is not a field for EGA dataset but can found in the xml FOR SOME DATASETS
 # the run ID in the dataset xml is EGAR, it needs to be mapped to ERR ID
 # extract run IDs for each dataset, map each run id (err) to dataset id (egad)    
-DatasetToRun = RetrieveObjectRef(DataSetInfo, './DATASET/RUN_REF', MatchIds(MetaData[1]))
+DatasetToRunBox12 = RetrieveObjectRef(InfoBox12[4], './DATASET/RUN_REF', MatchIds(MetaDataBox12[1]))
+DatasetToRunBox137 = RetrieveObjectRef(InfoBox137[4], './DATASET/RUN_REF', MatchIds(MetaDataBox137[1]))
 
 # analysisId is not a field for EGA dataset but can be found in the xml FOR SOME DATASETS
 # the analysis ID in the dataset xml is EGAZ, it needs to be mapped to ERZ ID
 # extract analysis IDs for each dataset, map each analysis id (erz) to dataset id (egad)
-DatasetToAnalysis = RetrieveObjectRef(DataSetInfo, './DATASET/ANALYSIS_REF', MatchIds(MetaData[-1]))
+DatasetToAnalysisBox12 = RetrieveObjectRef(InfoBox12[4], './DATASET/ANALYSIS_REF', MatchIds(MetaDataBox12[-1]))
+DatasetToAnalysisBox137 = RetrieveObjectRef(InfoBox137[4], './DATASET/ANALYSIS_REF', MatchIds(MetaDataBox137[-1]))
+
+# add box of origin to each object
+for i in range(len(InfoBox12)):
+    InfoBox12[i] = AddBoxOrigin(InfoBox12[i], 'ega-box-12')
+for i in range(len(InfoBox137)):
+    InfoBox137[i] = AddBoxOrigin(InfoBox137[i], 'ega-box-137')    
+    
+# add Ega-Box field to each field list
+for i in range(len(Fields)):
+    Fields[i].append('egaBox')
 
 print('extracted metadata of interest')
 
 
-### 7) connect to database
+### 6) connect to database
 
 #reorder fields so that primary key is first
 for i in range(len(Fields)):
@@ -336,24 +403,42 @@ print('Dropped existing tables and created new tables')
 # open new cursor to instert data into tables
 cur = conn.cursor()
 
-# make a list of lists with object info parallel to field list
-AllInfo = [StudyInfo, RunInfo, SampleInfo, ExperimentInfo, DataSetInfo, AnalysisInfo]     
-# make a parallel list of table names
+# make a list of table names parallel to object lists
 Tables = ['Studies', 'Runs', 'Samples', 'Experiments', 'Datasets', 'Analyses']
 
 # Insert data into tables
 # loop over objects
-for i in range(len(AllInfo)):
-    print('Inserting data for table {0}'.format(Tables[i]))
+for i in range(len(InfoBox12)):
+    print('Inserting data from ega-box-12 for table {0}'.format(Tables[i]))
     # loop over instances of given object
-    for j in range(len(AllInfo[i])):
+    for j in range(len(InfoBox12[i])):
         # dump values into a tuple
         Values = ()
         for field in Fields[i]:
-            if AllInfo[i][j][field] == '' or AllInfo[i][j][field] == None:
+            if InfoBox12[i][j][field] == '' or InfoBox12[i][j][field] == None:
                 Values = Values.__add__(('NULL',))
             else:
-                Values = Values.__add__((AllInfo[i][j][field],))
+                Values = Values.__add__((InfoBox12[i][j][field],))
+        assert len(Values) == len(Fields[i])        
+        # make a string with column names
+        names = ', '.join(Fields[i])
+        # get table name
+        TableName = Tables[i]
+        # add values into table
+        cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(TableName, names, Values))
+        conn.commit()
+
+for i in range(len(InfoBox137)):
+    print('Inserting data from ega-box-137 for table {0}'.format(Tables[i]))
+    # loop over instances of given object
+    for j in range(len(InfoBox137[i])):
+        # dump values into a tuple
+        Values = ()
+        for field in Fields[i]:
+            if InfoBox137[i][j][field] == '' or InfoBox137[i][j][field] == None:
+                Values = Values.__add__(('NULL',))
+            else:
+                Values = Values.__add__((InfoBox137[i][j][field],))
         assert len(Values) == len(Fields[i])        
         # make a string with column names
         names = ', '.join(Fields[i])
@@ -365,14 +450,22 @@ for i in range(len(AllInfo)):
 
 # Insert data into junction tables
 print('Inserting data into Datasets_Runs table')
-for egad_id in DatasetToRun:
-    for err_id in DatasetToRun[egad_id]:
+for egad_id in DatasetToRunBox12:
+    for err_id in DatasetToRunBox12[egad_id]:
+        cur.execute('INSERT INTO Datasets_Runs (datasetId, runId) VALUES {0}'.format((egad_id, err_id)))         
+        conn.commit()
+for egad_id in DatasetToRunBox137:
+    for err_id in DatasetToRunBox137[egad_id]:
         cur.execute('INSERT INTO Datasets_Runs (datasetId, runId) VALUES {0}'.format((egad_id, err_id)))         
         conn.commit()
 
 print('Inserting data into Datasets_Analyses table')
-for egad_id in DatasetToAnalysis:
-    for egaz_id in DatasetToAnalysis[egad_id]:
+for egad_id in DatasetToAnalysisBox12:
+    for egaz_id in DatasetToAnalysisBox12[egad_id]:
+        cur.execute('INSERT INTO Datasets_Analyses (datasetId, analysisId) VALUES {0}'.format((egad_id, egaz_id)))
+        conn.commit()
+for egad_id in DatasetToAnalysisBox137:
+    for egaz_id in DatasetToAnalysisBox137[egad_id]:
         cur.execute('INSERT INTO Datasets_Analyses (datasetId, analysisId) VALUES {0}'.format((egad_id, egaz_id)))
         conn.commit()
 
@@ -383,8 +476,12 @@ conn.close()
 
  
 ### 8) log out
-LogOutCmd = "curl -X DELETE -H \"X-Token: " + Token + "\" " + URL + "/logout"
+LogOutCmd = "curl -X DELETE -H \"X-Token: " + TokenBox12 + "\" " + URL + "/logout"
 logout = subprocess.call(LogOutCmd, shell=True)
 # check that returncode is success
-assert logout == 0, "did not successfully log out"
+assert logout == 0, "did not successfully log out from box-12"
 
+LogOutCmd = "curl -X DELETE -H \"X-Token: " + TokenBox137 + "\" " + URL + "/logout"
+logout = subprocess.call(LogOutCmd, shell=True)
+# check that returncode is success
+assert logout == 0, "did not successfully log out from box-137"
