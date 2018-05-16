@@ -269,11 +269,11 @@ sub validate_options{
 	} 
 	
 	if(! $opts{file_table} || ! -e $opts{file_table}){
-		usage("file_table, a list of files and md5sums not provided or not found");
+		usage("file_table, a list of files and md5sums was not provided or not found");
 	}
 	
 	if(! $opts{analysis} || ! -e $opts{analysis}){
-		usage("A file describing the analysis not provided or not found.");
+		usage("A file describing the analysis was not provided or not found.");
 	}
 	if(! $opts{out} || ! -d $opts{out}){
 		usage("Directory to save XML output not indicated or not found.");
@@ -307,7 +307,7 @@ sub usage{
 	print "\nprepare_SAMPLE_XMLS.pl [options]\n";
 	print "Options are as follows:\n";
 	print "\t--file_table String/filename. Required. A file with a table describing files that have been uploaded and are ready to register\n";  
-	print "\t\tTable header must include : 'sample (EGAN accession or registered Alias), alias (for the analysis object),file,md5,encrypteed_file,encrypted_md5\n";  
+	print "\t\tTable header must include : 'sample (EGAN accession or registered Alias, multiple samples should be colon separated), alias (for the analysis object),file,md5,encrypteed_file,encrypted_md5\n";  
 	print "\t--file_type String/filename. Required.  Either bam or vcf\n";
 	print "\t--analysis String/filename. Required. A file with a table describing analysis parameters.  Key:value pairs\n";  
 	print "\t--reference String/filename. Optional. A file with accessions for th reference sequence. First line is the build name and accession\n";  
