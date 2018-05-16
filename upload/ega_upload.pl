@@ -28,15 +28,16 @@ my %opts = ();
 GetOptions(
 	"config=s" 		=> \$opts{configfile},   ### configuration file where options are stored
 	"qdir=s" 		=> \$opts{qdir},         ### folder with links to files that need encryption/upload
+	"file=s"		=> \$opts{file},
 	"wdir=s" 		=> \$opts{wdir},         ### folder where work should be done, usually in scratch
-	"box=s" 		=> \$opts{box},  
+	"box=s" 		=> \$opts{box},
 	"pw=s" 			=> \$opts{pw},
-	"boxpath=s"		=> \$opts{boxpath},  
+	"boxpath=s"		=> \$opts{boxpath},
 	"delete=s"		=> \$opts{delete},
 	"next=s"		=> \$opts{next},
 	"help" 			=> \$opts{help},
 	"keys"			=> \$opts{keys},          ### comma separated list of public encryption keys
-	"xfer"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca			
+	"xfer"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca
 	"xfer_method"   => \$opts{xfer_method},   ### lftp or aspera
 	"aspera_pw"		=> \$opts{aspera_pw},
 );
@@ -60,7 +61,7 @@ print STDERR "Preparing process script under $workdir\n";
 my $script_process="$workdir/process.sh";
 my @keys=split /,/,$opts{keys};
 my $keystring=join(" ",map{"-r $_"} @keys);
- 
+
 (open my $QSUB,">",$script_process) || die "could not open $script_process";
 print $QSUB "qsub -cwd -b y -N ega.$fn.premd5                             \"md5sum $fn | cut -f1 -d\' \'> $fn.md5\"\n";
 print $QSUB "qsub -cwd -b y -N ega.$fn.gpg  	                          \"gpg --trust-model always $keystring -o $fn.gpg -e $fn\"\n";
@@ -87,7 +88,7 @@ if($opts{xfer_method} eq "lftp"){
 	print $UP "ssh $opts{xfer} \"export ASPERA_SCP_PASS=$opts{aspera_pw};".
 	          "~/.aspera/connect/bin/ascp -QT -l300M -L- -k2 $workdir/$fn*.md5 $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};".
 	          "~/.aspera/connect/bin/ascp -QT -l300M -L- -k2 $workdir/$fn.gpg $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};\"";
-}	
+}
 
 
 close $UP;
@@ -98,14 +99,14 @@ close $UP;
 
 
 print STDERR "Start processing\n";
-`(cd $workdir;bash process.sh)`;	
-	
+`(cd $workdir;bash process.sh)`;
+
 
 
 sub validate_options{
 	my (%opts)=@_;
 	usage("Help requested.") if($opts{help});
-	
+
 	if($opts{configfile}){
 		 if( ! -e $opts{configfile} ){
 			 usage("Configuration file not provided or not found.");
@@ -119,31 +120,38 @@ sub validate_options{
 			 map{$opts{$_} = $opts{$_} || $config{$_}} keys %config;
 		 }
 	 }
-	 
-	
-	if(! $opts{qdir} || ! -d $opts{qdir}){
-		usage("Directory with queued files not provided or nor found.");
+
+	if($opts{qdir} && $opts{file}){
+		usage("only one of --qdir and --file can be specified");
+	}elsif($opts{qdir}){
+		usage("Directory with queued files specified but not found.") if(! -d $opts{qdir});
+	}elsif($opts{file}){
+		usage("File specified but not found.") if(! -e $opts{file});
+		$opts{next}="False";
+	}else{
+		usage("Either --qdir or --file must be provided");
 	}
+
 	if(! $opts{wdir} || ! -d $opts{wdir}){
 		usage("Work directory not provided or nor found.");
 	}
-	
+
 	if(! $opts{box}){
 		usage("ega-box not provided");
 	}
-	
+
 	if(! $opts{pw}){
 		usage("password for $opts{box} not provided");
 	}
-	
+
 	if(! $opts{boxpath}){
 		usage("path on $opts{box} not provided");
 	}
-	
+
 	if(! $opts{keys}){
 		usage("gpg encryption key(s) not provided");
 	}
-	
+
 	if($opts{delete}){
 		usage("Invalid option --delete") unless($opts{delete} eq "True" || $opts{delete} eq "False");
 	}else{
@@ -155,7 +163,7 @@ sub validate_options{
 	}else{
 		$opts{next}="True";
 	}
-	
+
     	$opts{xfer}="xfer.res.oicr.on.ca" unless($opts{xfer});   ## set the default
 	$opts{xfer_method}="lftp" unless($opts{xfer_method});
 
@@ -167,13 +175,17 @@ sub usage{
 	print "\nega_lftp.pl [options]\n";
 	print "Options are as follows:\n";
 	print "\t--config String/filename. A configuration file, storing options as key value pairs\n";  ### currently not supported
+	print "\n";
+	print "\tEither qdir or file must be provided\n";
 	print "\t--qdir  String/directory name.  A directory with a list of files that need to be uploaded.\n";
+	print "\t--file  String/file name.  The path to a file to be uploaded\n";
+	print "\n";
 	print "\t--wdir  String/directory name. A directory where the file will be copied, encrypted and md5summed, prior to upload.\n";
 	print "\t--box String.  The ega-box for upload\n";
 	print "\t--pw String. Password for the ega-box.\n";
 	print "\t--boxpath String. Path on the ega-box where files should be uploaded.\n";
 	print "\t--delete. True/False.  Should encrypted data be deleted after upload?  Default = True\n";
-	print "\t--next. True/False.  Should the next file be processed once this one has completed.  Default = True.\n";
+	print "\t--next. True/False.  Should the next file in the qdir be processed once this one has completed.  Default = True.\n";
 	print "\t--keys. String. A comma separated list of public gpg encryption keys..\n";
 	print "\t--xfer. String.  The oicr xfer system to use for data upload.  Default : xfer.sftp.oicr.on.ca";
 	print "\t--help displays this usage message.\n";
