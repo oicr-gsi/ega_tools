@@ -479,13 +479,16 @@ sub analysis_xml{
 	
 	
 	### for each sample in teh readgroups information
-	my $EGAN=$$info{file}{sample} || "noacc";
-	my $SAMPLE_REF=$XML->createElement("SAMPLE_REF");
-	#$SAMPLE_REF->setAttribute(accession=>$EGAS);      ### accession is only available if previousl generated
-	$SAMPLE_REF->setAttribute(accession=>$EGAN);
-	$SAMPLE_REF->setAttribute(refcenter=>$$info{study}{center_name});
-	$ANALYSIS->appendChild($SAMPLE_REF);
-		
+	### EGAN can be specified with multiple identifiers, each will be a sample reference.  these should be colon separated
+	
+	my $EGANs=$$info{file}{sample} || "noacc";
+	my @EGANs=split /:/,$EGANs;
+	for my $EGAN(@EGANs){
+		my $SAMPLE_REF=$XML->createElement("SAMPLE_REF");
+		$SAMPLE_REF->setAttribute(accession=>$EGAN);
+		$SAMPLE_REF->setAttribute(refcenter=>$$info{study}{center_name});
+		$ANALYSIS->appendChild($SAMPLE_REF);
+	}	
 	
 	my $ANALYSIS_TYPE=$XML->createElement("ANALYSIS_TYPE");
 	
