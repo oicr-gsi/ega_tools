@@ -36,13 +36,14 @@ GetOptions(
 	"delete=s"		=> \$opts{delete},
 	"next=s"		=> \$opts{next},
 	"help" 			=> \$opts{help},
-	"keys"			=> \$opts{keys},          ### comma separated list of public encryption keys
-	"xfer"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca
+	"keys=s"			=> \$opts{keys},          ### comma separated list of public encryption keys
+	"xfer=s"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca
 	"xfer_method"   => \$opts{xfer_method},   ### lftp or aspera
 	"aspera_pw"		=> \$opts{aspera_pw},
 );
 %opts=validate_options(%opts);
 
+print Dumper(%opts);exit;
 
 ### grab ONE file from the queue direcotry
 my $file=`ls $opts{qdir} | head -n 1`;chomp $file;   ### grab one file
@@ -164,7 +165,7 @@ sub validate_options{
 		$opts{next}="True";
 	}
 
-    	$opts{xfer}="xfer.res.oicr.on.ca" unless($opts{xfer});   ## set the default
+  $opts{xfer}="xfer.res.oicr.on.ca" unless($opts{xfer});   ## set the default
 	$opts{xfer_method}="lftp" unless($opts{xfer_method});
 
 	return %opts;
