@@ -111,6 +111,8 @@ close $UP;
 
 print STDERR "Start processing\n";
 `(cd $workdir;bash process.sh)`;
+print "jobid=ega.$fn.upload\n";
+
 
 
 
