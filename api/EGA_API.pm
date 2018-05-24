@@ -10,7 +10,7 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
 $VERSION        =       1.00;
 @ISA            =       qw(Exporter);
-@EXPORT         =       qw(get_token delete_token get_submission_id delete_object view_objects submit_object validate_submission);
+@EXPORT         =       qw(get_token delete_token open_submission delete_object view_objects create_objects validate_submission submit_objects);
 
 
 my %http_response_codes=(200=>'OK',400=>'Bad Request',401=>"Unauthorized/Forbidden",404=>"NOT FOUND",500=>"INTERNAL SERVER ERROR");
@@ -40,9 +40,9 @@ sub delete_token{
 	#print Dumper($response);
 	print STDERR "Session $token ended\n";
 }
-sub get_submission_id{
-	my($api,$token,$json_sub)=@_;
-	my $cmd="curl -H \"X-Token: $token\" -H \"Content-type: application/json\" -X POST $api/submissions -d '$json_sub'";
+sub open_submission{
+	my($api,$token,$jsonfile)=@_;
+	my $cmd="curl -s -H \"X-Token: $token\" -H \"Content-type: application/json\" -X POST $api/submissions -d '\@$jsonfile'";
 	#print "$cmd\n";
 
 	my $json=`$cmd`;
@@ -52,6 +52,7 @@ sub get_submission_id{
 	print STDERR "SubmissionId=$submissionId\n";
 	return $submissionId;
 }
+
 sub check_response{
 	my ($response)=@_;
 	#print Dumper($response);<STDIN>;
@@ -68,14 +69,19 @@ sub check_response{
 		return 1;
 	}
 }
+
 sub delete_object{
 	my($api,$token,$object_type,$id)=@_;
 	print STDERR "attempting to delete object $id from $object_type\n";
-	my $cmd="curl -H \"X-Token: $token\" -X DELETE $api/$object_type/{$id}";
+	my $cmd="curl -s -H \"X-Token: $token\" -X DELETE $api/$object_type/{$id}";
 	my $json=`$cmd`;
 	my $response=decode_json($json);
 	check_response($response);
-	print Dumper($response);
+
+ 	my $result_count=$$response{response}{numTotalResults};
+ 	my $result=shift @{$$response{response}{result}};
+	print "$result\n";
+
 }
 
 
@@ -83,13 +89,13 @@ sub delete_object{
 sub view_objects{
 	my($api,$token,$object_type,$status)=@_;
 	print STDERR "getting objects of type:$object_type ; status:$status\n";
-	
+
 	my %statuses=map{$_=>1}qw/DRAFT VALIDATED VALIDATED_WITH_ERRORS SUBMITTED NOT_SUBMITTED/;
 	my %object_types=map{$_=>1}qw/analyses dacs datasets experiments policies runs samples studies/;
 
 	die "invalid object_type request $object_type" unless($object_type && $object_types{$object_type});
 	die "invalid status request $status" unless($status && $statuses{$status});
-	
+
 	my $cmd;
 	if($status ne "NOT_SUBMITTED"){
 		### query for the specific status
@@ -98,16 +104,16 @@ sub view_objects{
 		### query for without status, will return all but SUBMITTED
 		$cmd="curl -s -H \"X-Token: $token\" -X GEt $api/$object_type";
 	}
-	
+
 	my $json=`$cmd`;
 	my $response=decode_json($json);
-	
+
 	#print Dumper($response);
 	check_response($response);
 	#print Dumper($response);
 	my $result_count=$$response{response}{numTotalResults};
-	print "$result_count results\n";
-		
+	print "\nReturning $result_count results\n";
+	print "\n\n#\tstatus\tObjectID\tAlias\tSubmissionID\tError_Messages\n";
 	my @results=@{$$response{response}{result}};
 	my $n=0;my %xml;
 	for my $result(@results){
@@ -117,108 +123,81 @@ sub view_objects{
 		my $id=$$result{id} || 0;
 		my $submissionId=$$result{submissionId} || 0;
 		my $alias=$$result{alias} || 0;
-		print "$n : $status : $id : $submissionId : $alias\n"; 
-		
+
+		my $errors=$$result{validationErrorMessages} ? join(",",@{$$result{validationErrorMessages}}) : "";
+		print "$n\t$status\t$id\t$alias\t$submissionId\t$errors\n";
+
 		$xml{$id}=$$result{xml};
-		
+
 	}
 	return %xml;
-	
-	
+
+
 }
 
 
-sub submit_object{
+sub create_objects{
 	my($api,$token,$submissionId,$object_type,$structure_type,$file)=@_;
 	### object types : analyses,dacs,datasets,experiments,policies,,runs,samples,studies
 	### structure_type : xml,json
 	my %paths=(
-		json=>{
-			analyses=>'analyses',
-			dacs=>'dacs',
-			datasets=>'datasets',
-			experiments=>'experiments',
-			policies=>'policies',
-			runs=>'runs',
-			samples=>'samples',
-			studies=>'studies',
-		},
-		xml=>{
-			analyses=>'analyses/xml',
-			dacs=>'dacs/xml',
-			datasets=>'datasets/xml',
-			experiments=>'experiments/xml',
-			policies=>'policies/xml',
-			runs=>'runs/sequencing/xml',
-			samples=>'samples/xml',
-			studies=>'studies/xml',
-		},
-	
+		json=>{analyses=>'analyses',dacs=>'dacs',datasets=>'datasets',experiments=>'experiments',
+			policies=>'policies',runs=>'runs',samples=>'samples',studies=>'studies',},
+		xml=>{analyses=>'analyses/xml',dacs=>'dacs/xml',datasets=>'datasets/xml',experiments=>'experiments/xml',
+			policies=>'policies/xml',runs=>'runs/sequencing/xml',samples=>'samples/xml',studies=>'studies/xml',},
 	);
-	
-	
-	
-	
+
 	my $path=$paths{$structure_type}{$object_type} || 0;
+
 	if($path){
-		my $cmd="curl -H \"X-Token: $token\" -H \"Content-type: application/$structure_type \" -X POST $api/submissions/$submissionId/$path -d \@$file";
+		my $cmd="curl -s -H \"X-Token: $token\" -H \"Content-type: application/$structure_type \" -X POST $api/submissions/$submissionId/$path -d \@$file";
 		#print "$cmd\n";
 		my $json=`$cmd`;
 		my $response=decode_json($json);
 		check_response($response);
+
 		my $result_count=$$response{response}{numTotalResults};
-		print "$result_count results\n";
-			
+		print "\nReturning $result_count results\n";
+		print "\n\n#\tstatus\tObjectID\tAlias\tSubmissionID\n";
 		my @results=@{$$response{response}{result}};
-		my $n=0;
+		my $n=0;my %xml;
 		for my $result(@results){
 			$n++;
 			#print Dumper($result);
 			my $status=$$result{status} || 0;
-			print "$n : $status\n"; 
+			my $id=$$result{id} || 0;
+			my $submissionId=$$result{submissionId} || 0;
+			my $alias=$$result{alias} || 0;
+			print "$n\t$status\t$id\t$alias\t$submissionId\n";
 		}
 	}else{
-		die "no path could be formed from structure and object type";
+		die "no path could be formed from structure_type $structure_type and object type $object_type";
 	}
 }
 
 sub validate_submission{
 	my ($api,$token,$submissionId)=@_;
-	my $cmd="curl -H \"X-Token: $token\" -X PUT $api/submissions/$submissionId/?action=VALIDATE";
+	my $cmd="curl -s -H \"X-Token: $token\" -X PUT $api/submissions/$submissionId/?action=VALIDATE";
 	my $json=`$cmd`;
 	my $response=decode_json($json);
 	check_response($response);
 	#print Dumper($response);
 	my $result_count=$$response{response}{numTotalResults};
 	print "$result_count results\n";
-		
+
 	my @results=@{$$response{response}{result}};
 	my $n=0;
 	for my $result(@results){
 		$n++;
 		#print Dumper($result);
 		my $status=$$result{status} || 0;
-		print STDERR "$n : $status\n"; 
-		
+		print STDERR "$n : $status\n";
+
 		if($status eq "VALIDATED_WITH_ERRORS"){
 			my @validationErrors=@{$$result{validationError}};
 			print STDERR "Validation Errors:\n";
 			print STDERR join("\n",@validationErrors) . "\n";
 		}
-		
+
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -16,11 +16,12 @@ GetOptions(
 	"username|u=s"	=> \$opts{username},
 	"password|p=s"	=> \$opts{password},
 	"action|a=s"    => \$opts{action},
-	
-	"object_type=s" => \$opts{object_type},
-	"status=s"      => \$opts{status},
-	"xml=s"         => \$opts{xml},
-	
+
+	"object_type=s" => \$opts{object_type},  ## action = view, create, delete
+	"status=s"      => \$opts{status},       ## action = view
+	"xml=s"         => \$opts{xml},					## action = view,create
+	"json=s"				=> \$opts{json},        ## action = open
+	"id=s"          => \$opts{id},           ## action = create, delete, validate
 
 	"help" 			=> \$opts{help},
 );
@@ -36,7 +37,7 @@ if($opts{action} eq "view"){
 	#delete_object($path,$token,'datasets',$to_delete);
 
 	my %xml=view_objects($opts{api},$token,$opts{object_type},$opts{status});
-	
+
 	if($opts{xml}){
 		for my $id(keys %xml){
 			(open my $XML,">","$opts{xml}/${id}.xml") || die "unable to open xml file at $opts{xml}/${id}.xml";
@@ -46,15 +47,23 @@ if($opts{action} eq "view"){
 	}
 }
 
-#my $json_sub="{\"title\" : \"test\",\"description\": \"test\"}";
-#my $submissionId=get_submission_id($path,$token,$json_sub);
+if($opts{action} eq "open"){
+	my $submissionId=open_submission($opts{api},$token,$opts{json});
+	print "opened Submission, ID=$submissionId\n";
+}
 
 
-#exit;
-#my $file="Dataset.GATCI_TEST.1.xml";
-#submit_object($path,$token,$submissionId,'datasets','xml',$file);
+if($opts{action} eq "create"){
+	create_objects($opts{api},$token,$opts{id},$opts{object_type},$opts{structure_type},$opts{xml});
+}
 
-#validate_submission($path,$token,$submissionId);
+if($opts{action} eq "delete"){
+	delete_object($opts{api},$token,$opts{object_type},$opts{id});
+}
+
+if($opts{action} eq "validate"){
+	validate_submission($opts{api},$token,$opts{id});
+}
 
 
 
@@ -64,14 +73,14 @@ if($opts{action} eq "view"){
 sub validate_options{
 	my (%opts)=@_;
 	usage("Help requested.") if($opts{help});
-	
+
 	$opts{api}=$opts{api} || "https://ega.crg.eu/submitterportal/v1";
-	
+
 	if(! $opts{username} && ! $opts{password}){
 		usage("username (ega-box) and password required");
 	}
 
-	my %valid_actions=map{$_=>1} qw/open submit view delete/;
+	my %valid_actions=map{$_=>1} qw/open create view delete validate/;
 	## open : opens a submission
 	## submit : submits an object to an open submission
 	## view : views objects
@@ -79,21 +88,36 @@ sub validate_options{
 	if(!$opts{action} || !$valid_actions{$opts{action}}){
 		usage("must provide a valid action");
 	}
-	
+
 	if($opts{action} eq "view"){
 		usage("object_type to view not provided") unless($opts{object_type});
 		usage("status to view not provided") unless($opts{status});
-		
+
 		if($opts{xml}){
 			usage("directory to save xml $opts{xml} not found") unless(-d $opts{xml});
 		}
-		
+
 	}
 
-	
+	if($opts{action} eq "open"){
+		usage("json file describing submission not provided or not found") unless($opts{json} && -e $opts{json});
+	}
+
+	if($opts{action} eq "create"){
+		usage("must provide a valid submissionId") unless($opts{id});
+		usage("object_type to create not provided") unless($opts{object_type});
+		usage("xml file not provided or not found") unless($opts{xml} && -e $opts{xml});
+
+		$opts{structure_type}="xml";  ### will expand later to allow json
+	}
+
+	if($opts{action} eq "delete"){
+		usage("must provide an objectId") unless($opts{id});
+	}
+
+
 	return %opts;
 }
-
 
 
 sub usage{
@@ -103,27 +127,28 @@ sub usage{
 	print "\t--username|-u String. Required.  The name of the ega-box (eg. ega-box-12)\n";
 	print "\t--password|-p String. Required.  Password for the ega-box\n";
 	print "\n";
-	print "\t--action|a String.  Required.  One of open|submit|view|delete\n";
+	print "\t--action|a String.  Required.  One of open|create|validate|view|delete\n";
 	print "\t\topen     : open a data submission, returns a submissionId\n";
-	print "\t\tsubmit   : submit an object, must provide submissionID and objecttype\n";
+	print "\t\t           --json json file describing the submission. Include a title and description\n";
+	print "\t\tcreate   : create an object, must provide submissionID and objecttype\n";
+	print "\t\t           --id a valid submissionId\n";
+	print "\t\t           --object_type analyses|dacs|datasets|experiments|policies|runs|samples|studies\n";
+	print "\t\t           --xml file describing the object(s) to be created\n";
+	print "\t\tvalidate : validate objects in a submission, must provide submissionID\n";
+	print "\t\t           --id a valid submissionId\n";
+	print "\t\tdelete   : delete an object, must provide object_typeID and objecttype\n";
+	print "\t\t           --id a valid objectId\n";
+	print "\t\t           --object_type analyses|dacs|datasets|experiments|policies|runs|samples|studies\n";
 	print "\t\tview     : view registered object ids and status\n";
 	print "\t\t           --object_type analyses|dacs|datasets|experiments|policies|runs|samples|studies\n";
 	print "\t\t           --status DRAFT|VALIDATED|VALIDATED_WITH_ERRORS|SUBMITTED|NOT_SUBMITTED\n";
 	print "\t\t           --xml directory to save xml, named by object id\n";
-	
-	
+
+
 	print "\t\tdelete   : delete objects by id\n";
-	
-	
+
+
 	print "\t--help displays this usage message.\n";
 
 	die "\n@_\n\n";
 }
-
-
-
-
-
-
-
-
