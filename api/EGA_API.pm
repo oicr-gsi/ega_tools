@@ -71,9 +71,10 @@ sub check_response{
 }
 
 sub delete_object{
-	my($api,$token,$object_type,$id)=@_;
-	print STDERR "attempting to delete object $id from $object_type\n";
-	my $cmd="curl -s -H \"X-Token: $token\" -X DELETE $api/$object_type/{$id}";
+	my($api,$token,$object_type,$object_id)=@_;
+	print STDERR "attempting to delete object $object_id from $object_type\n";
+	my $cmd="curl -s -H \"X-Token: $token\" -X DELETE $api/$object_type/$object_id";
+	#print "$cmd";<STDIN>;
 	my $json=`$cmd`;
 	my $response=decode_json($json);
 	check_response($response);
@@ -87,23 +88,34 @@ sub delete_object{
 
 
 sub view_objects{
-	my($api,$token,$object_type,$status)=@_;
+	my($api,$token,$object_type,$object_id,$submission_id,$status)=@_;
 	print STDERR "getting objects of type:$object_type ; status:$status\n";
 
-	my %statuses=map{$_=>1}qw/DRAFT VALIDATED VALIDATED_WITH_ERRORS SUBMITTED NOT_SUBMITTED/;
+	my %statuses=map{$_=>1}qw/DRAFT VALIDATED VALIDATED_WITH_ERRORS SUBMITTED PARTIALLY_SUBMITTED ALL/;
 	my %object_types=map{$_=>1}qw/analyses dacs datasets experiments policies runs samples studies/;
 
 	die "invalid object_type request $object_type" unless($object_type && $object_types{$object_type});
 	die "invalid status request $status" unless($status && $statuses{$status});
 
-	my $cmd;
-	if($status ne "NOT_SUBMITTED"){
-		### query for the specific status
-		$cmd="curl -s -H \"X-Token: $token\" -X GEt $api/$object_type?status=$status";
-	}else{
-		### query for without status, will return all but SUBMITTED
-		$cmd="curl -s -H \"X-Token: $token\" -X GEt $api/$object_type";
+
+	my $cmd;my $msg;
+	if($object_id){
+		$cmd="curl -s -H \"X-Token: $token\" -X GET $api/$object_type/$object_id";
+		$msg="Viewing object_type:$object_type by object_id:$object_id";
+	}elsif($submission_id){
+		$cmd="curl -s -H \"X-Token: $token\" -X GET $api/submissions/$submission_id/$object_type";
+		$msg="Viewing object_type:$object_type by submission_id:$submission_id";
+  }else{
+		$cmd="curl -s -H \"X-Token: $token\" -X GET $api/$object_type";
+		$msg="Viewing object_type:$object_type";
 	}
+
+	if(! $object_id && $status ne "ALL"){
+		$cmd.="?status=$status";
+		$msg.=" Filtering by status:$status";
+	}
+
+	print "\n$msg\n";
 
 	my $json=`$cmd`;
 	my $response=decode_json($json);
@@ -113,22 +125,24 @@ sub view_objects{
 	#print Dumper($response);
 	my $result_count=$$response{response}{numTotalResults};
 	print "\nReturning $result_count results\n";
-	print "\n\n#\tstatus\tObjectID\tAlias\tSubmissionID\tError_Messages\n";
-	my @results=@{$$response{response}{result}};
-	my $n=0;my %xml;
-	for my $result(@results){
-		$n++;
-		#print Dumper($result);
-		my $status=$$result{status} || 0;
-		my $id=$$result{id} || 0;
-		my $submissionId=$$result{submissionId} || 0;
-		my $alias=$$result{alias} || 0;
+	my %xml;
+	if($result_count>0){
+		print "\n#\tstatus\tObjectID\tAlias\tSubmissionID\tError_Messages\n";
+		my @results=@{$$response{response}{result}};
+		my $n=0;
+		for my $result(@results){
+			$n++;
+			#print Dumper($result);<STDIN>;
+			my $status=$$result{status} || 0;
+			my $id=$$result{id} || 0;
+			my $submissionId=$$result{submissionId} || 0;
+			my $alias=$$result{alias} || 0;
 
-		my $errors=$$result{validationErrorMessages} ? join(",",@{$$result{validationErrorMessages}}) : "";
-		print "$n\t$status\t$id\t$alias\t$submissionId\t$errors\n";
+			my $errors=$$result{validationErrorMessages} ? join(",",@{$$result{validationErrorMessages}}) : "";
+			print "$n\t$status\t$id\t$alias\t$submissionId\t$errors\n";
 
-		$xml{$id}=$$result{xml};
-
+			$xml{$id}=$$result{xml};
+		}
 	}
 	return %xml;
 

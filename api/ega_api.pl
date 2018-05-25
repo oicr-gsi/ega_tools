@@ -23,6 +23,9 @@ GetOptions(
 	"json=s"				=> \$opts{json},        ## action = open
 	"id=s"          => \$opts{id},           ## action = create, delete, validate
 
+	"submission_id=s"  => \$opts{submission_id},
+	"object_id=s" 		 => \$opts{object_id},
+
 	"help" 			=> \$opts{help},
 );
 
@@ -36,7 +39,9 @@ if($opts{action} eq "view"){
 	#my $to_delete='5b05caa18d962971c1f66d4d';
 	#delete_object($path,$token,'datasets',$to_delete);
 
-	my %xml=view_objects($opts{api},$token,$opts{object_type},$opts{status});
+
+
+	my %xml=view_objects($opts{api},$token,$opts{object_type},$opts{object_id},$opts{submission_id},$opts{status});
 
 	if($opts{xml}){
 		for my $id(keys %xml){
@@ -58,11 +63,16 @@ if($opts{action} eq "create"){
 }
 
 if($opts{action} eq "delete"){
-	delete_object($opts{api},$token,$opts{object_type},$opts{id});
+	delete_object($opts{api},$token,$opts{object_type},$opts{object_id});
 }
 
 if($opts{action} eq "validate"){
 	validate_submission($opts{api},$token,$opts{id});
+}
+
+if($opts{action} eq "submit"){
+	print "request to submit data, needs work";
+
 }
 
 
@@ -91,7 +101,19 @@ sub validate_options{
 
 	if($opts{action} eq "view"){
 		usage("object_type to view not provided") unless($opts{object_type});
-		usage("status to view not provided") unless($opts{status});
+
+		if($opts{status} && $opts{object_id}){
+			usage("requested view should be for status or object_id, not both");
+		}
+		if($opts{submission_id} && $opts{object_id}){
+			usage("requested view should be for submission_id or object_id, not both");
+		}
+
+		### status reques is NOT_SUBMITTED by defaults
+		$opts{status}="ALL" unless($opts{status});
+		$opts{object_id}=0 unless($opts{object_id});
+		$opts{submission_id}=0 unless($opts{submission_id});
+
 
 		if($opts{xml}){
 			usage("directory to save xml $opts{xml} not found") unless(-d $opts{xml});
@@ -112,7 +134,7 @@ sub validate_options{
 	}
 
 	if($opts{action} eq "delete"){
-		usage("must provide an objectId") unless($opts{id});
+		usage("must provide an objectId") unless($opts{object_id});
 	}
 
 
@@ -136,13 +158,22 @@ sub usage{
 	print "\t\t           --xml file describing the object(s) to be created\n";
 	print "\t\tvalidate : validate objects in a submission, must provide submissionID\n";
 	print "\t\t           --id a valid submissionId\n";
+	print "\t\tsubmit   : submit validated objects, must provide submissionID\n";
+	print "\t\t           --submission_id a valid submissionId\n";
 	print "\t\tdelete   : delete an object, must provide object_typeID and objecttype\n";
-	print "\t\t           --id a valid objectId\n";
+	print "\t\t           --object_id a valid objectId\n";
 	print "\t\t           --object_type analyses|dacs|datasets|experiments|policies|runs|samples|studies\n";
-	print "\t\tview     : view registered object ids and status\n";
+	print "\t\tview     : view registered objects by type and status\n";
 	print "\t\t           --object_type analyses|dacs|datasets|experiments|policies|runs|samples|studies\n";
-	print "\t\t           --status DRAFT|VALIDATED|VALIDATED_WITH_ERRORS|SUBMITTED|NOT_SUBMITTED\n";
-	print "\t\t           --xml directory to save xml, named by object id\n";
+	print "\t\t           --object_id a valid objectID (OPTIONAL)\n";
+	print "\t\t           --submission_id a valid submissionID (OPTIONAL)\n";
+	print "\t\t           --status DRAFT|VALIDATED|VALIDATED_WITH_ERRORS|PARTIALLY_SUBMITTED|SUBMITTED|ALL(default)\n";
+	print "\t\t           --xml directory to save xml files which will be named by object id\n";
+	print "\t\t              Notes:\n";
+	print "\t\t               if object_id is supplied, status is ignored\n";
+	print "\t\t              	status ALL includes all non-submitted objects\n";
+
+
 
 
 	print "\t\tdelete   : delete objects by id\n";
