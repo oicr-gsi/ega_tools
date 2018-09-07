@@ -108,7 +108,7 @@ def AddSampleIdToAnalysis(AnalysisInfo):
         for accession in accessions:
             assert 'ERS' in accession, 'not a valid sample Id'
         # populate dict
-        AnalysisInfo[i]['sampleId'] = accession
+        AnalysisInfo[i]['sampleId'] = accessions
     return AnalysisInfo
 
 
@@ -169,6 +169,30 @@ def RetrieveObjectRef(Info, TagPath, MatchingIDs):
         assert item['ebiId'] not in IdToId, 'id already recorded' 
         IdToId[item['ebiId']] = IDs
     return IdToId
+
+# use this function to add sampleID field to the analysis object
+def ExtractSampleIDsFromAnalysisXml(AnalysisInfo):
+    '''
+    (list) -> list
+    Take a list of dictionaries of analysis object and return a modified list
+    in which a 'sampleId: [accession_id key] value-pair is added to each dictionary
+    '''
+    
+    # create a dict {analysis ebiID: [list of sample EbiID]}
+    AnalysisIDs = {}
+    
+    # sampleId is not a field for EGA analysis but can be found in the xml
+    for i in range(len(AnalysisInfo)):
+        # extract sampleId from xml
+        tree = ET.ElementTree(ET.fromstring(AnalysisInfo[i]['xml']))
+        sample_ref = tree.findall('.//SAMPLE_REF')
+        # capture all sample IDs in a list, there mayy be more than 1 for vcf files
+        accessions = [sample_ref[j].attrib['accession'] for j in range(len(sample_ref))]
+        for accession in accessions:
+            assert 'ERS' in accession, 'not a valid sample Id'
+        assert AnalysisInfo[i]['ebiId'] not in AnalysisIDs
+        AnalysisIDs[AnalysisInfo[i]['ebiId']] = accessions
+    return AnalysisIDs
 
 
 # use this function to reorganize the object fields
@@ -327,15 +351,14 @@ for i in range(len(Fields)):
     InfoBox12.append(GetObjectFields(Fields[i], MetaDataBox12[i]))
     InfoBox137.append(GetObjectFields(Fields[i], MetaDataBox137[i]))
 
-
 ### 5) add fields to link tables that are found only in the xml
 
 # sampleId is not a field for EGA analysis but can be found in the xml
-InfoBox12[5] = AddSampleIdToAnalysis(InfoBox12[5])
-InfoBox137[5] = AddSampleIdToAnalysis(InfoBox137[5])
+#InfoBox12[5] = AddSampleIdToAnalysis(InfoBox12[5])
+#InfoBox137[5] = AddSampleIdToAnalysis(InfoBox137[5])
 
 # add sampleId field to list of analysis fields
-Fields[-1].append('sampleId')
+#Fields[-1].append('sampleId')
 
 # runId is not a field for EGA dataset but can found in the xml FOR SOME DATASETS
 # the run ID in the dataset xml is EGAR, it needs to be mapped to ERR ID
@@ -348,6 +371,20 @@ DatasetToRunBox137 = RetrieveObjectRef(InfoBox137[4], './DATASET/RUN_REF', Match
 # extract analysis IDs for each dataset, map each analysis id (erz) to dataset id (egad)
 DatasetToAnalysisBox12 = RetrieveObjectRef(InfoBox12[4], './DATASET/ANALYSIS_REF', MatchIds(MetaDataBox12[-1]))
 DatasetToAnalysisBox137 = RetrieveObjectRef(InfoBox137[4], './DATASET/ANALYSIS_REF', MatchIds(MetaDataBox137[-1]))
+
+# sampleId is not a field for EGA analysis but can be found in the xml
+# because there may be more than 1 sampleId for a given analysisID,
+# a junction table with analysisID and sampleID is necessary
+AnalysisToSampleBox12 = ExtractSampleIDsFromAnalysisXml(InfoBox12[5])
+AnalysisToSampleBox137 = ExtractSampleIDsFromAnalysisXml(InfoBox137[5])
+
+print('analysis_sample', len(AnalysisToSampleBox12), len(AnalysisToSampleBox137))
+
+
+for i in AnalysisToSampleBox137:
+    print(i, AnalysisToSampleBox137[i])
+
+
 
 # add box of origin to each object
 for i in range(len(InfoBox12)):
@@ -373,7 +410,7 @@ Fields[3] = ReorderFields(Fields[3], 'studyId')
 Fields[1] = ReorderFields(Fields[1], 'sampleId')
 Fields[1] = ReorderFields(Fields[1], 'experimentId')
 Fields[-1] = ReorderFields(Fields[-1], 'studyId')
-Fields[-1] = ReorderFields(Fields[-1], 'sampleId')
+#Fields[-1] = ReorderFields(Fields[-1], 'sampleId')
 
 # make SQL command to specifiy the columns datatype    
 Columns = []
@@ -386,12 +423,13 @@ conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = D
 # Drop existing tables if present and create new ones
 SqlCommand = ['DROP TABLE IF EXISTS Experiments', 'DROP TABLE IF EXISTS Runs', 'DROP TABLE IF EXISTS Samples',
               'DROP TABLE IF EXISTS Analyses', 'DROP TABLE IF EXISTS Datasets', 'DROP TABLE IF EXISTS Studies',
-              'DROP TABLE IF EXISTS Datasets_Runs', 'DROP TABLE IF EXISTS Datasets_Analyses', 
+              'DROP TABLE IF EXISTS Datasets_Runs', 'DROP TABLE IF EXISTS Datasets_Analyses', 'DROP TABLE IF EXISTS Analyses_Samples',
               'CREATE TABLE Studies ({0})'.format(Columns[0]), 'CREATE TABLE Runs ({0})'.format(Columns[1]),
               'CREATE TABLE Samples ({0})'.format(Columns[2]), 'CREATE TABLE Experiments ({0})'.format(Columns[3]),
               'CREATE TABLE Datasets ({0})'.format(Columns[4]), 'CREATE TABLE Analyses ({0})'.format(Columns[5]),
               'CREATE TABLE Datasets_Runs (datasetId VARCHAR(100), runId VARCHAR(100), PRIMARY KEY (datasetId, runId))',
-              'CREATE TABLE Datasets_Analyses (datasetId VARCHAR(100), analysisId VARCHAR(100), PRIMARY KEY (datasetId, analysisId))']
+              'CREATE TABLE Datasets_Analyses (datasetId VARCHAR(100), analysisId VARCHAR(100), PRIMARY KEY (datasetId, analysisId))',
+              'CREATE TABLE Analyses_Samples (analysisId VARCHAR(100), sampleId  VARCHAR(100), PRIMARY KEY (analysisId, sampleId))']
 
 # execute each sql command in turn with a new cursor
 for i in range(len(SqlCommand)):
@@ -468,6 +506,12 @@ for egad_id in DatasetToAnalysisBox12:
 for egad_id in DatasetToAnalysisBox137:
     for egaz_id in DatasetToAnalysisBox137[egad_id]:
         cur.execute('INSERT INTO Datasets_Analyses (datasetId, analysisId) VALUES {0}'.format((egad_id, egaz_id)))
+        conn.commit()
+
+print('Inserting data into Analyses_Samples table')
+for erz_id in AnalysisToSampleBox12:
+    for ers_id in AnalysisToSampleBox12[erz_id]:
+        cur.execute('INSERT INTO Analyses_Samples (analysisId, sampleId) VALUES {0}'.format((erz_id, ers_id)))
         conn.commit()
 
 print('Inserted data into all tables')
