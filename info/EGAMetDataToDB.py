@@ -95,17 +95,18 @@ def AddSampleIdToAnalysis(AnalysisInfo):
     '''
     (list) -> list
     Take a list of dictionaries of analysis object and return a modified list
-    in which a 'sampleId: accession_id key: value pair is added to each dictionary
+    in which a 'sampleId: [accession_id key] value-pair is added to each dictionary
     '''
     
     # sampleId is not a field for EGA analysis but can be found in the xml
     for i in range(len(AnalysisInfo)):
         # extract sampleId from xml
-        assert AnalysisInfo[i]['xml'].count('SAMPLE_REF') == 2
         tree = ET.ElementTree(ET.fromstring(AnalysisInfo[i]['xml']))
-        sample_ref = tree.find('.//SAMPLE_REF')
-        accession = sample_ref.attrib['accession']
-        assert 'ERS' in accession, 'not a valid sample Id'
+        sample_ref = tree.findall('.//SAMPLE_REF')
+        # capture all sample IDs in a list, there mayy be more than 1 for vcf files
+        accessions = [sample_ref[j].attrib['accession'] for j in range(len(sample_ref))]
+        for accession in accessions:
+            assert 'ERS' in accession, 'not a valid sample Id'
         # populate dict
         AnalysisInfo[i]['sampleId'] = accession
     return AnalysisInfo
