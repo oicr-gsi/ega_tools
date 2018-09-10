@@ -382,15 +382,13 @@ for i in range(len(Fields)):
 # connect to the database
 conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = DbName, charset = "utf8")
 
-# Drop existing tables if present and create new ones
 SqlCommand = ['DROP TABLE IF EXISTS Experiments', 'DROP TABLE IF EXISTS Runs', 'DROP TABLE IF EXISTS Samples',
               'DROP TABLE IF EXISTS Analyses', 'DROP TABLE IF EXISTS Datasets', 'DROP TABLE IF EXISTS Studies',
-              'DROP TABLE IF EXISTS Datasets_Runs', 'DROP TABLE IF EXISTS Datasets_Analyses', 'DROP TABLE IF EXISTS Analyses_Samples',
+              'DROP TABLE IF EXISTS Datasets_RunsAnalysis', 'DROP TABLE IF EXISTS Analyses_Samples',
               'CREATE TABLE Studies ({0})'.format(Columns[0]), 'CREATE TABLE Runs ({0})'.format(Columns[1]),
               'CREATE TABLE Samples ({0})'.format(Columns[2]), 'CREATE TABLE Experiments ({0})'.format(Columns[3]),
               'CREATE TABLE Datasets ({0})'.format(Columns[4]), 'CREATE TABLE Analyses ({0})'.format(Columns[5]),
-              'CREATE TABLE Datasets_Runs (datasetId VARCHAR(100), runId VARCHAR(100), PRIMARY KEY (datasetId, runId))',
-              'CREATE TABLE Datasets_Analyses (datasetId VARCHAR(100), analysisId VARCHAR(100), PRIMARY KEY (datasetId, analysisId))',
+              'CREATE TABLE Datasets_RunsAnalysis (datasetId VARCHAR(100), ebiId VARCHAR(100), PRIMARY KEY (datasetId, ebiId))',
               'CREATE TABLE Analyses_Samples (analysisId VARCHAR(100), sampleId  VARCHAR(100), PRIMARY KEY (analysisId, sampleId))']
 
 # execute each sql command in turn with a new cursor
@@ -450,24 +448,22 @@ for i in range(len(InfoBox137)):
         conn.commit()
 
 # Insert data into junction tables
-print('Inserting data into Datasets_Runs table')
+print('Inserting data into Datasets_RunsAnalysis table')
 for egad_id in DatasetToRunBox12:
     for err_id in DatasetToRunBox12[egad_id]:
-        cur.execute('INSERT INTO Datasets_Runs (datasetId, runId) VALUES {0}'.format((egad_id, err_id)))         
+        cur.execute('INSERT INTO Datasets_RunsAnalysis (datasetId, ebiId) VALUES {0}'.format((egad_id, err_id)))         
         conn.commit()
 for egad_id in DatasetToRunBox137:
     for err_id in DatasetToRunBox137[egad_id]:
-        cur.execute('INSERT INTO Datasets_Runs (datasetId, runId) VALUES {0}'.format((egad_id, err_id)))         
+        cur.execute('INSERT INTO Datasets_RunsAnalysis (datasetId, ebiId) VALUES {0}'.format((egad_id, err_id)))         
         conn.commit()
-
-print('Inserting data into Datasets_Analyses table')
 for egad_id in DatasetToAnalysisBox12:
     for egaz_id in DatasetToAnalysisBox12[egad_id]:
-        cur.execute('INSERT INTO Datasets_Analyses (datasetId, analysisId) VALUES {0}'.format((egad_id, egaz_id)))
+        cur.execute('INSERT INTO Datasets_RunsAnalysis (datasetId, ebiId) VALUES {0}'.format((egad_id, egaz_id)))
         conn.commit()
 for egad_id in DatasetToAnalysisBox137:
     for egaz_id in DatasetToAnalysisBox137[egad_id]:
-        cur.execute('INSERT INTO Datasets_Analyses (datasetId, analysisId) VALUES {0}'.format((egad_id, egaz_id)))
+        cur.execute('INSERT INTO Datasets_RunsAnalysis (datasetId, ebiId) VALUES {0}'.format((egad_id, egaz_id)))
         conn.commit()
 
 print('Inserting data into Analyses_Samples table')
