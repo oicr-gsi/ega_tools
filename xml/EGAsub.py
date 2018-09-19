@@ -269,7 +269,52 @@ def ParseSamplesInputTable(TableFile):
                         Table[sample][field] = ''
     return Table
                         
-                        
+  
+
+# use this function to parse a database table into a dictionary
+def ParseDatabaseTable(CredentialFile, Database, Table):
+    '''
+    (file, str, str) -> dict
+    Take a file with credentials to connect to Database and return a dictionary
+    with all the data in the Database Table with ebiId as key of columns:value pairs
+    '''
+
+    # connect to database
+    conn = EstablishConnection(CredentialFile, Database)
+    # select all fields from table
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM {0}'.format(Table))
+    
+    # create a dict {ebiId: {column:value}}
+    TableData = {}
+    
+    # get the table header
+    header = [i[0] for i in cur.description]
+    
+    # loop over table records
+    for i in cur:
+        ebiId = i[header.index('ebiId')]
+        # check that key is unique in database
+        assert ebiId not in TableData
+        # initialize inner dict
+        TableData[ebiId] = {}
+        # populate inner dict with columns: value
+        for j in range(len(i)):
+            TableData[ebiId][header[j]] = i[j]
+    # close connection
+    conn.close()
+    
+    return TableData
+
+
+
+
+
+
+
+
+
+                      
 
 # use this function to add data to Samples Table
 def AddSamples(args):
@@ -278,11 +323,18 @@ def AddSamples(args):
     
     '''
 
-    # connect to database
-    conn = EstablishConnection(args.credential, args.database)
     
     # parse input table, create a dict {sample: {attributes:values}}
     Samples = ParseSamplesInputTable(args.intable)
+    
+    # check if samples already have a accession number
+    # connect to metadata database
+    conn = EstablishConnection(args.credential, 'EGA')
+    # retrieve all samples from Samples table in metadata database
+    cur = conn.cursor()
+    
+    
+    
     
     # add sample information to database
     cur = conn.cusor()
