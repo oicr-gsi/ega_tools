@@ -23,8 +23,8 @@ import argparse
 def ExtractCredentials(CredentialFile):
     '''
     (file) -> tuple
-    Take a file with credentials to access the database and return a tuple
-    with the credentials
+    Take a file with credentials to access the database and return a dictionary
+    with the credentials as key:value pairs
     '''
     
     Credentials = {}            
@@ -34,12 +34,7 @@ def ExtractCredentials(CredentialFile):
             line = line.rstrip().split('=')
             Credentials[line[0]] = line[1]
     infile.close()        
-
-    # extract credential values
-    DbHost, DbName = Credentials['DbHost'], Credentials['DbName']
-    DbUser, DbPasswd = Credentials['DbUser'], Credentials['DbPasswd']
-
-    return (DbHost, DbName, DbUser, DbPasswd)
+    return Credentials
 
 
 # use this function to connect to the gsi database
@@ -50,9 +45,9 @@ def EstablishConnection(CredentialFile):
     '''
     
     # extract database credentials from the command
-    DbHost, DbName, DbUser, DbPasswd = ExtractCredentials(CredentialFile)
+    Credentials = ExtractCredentials(CredentialFile)
     # connnect to the database
-    conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = DbName, charset = "utf8")
+    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'], password = Credentials['DbPasswd'], db = Credentials['DbMet'], charset = "utf8")
     return conn 
 
 
