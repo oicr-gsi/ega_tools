@@ -43,17 +43,14 @@ def ExtractCredentials(CredentialFile):
 
 
 # use this function to connect to the gsi database
-def EstablishConnection(args):
+def EstablishConnection(CredentialFile):
     '''
     (list) -> connection object    
     Take a list of command line arguments and return an open connection to gsi database
     '''
     
     # extract database credentials from the command
-    if args.credential:
-        DbHost, DbName, DbUser, DbPasswd = ExtractCredentials(args.credential)
-    else:
-        DbHost, DbName, DbUser, DbPasswd = args.dbhost, args.dbname, args.dbuser, args.dbpass
+    DbHost, DbName, DbUser, DbPasswd = ExtractCredentials(CredentialFile)
     # connnect to the database
     conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = DbName, charset = "utf8")
     return conn 
@@ -403,10 +400,6 @@ if __name__ == '__main__':
     # Download sub-commands
     Download_parser = subparsers.add_parser('DownloadTable', help ='Download database table to flat file')
     Download_parser.add_argument('-c', '--Credentials', dest=args.credential, help='file with database credentials')
-    Download_parser.add_argument('-h', '--Host', dest=dbhost, help='database host')
-    Download_parser.add_argument('-n', '--Name', dest=dbname, help='database name')
-    Download_parser.add_argument('-u', '--User', dest=dbuser, help='database user')
-    Download_parser.add_argument('-p', '--Pass', dest=dbpass, help='database password')
     Download_parser.add_argument('-t', '--Table', dest=table, help='database table to be downloaded')
     Download_parser.add_argument('-o', '--Output', dest=outputfile, help='path to the tab-delimited file with database table content')
     Download_parser.set_defaults(func=DownloadDbTable)
