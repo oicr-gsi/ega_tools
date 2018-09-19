@@ -225,7 +225,8 @@ def ParseSamplesInputTable(TableFile):
                    'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
                    'anonymizedName', 'phenotype', 'description', 'title',
                    'attributes', 'caseOrControl', 'cellLine', 'organismPart',
-                   'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter']
+                   'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
+                   'EGAaccessionId', 'json']
 
     for line in infile:
         if line.rstrip() != '':
@@ -367,6 +368,14 @@ if __name__ == '__main__':
     Download_parser.add_argument('-o', '--Output', dest='outputfile', help='path to the tab-delimited file with database table content', required=True)
     Download_parser.set_defaults(func=DownloadDbTable)
 
+    # Upload sub-commands
+    Upload_parser = subparsers.add_parser('UploadTable', help ='Upload file to database table. This will either replace the entire table or update records')
+    Upload_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    Upload_parser.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
+    Upload_parser.add_argument('-t', '--Table', dest='table', help='database table to be modified', required=True)
+    Upload_parser.add_argument('-i', '--InputFile', dest='inputfile', help='file to upload to database table', required=True)
+    Upload_parser.set_defaults(func=UploadDbTable)
+    
     
     
   
