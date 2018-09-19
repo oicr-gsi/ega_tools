@@ -66,7 +66,7 @@ def DownloadDbTable(args):
     '''
     
     # connect to database
-    conn = EstablishConnection(args)
+    conn = EstablishConnection(args.credential, args.database)
     
     # list all tables
     cur = conn.cursor()
@@ -142,7 +142,7 @@ def UploadDbTable(args):
     '''
     
     # connect to database
-    conn = EstablishConnection(args)
+    conn = EstablishConnection(args.credential, args.database)
         # list all tables
     cur = conn.cursor()
     cur.execute('SHOW TABLES')
@@ -169,7 +169,7 @@ def UploadDbTable(args):
             # execute each command in turn with a new cursor
             for i in range(len(SqlCommands)):
                 with conn.cursor() as cur:
-                    cur.execute(SqlCommand[i])
+                    cur.execute(SqlCommands[i])
                     conn.commit()
             # insert data in table
             cur = conn.cursor()
@@ -261,7 +261,7 @@ def ParseSamplesInputTable(TableFile):
                 # check if field if key in inner dict
                 if field not in list(Table[sample].keys()):
                     # check if field is hard-coded or not
-                    if field in list(hard_coded_fiels.keys()):
+                    if field in list(hard_coded_fields.keys()):
                         # add hard-coded fields
                         Table[sample][field] = hard_coded_fields[field]
                     else:
@@ -278,7 +278,7 @@ def AddSamples(args):
     '''
 
     # connect to database
-    conn = EstablishConnection(args)
+    conn = EstablishConnection(args.credential, args.database)
     
     # parse input table, create a dict {sample: {attributes:values}}
     Samples = ParseSamplesInputTable(args.intable)
@@ -302,6 +302,7 @@ def AddSamples(args):
         
         
     else:
+        pass
         
         
     
@@ -350,44 +351,6 @@ def AddSamples(args):
 
 
 
-center_name='OICR_ICGC' accession='ERS1020778' broker_name='EGA' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>    <IDENTIFIERS>      <PRIMARY_ID>ERS1020778</PRIMARY_ID>      <SUBMITTER_ID namespace='OICR_ICGC'>184ND</SUBMITTER_ID>    </IDENTIFIERS>    <SAMPLE_NAME>      <TAXON_ID>9606</TAXON_ID>      <SCIENTIFIC_NAME>Homo sapiens</SCIENTIFIC_NAME>      <COMMON_NAME>human</COMMON_NAME>    </SAMPLE_NAME>    <SAMPLE_ATTRIBUTES>      <SAMPLE_ATTRIBUTE>        <TAG>gender</TAG>        <VALUE>unknown</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>phenotype</TAG>        <VALUE>Matched Blood Normal</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>subject_id</TAG>        <VALUE>CLL184</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>ENA-CHECKLIST</TAG>        <VALUE>ERC000026</VALUE>      
-
-
-
-
-ebiId	alias	attributes	caseOrControl	centerName	creationTime	description	egaAccessionId	gender	phenotype	status	subjectId	title	xml	egaBox
-
-
-CPCG_External_Baca_T_01-28_WGS  01-28   Baca    https://www.ncbi.nlm.nih.gov/projects/gap/cgi-bin/study.cgi?study_id=phs000447.v1.p1    T_01-28_WGS     Prostate tumor       male    X/Y     SAMN00848211    SRS306791
-Sample  donor_id        External_dataset        source  SourceID        phenotype       Gender  Gender:Units    BiosampleID     SRA Sample      sample_uuid     EGA_accession
-
-
-
-
-
-
-
-
-ebiId	alias	attributes	caseOrControl	centerName	creationTime	description	egaAccessionId	gender	phenotype	status	subjectId	title	xml	egaBox
-ERS1020778	184ND	NULL	NULL	OICR_ICGC	2015-12-15	NULL	EGAN00001356756	unknown	Matched Blood Normal	SUBMITTED	NULL	NULL	<SAMPLE_SET>  <SAMPLE alias='184ND' center_name='OICR_ICGC' accession='ERS1020778' broker_name='EGA' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>    <IDENTIFIERS>      <PRIMARY_ID>ERS1020778</PRIMARY_ID>      <SUBMITTER_ID namespace='OICR_ICGC'>184ND</SUBMITTER_ID>    </IDENTIFIERS>    <SAMPLE_NAME>      <TAXON_ID>9606</TAXON_ID>      <SCIENTIFIC_NAME>Homo sapiens</SCIENTIFIC_NAME>      <COMMON_NAME>human</COMMON_NAME>    </SAMPLE_NAME>    <SAMPLE_ATTRIBUTES>      <SAMPLE_ATTRIBUTE>        <TAG>gender</TAG>        <VALUE>unknown</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>phenotype</TAG>        <VALUE>Matched Blood Normal</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>subject_id</TAG>        <VALUE>CLL184</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>ENA-CHECKLIST</TAG>        <VALUE>ERC000026</VALUE>      </SAMPLE_ATTRIBUTE>    </SAMPLE_ATTRIBUTES>  </SAMPLE></SAMPLE_SET>	ega-box-12
-
-
-
-
-
-
-ebiId	alias	attributes	caseOrControl	centerName	creationTime	description	egaAccessionId	gender	phenotype	status	subjectId	title	xml	egaBox
-ERS1020778	184ND	NULL	NULL	OICR_ICGC	2015-12-15	NULL	EGAN00001356756	unknown	Matched Blood Normal	SUBMITTED	NULL	NULL	<SAMPLE_SET>  <SAMPLE alias='184ND' center_name='OICR_ICGC' accession='ERS1020778' broker_name='EGA' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>    <IDENTIFIERS>      <PRIMARY_ID>ERS1020778</PRIMARY_ID>      <SUBMITTER_ID namespace='OICR_ICGC'>184ND</SUBMITTER_ID>    </IDENTIFIERS>    <SAMPLE_NAME>      <TAXON_ID>9606</TAXON_ID>      <SCIENTIFIC_NAME>Homo sapiens</SCIENTIFIC_NAME>      <COMMON_NAME>human</COMMON_NAME>    </SAMPLE_NAME>    <SAMPLE_ATTRIBUTES>      <SAMPLE_ATTRIBUTE>        <TAG>gender</TAG>        <VALUE>unknown</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>phenotype</TAG>        <VALUE>Matched Blood Normal</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>subject_id</TAG>        <VALUE>CLL184</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>ENA-CHECKLIST</TAG>        <VALUE>ERC000026</VALUE>      </SAMPLE_ATTRIBUTE>    </SAMPLE_ATTRIBUTES>  </SAMPLE></SAMPLE_SET>	ega-box-12
-
-
-
-
-
-
-
-
-
-
 
 
 if __name__ == '__main__':
@@ -398,9 +361,10 @@ if __name__ == '__main__':
 
     # Download sub-commands
     Download_parser = subparsers.add_parser('DownloadTable', help ='Download database table to flat file')
-    Download_parser.add_argument('-c', '--Credentials', dest=args.credential, help='file with database credentials')
-    Download_parser.add_argument('-t', '--Table', dest=table, help='database table to be downloaded')
-    Download_parser.add_argument('-o', '--Output', dest=outputfile, help='path to the tab-delimited file with database table content')
+    Download_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    Download_parser.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
+    Download_parser.add_argument('-t', '--Table', dest='table', help='database table to be downloaded', required=True)
+    Download_parser.add_argument('-o', '--Output', dest='outputfile', help='path to the tab-delimited file with database table content', required=True)
     Download_parser.set_defaults(func=DownloadDbTable)
 
     
