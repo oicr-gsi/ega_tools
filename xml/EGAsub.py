@@ -23,7 +23,7 @@ import argparse
 def ExtractCredentials(CredentialFile):
     '''
     (file) -> tuple
-    Take a file with credentials to access the database and return a dictionary
+    Take a file with database credentials and return a dictionary
     with the credentials as key:value pairs
     '''
     
@@ -38,16 +38,22 @@ def ExtractCredentials(CredentialFile):
 
 
 # use this function to connect to the gsi database
-def EstablishConnection(CredentialFile):
+def EstablishConnection(CredentialFile, database):
     '''
-    (list) -> connection object    
-    Take a list of command line arguments and return an open connection to gsi database
+    (list, str) -> connection object    
+    Take a file with database credentials and a string specifying if the connection
+    if made to the Metadata or Submission database
     '''
     
     # extract database credentials from the command
     Credentials = ExtractCredentials(CredentialFile)
+    # determine the database name
+    if database == 'Metadata':
+        DbName = Credentials['DbMet']
+    elif database == 'Submission':
+        DbName = Credentials['DbSub']
     # connnect to the database
-    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'], password = Credentials['DbPasswd'], db = Credentials['DbMet'], charset = "utf8")
+    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'], password = Credentials['DbPasswd'], db = DbName, charset = "utf8")
     return conn 
 
 
@@ -215,42 +221,51 @@ def ParseSamplesInputTable(TableFile):
     Table = {}
     
     # create a list of valid fields
-    ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'phenotype',
-                   'brokerName', 'subjectId', 'centerName', 'description',
-                   'title', 'anonymizedName', 'attributes', 'bioSampleId',
-                   'caseOrControl', 'cellLine', 'organismPart',
-                   'region', 'sampleAge', 'sampleDetail']
+    ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
+                   'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
+                   'anonymizedName', 'phenotype', 'description', 'title',
+                   'attributes', 'caseOrControl', 'cellLine', 'organismPart',
+                   'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter']
 
     for line in infile:
         if line.rstrip() != '':
             line = line.rstrip().split('\t')
             # check that required fields are present
-            required_fields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'phenotype']
+            required_fields = ['alias', 'gender', 'phenotype', 'title', 'description']
             for field in required_fields:
                 if field not in header:
                     print('table format is not valid, 1 or more fields are missing')
                     sys.exit(2)
+            # extract key-value pairs, ignore non-valid fields
+            # get the sample alias
+            alias = line.pop(header.index('alias'))
+            # insert alias in 1st position
+            line.insert(0, alias)
             # initialize inner dict with sample alias
-            alias = line[header.index('alias')]
             assert alias not in Table 
             Table[alias] = {}
-            # extract key-value pairs, ignore non-valid fields
             for i in range(len(line)):
-                # skip alias, already recorded
-                if header[i] != 'alias':
-                    # check that key is valid
-                    if header[i] in ValidFields:
-                        Table[alias][header[i]] = line[i]
+                # check that key is valid
+                if header[i] in ValidFields:
+                    Table[alias][header[i]] = line[i]
     infile.close()
     
-    # add empty values to missing keys
+    # add empty or hard-coded values to missing keys
+    hard_coded_fields = {'taxonId': '9606', 'speciesName': 'Homo sapiens',
+                         'species': 'human', 'brokerName': 'EGA', 'centerName': 'OICR',
+                         'runCenter': 'OICR'}
     for sample in Table:
         # compare sample attributes to valid fields
         if set(Table[sample].keys()) != set(ValidFields):
             for field in ValidFields:
-                # skip alias and add empty string to other missing fields 
-                if field != 'alias' and field not in list(Table[sample].keys()):
-                    Table[sample][field] = ''
+                # check if field if key in inner dict
+                if field not in list(Table[sample].keys()):
+                    # check if field is hard-coded or not
+                    if field in list(hard_coded_fiels.keys()):
+                        # add hard-coded fields
+                        Table[sample][field] = hard_coded_fields[field]
+                    else:
+                        Table[sample][field] = ''
     return Table
                         
                         
@@ -359,18 +374,7 @@ ERS1020778	184ND	NULL	NULL	OICR_ICGC	2015-12-15	NULL	EGAN00001356756	unknown	Mat
 
 
 
-0 Sample CPCG_External_Baca_T_01-28_WGS
-1 donor_id 01-28
-2 External_dataset Baca
-3 source https://www.ncbi.nlm.nih.gov/projects/gap/cgi-bin/study.cgi?study_id=phs000447.v1.p1
-4 SourceID T_01-28_WGS
-5 phenotype Prostate tumor
-6 Gender male
-7 Gender:Units X/Y
-8 BiosampleID SAMN00848211
-9 SRA Sample SRS306791
-10 sample_uuid
-11 EGA_accession
+
 
 ebiId	alias	attributes	caseOrControl	centerName	creationTime	description	egaAccessionId	gender	phenotype	status	subjectId	title	xml	egaBox
 ERS1020778	184ND	NULL	NULL	OICR_ICGC	2015-12-15	NULL	EGAN00001356756	unknown	Matched Blood Normal	SUBMITTED	NULL	NULL	<SAMPLE_SET>  <SAMPLE alias='184ND' center_name='OICR_ICGC' accession='ERS1020778' broker_name='EGA' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>    <IDENTIFIERS>      <PRIMARY_ID>ERS1020778</PRIMARY_ID>      <SUBMITTER_ID namespace='OICR_ICGC'>184ND</SUBMITTER_ID>    </IDENTIFIERS>    <SAMPLE_NAME>      <TAXON_ID>9606</TAXON_ID>      <SCIENTIFIC_NAME>Homo sapiens</SCIENTIFIC_NAME>      <COMMON_NAME>human</COMMON_NAME>    </SAMPLE_NAME>    <SAMPLE_ATTRIBUTES>      <SAMPLE_ATTRIBUTE>        <TAG>gender</TAG>        <VALUE>unknown</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>phenotype</TAG>        <VALUE>Matched Blood Normal</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>subject_id</TAG>        <VALUE>CLL184</VALUE>      </SAMPLE_ATTRIBUTE>      <SAMPLE_ATTRIBUTE>        <TAG>ENA-CHECKLIST</TAG>        <VALUE>ERC000026</VALUE>      </SAMPLE_ATTRIBUTE>    </SAMPLE_ATTRIBUTES>  </SAMPLE></SAMPLE_SET>	ega-box-12
