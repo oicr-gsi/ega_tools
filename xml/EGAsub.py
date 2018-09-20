@@ -58,22 +58,17 @@ def EstablishConnection(CredentialFile, database):
 
 
 # use this function to create the table headers
-def GenerateTableHeader(CredentialFile, Table):
+def FormatDbTableHeader(Table):
     '''
-    (file, str) -> None
-    Take a file with database credentials and create a Table with columns if 
-    Table is not already in the database
+    (str) -> str
+    Take a database Table string name and return a string with column headers and datatype
+    to be used in  SQL command to create a tabkle and its header
     '''
     
-    # connect to database
-    conn = EstablishConnection(CredentialFile, 'EGAsub')
+    # create a list of columns and datatype
+    Columns = []
     
-    # make a list of all tables
-    cur = conn.cursor()
-    cur.execute('SHOW TABLES')
-    Tables = [i[0] for i in cur]
-    
-    # get table header
+    # check the table in database
     if Table == 'Samples':
         # create a list of valid fields
         ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
@@ -84,25 +79,33 @@ def GenerateTableHeader(CredentialFile, Table):
                        'creationTime', 'json', 'egaAccessionId']
         # format columns with data type
         Columns = []
-        
         for i in range(len(ValidFields)):
             if ValidFields[i] == 'json':
                 Columns.append(ValidFields[i] + ' MEDIUMTEXT NULL')
             else:
                 Columns.append(L[i] + ' TEXT NULL')
-        Columns = ' '.join(Columns)        
-           
-    # create table if it doesn't exists
-    if Table not in Tables:
-        # create table with header
-        cur = conn.cursor()
-        cur.execute('CREATE TABLE {0} ({1})'.format(Table, Columns))
-        conn.commit()
-    # close connection
-    conn.close()
+    
+    # convert list to string    
+    Columns = ' '.join(Columns)        
+    return Columns
 
 
-
+# use this function to insert data in a database table
+def FormatDbTableData(L):
+    '''
+    (list) -> tuple
+    Take a list of data and return a tuple to be inserted in a database table 
+    '''
+    
+    # create a tuple of strings data values
+    Values = ()
+    # loop over data 
+    for i in range(len(L)):
+        if L[i] == '' or L[i] == None or L[i] == 'NA':
+            Values = Values.__add__(('NULL',))
+        else:
+            Values = Values.__add__((str(L[i]),))
+    return Values
 
 
 # use this function to download a database table as a flat file
@@ -142,10 +145,6 @@ def DownloadDbTable(args):
         sys.exit(2)
         
 
-
-
-
-
 # use this function to upload content and replace table database
 def UploadDbTable(args):
     '''
@@ -165,132 +164,143 @@ def UploadDbTable(args):
     cur.execute('SHOW TABLES')
     Tables = [i[0] for i in cur]
     
-    # check that table to be uploaded is present in database
-    if args.table in Tables:
-        # compare headers between input file and table in database
-        cur.execute('SELECT * from {0}'.format(args.table))
-        fields = [i[0] for i in cur.description]
-        infile = open(args.inputfile)
-        header = infile.readline().rstrip().split('\t')
-        if fields != header:
-            print('table headers should be identical')
-            conn.close()
-            sys.exit(2)
-        else:
-            # extract the file content as a list of lines
-            content = infile.read().rstrip().split('\n')
-            # specify the column type of each column
-            Columns = FormatTableHeader(fields, args.table)            
-            SqlCommands = ['DROP TABLE IF EXISTS {0}'.format(args.table),
-                           'CREATE TABLE {0} ({1})'.format(args.table, Columns)]
-            # execute each command in turn with a new cursor
-            for i in range(len(SqlCommands)):
-                with conn.cursor() as cur:
-                    cur.execute(SqlCommands[i])
-                    conn.commit()
-            # insert data in table
-            cur = conn.cursor()
-            # make a string with column names
-            ColumnNames = ', '.join(header)
-            assert ColumnNames == ', '.join(fields)
-            # loop over list of lines from file content
-            for i in range(len(content)):
-                Values = ()
-                # convert line string to list of column entries
-                line = content[i].split('\t')
-                # loop over line entries, dump values into a tuple
-                for j in range(len(line)):
-                    if line[j] == '' or line[j] == None or line[j] == 'NA':
-                        Values = Values.__add__(('NULL',))
-                    else:
-                        Values = Values.__add__((line[j],))
-                # check that all column data has been recorded for the current line
-                assert len(Values) == len(fields)
-                # add values into table
-                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-                conn.commit()
-            # close connection
-            conn.close()
-    else:
-        print('table {0} is not in Database'.format(args.table))
-        # close connection and exit
+    # check if table exists in database
+    if args.table not in Tables:
+        # create table with column headers
+        Columns = FormatDbTableHeader(args.table)
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    
+    # compare headers between input file and table in database
+    cur = conn.cursor()
+    cur.execute('SELECT * from {0}'.format(args.table))
+    fields = [i[0] for i in cur.description]
+    infile = open(args.inputfile)
+    header = infile.readline().rstrip().split('\t')
+    if fields != header:
+        print('table headers should be identical')
         conn.close()
         sys.exit(2)
-
-
-# use this function to parse the input samples table
+    else:
+        # extract the file content as a list of lines
+        content = infile.read().rstrip().split('\n')
+        # specify the column type of each column
+        Columns = FormatDbTableHeader(args.table)            
+        SqlCommands = ['DROP TABLE IF EXISTS {0}'.format(args.table),
+                       'CREATE TABLE {0} ({1})'.format(args.table, Columns)]
+        # execute each command in turn with a new cursor
+        for i in range(len(SqlCommands)):
+            with conn.cursor() as cur:
+                cur.execute(SqlCommands[i])
+                conn.commit()
+        # insert data in table
+        cur = conn.cursor()
+        # make a string with column names
+        ColumnNames = ', '.join(header)
+        assert ColumnNames == ', '.join(fields)
+        # loop over list of lines from file content
+        for i in range(len(content)):
+            # convert line string to list of column entries
+            line = content[i].split('\t')
+            # get the values to be added to database table
+            Values = FormatDbTableData(line)
+            # check that all column data has been recorded for the current line
+            assert len(Values) == len(fields)
+            # add values into table
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+        # close connection
+        conn.close()
+    
+    
+# use this function to parse the input sample table
 def ParseSamplesInputTable(TableFile):
     '''
     (file) -> dict
-    Take a file with sample information and return a dictionary with sample alias
-    as key and a dictionary of attributes as value. Non-valid attributes are
-    ignored and missing attributes are allowed
+    Take a tab-delimited file with sample information and return a dictionary
+    with sample alias as key and a dictionary of attributes as value.
+    Precondition: "alias" is a required in the table header 
     '''
-
-    # parse the input file
-    # varying content is allowed:
-    # missing key value pairs are allowed, non-valid key-value pairs are ignored
     
+    Data = {}
     infile = open(TableFile)
-    # lower caps in header to allow for variation in spelling
-    header = infile.readline().rstrip().lower().split('\t')
-    # create a dictionary of dictionaries {sample: {key:values}}
-    Table = {}
-    
-    # create a list of valid fields
-    ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
-                   'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
-                   'anonymizedName', 'phenotype', 'description', 'title',
-                   'attributes', 'caseOrControl', 'cellLine', 'organismPart',
-                   'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
-                   'egaAccessionId', 'json', 'creationTime']
-
-    # make a list of valid fields in lower case for comparison with file header
-    FieldsLower = '\t'.join(ValidFields).lower().split('\t')
-
+    header = infile.readline().rstrip().split('\t')
+    assert 'alias' in header
     for line in infile:
         if line.rstrip() != '':
             line = line.rstrip().split('\t')
-            # check that required fields are present
-            required_fields = ['alias', 'gender', 'phenotype', 'title', 'description']
-            for field in required_fields:
-                if field.lower() not in header.lower():
-                    print('table format is not valid, 1 or more fields are missing')
-                    infile.close()
-                    sys.exit(2)
-            # extract key-value pairs, ignore non-valid fields
-            # get the sample alias
-            alias = line.pop(header.index('alias'))
-            # insert alias in 1st position
-            line.insert(0, alias)
-            # initialize inner dict with sample alias
-            assert alias not in Table 
-            Table[alias] = {}
+            alias = line[header.index('alias')]
+            assert alias not in Data
+            Data[alias] = {}
             for i in range(len(line)):
-                # check that key is valid
-                if header[i] in FieldsLower:
-                    # get the valid column name
-                    column = ValidFields[FieldsLower.index(header[i])]
-                    Table[alias][column] = line[i]
+                Data[alias][header[i]] = line[i]
     infile.close()
+    return Data
+
+
+# use this function to parse the input samples table
+def LoadSamples(TableFile, ValidFields):
+    '''
+    (file, list) -> dict
+    Take a file with sample information and a list of valid column fields in the
+    database Sample Table and return a dictionary with sample alias as key and
+    a dictionary of attributes as value. Non-valid attributes are ignored and
+    missing attributes are allowed
+    '''
+
+    # parse the input table file
+    Table = ParseSamplesInputTable(TableFile)
+    # get the fields of the input table and convert to lower cap
+    FileFields = list(map(lambda x: x.lower(), list(Table[list(Table.keys())[0]].keys())))
     
-    # add empty or hard-coded values to missing keys
-    hard_coded_fields = {'taxonId': '9606', 'speciesName': 'Homo sapiens',
-                         'species': 'human', 'brokerName': 'EGA', 'centerName': 'OICR',
-                         'runCenter': 'OICR'}
+    # create a dictionary of dictionaries {sample: {key:values}}
+    Data = {}
+    # make a list of valid fields in lower case for comparison with fields in file
+    FieldsLower = '\t'.join(ValidFields).lower().split('\t')
+    # check if required fields are present
+    required_fields = ['alias', 'gender', 'phenotype', 'title', 'description']
+    for field in required_fields:
+        if field.lower() not in FileFields:
+            print('table format is not valid, 1 or more fields are missing')
+            return Data
+
+    # for each sample in input table:
+    # 1) remove non-valid fields: non-valid fields are ignored
+    # 2) add hard-coded fields: some fields are required but may be omitted in the input table
+    # 3) add empty string to missing fields: missing values are allowed for some fields
+    
+    # make a set of non-supported fields
+    NonSupportedFields = set()
+    # remove non-valid fields 
     for sample in Table:
-        # compare sample attributes to valid fields
-        if set(Table[sample].keys()) != set(ValidFields):
-            for field in ValidFields:
-                # check if field if key in inner dict
-                if field not in list(Table[sample].keys()):
-                    # check if field is hard-coded or not
-                    if field in list(hard_coded_fields.keys()):
-                        # add hard-coded fields
-                        Table[sample][field] = hard_coded_fields[field]
-                    else:
-                        Table[sample][field] = ''
-    return Table
+        # initialize data inner dict
+        Data[sample] = {}
+        # loop over sample fields 
+        for field in Table[sample]:
+            # check if valid field, convert to lower caps to allow for mis-spelling in input table
+            if field.lower() in FieldsLower:
+                # valid field, get field valid name
+                field_name = ValidFields[FieldsLower.index(field)]
+                # add value to dict
+                Data[sample][field_name] = Table[sample][field]
+            else:
+                # print message for field only once
+                if field not in NonSupportedFields:
+                    print('{0} column is not supported in Samples table'.format(field))
+                    NonSupportedFields.add(field)
+    # add values to missing columns 
+    # some required fields are hard-coded and can be omitted from the input table
+    hard_coded_fields = {'taxonId': '9606', 'speciesName': 'Homo sapiens', 'species': 'human',
+                         'brokerName': 'EGA', 'centerName': 'OICR', 'runCenter': 'OICR'}
+    for sample in Data:
+        for field in ValidFields:
+            if field not in Data[sample]:
+                if field in hard_coded_fields:
+                    Data[sample][field] = hard_coded_fields[field]
+                else:
+                    Data[sample][field] = ''
+    return Data
                         
   
 
