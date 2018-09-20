@@ -90,6 +90,30 @@ def FormatDbTableHeader(Table):
     return Columns
 
 
+# use this function to create a table and its header if the table doesn't exist in the database
+def FirstTimeCreateTable(CredentialFile, Database, Table):
+    '''
+    (file, str, str) -> None
+    Take a file with database credentials and create Table and its header in the
+    Database if doesn't already exists
+    '''
+    
+    # connect to database
+    conn = EstablishConnection(CredentialFile, Database)
+    # list all tables
+    cur = conn.cursor()
+    cur.execute('SHOW TABLES')
+    AllTables = [i[0] for i in cur]
+    # check if table exists in database
+    if Table not in AllTables:
+        # create table with column headers
+        Columns = FormatDbTableHeader(Table)
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(Table, Columns))
+        conn.commit()
+    #close connection to db
+    conn.close()
+
 # use this function to insert data in a database table
 def FormatDbTableData(L):
     '''
@@ -106,6 +130,17 @@ def FormatDbTableData(L):
         else:
             Values = Values.__add__((str(L[i]),))
     return Values
+
+
+
+
+
+
+
+
+
+
+
 
 
 # use this function to download a database table as a flat file
@@ -347,9 +382,60 @@ def AddSamples(args):
     
     '''
 
+    # connect to database
+    conn = EstablishConnection(args.credential, args.database)
     
     # parse input table, create a dict {sample: {attributes:values}}
     Samples = ParseSamplesInputTable(args.intable)
+    
+    # get the list of valid column fields
+    cur = conn.cursor()
+    cur.execute('SHOW TABLES')
+    
+    
+    # use this function to create the table headers
+    def FormatDbTableHeader(Table):
+    '''
+    (str) -> str
+    Take a database Table string name and return a string with column headers and datatype
+    to be used in  SQL command to create a tabkle and its header
+    '''
+    
+    # create a list of columns and datatype
+    Columns = []
+    
+    # check the table in database
+    if Table == 'Samples':
+        # create a list of valid fields
+        ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
+                       'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
+                       'anonymizedName', 'phenotype', 'description', 'title',
+                       'attributes', 'caseOrControl', 'cellLine', 'organismPart',
+                       'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
+                       'creationTime', 'json', 'egaAccessionId']
+        # format columns with data type
+        Columns = []
+        for i in range(len(ValidFields)):
+            if ValidFields[i] == 'json':
+                Columns.append(ValidFields[i] + ' MEDIUMTEXT NULL')
+            else:
+                Columns.append(L[i] + ' TEXT NULL')
+    
+    # convert list to string    
+    Columns = ' '.join(Columns)        
+    return Columns
+    
+    
+    
+    
+    
+    
+    # use this function to parse the input samples table
+def LoadSamples(TableFile, ValidFields):
+    
+    
+     
+    
     
     # look for samples in the metadata database
     Metadata = ParseMetaDaDatabaseTable(args.credential, 'EGA', 'Samples')
