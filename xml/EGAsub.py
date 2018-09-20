@@ -409,50 +409,39 @@ def AddSamples(args):
                     # replace column:values for that sample with info from the Metadata db
                     Samples[sample][field] = Metadata[ebiId][field]
             
-    # make a list of samples that are already recorded in the Samples table
-    cur.execute('SELECT {0}.alias FROM {0}'.format(args.table))
-    PresentSamples = [i[0] for i in cur]
-            
+    # parse Samples table to extract information already in the Samples submission database
+    PresentSamples = ParseDatabaseTable(args.credential, 'EGAsub', args.table, 'Submission')
+    
     # check if samples already exist, existing records cannot be replaced
     # create a list to store the data to be added
     NewData = []
-    
-    
-    
     for sample in Samples:
         if sample in PresentSamples:
             # existing recorded cannot be replaced
             print('sample {0} is already recorded'.format(sample))
         else:
-            # need to add sample and its information to database
+            # add sample and its information to database 
+            sample_data = [Samples[sample][field] for field in ValidFields]
+            NewData.append(sample_data)    
+            
+    # insert data in Samples table
+    cur = conn.cursor()
+    # make a string with column names
+    ColumnNames = ', '.join(ValidFields)
+    # loop over new sample data
+    for i in range(len(NewData)):
+        # get the values to be added to database table
+        Values = FormatDbTableData(NewData[i])
+        # add values into table
+        cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+        conn.commit()
     
     
     
     
-        # existing samples cannot be replaced
-        
-        # if exist, do nothing
-        
-        # if doesn't exist add info to table
-        
     
     
-    
-    
-    # check if table already exists
-    
-    
-    
-    
-     
-    
-    # update
-    
-    
-    # reinject
-    
-    
-    # how top simply update fields for given sample without having to drop and re-create table?
+    # update sample fields without having to drop/create table
     
     
     # need a working directory to save the json/xml
@@ -466,11 +455,11 @@ def AddSamples(args):
     
     # extract egan and strore in db
 
+    # get creation time
 
     # check if analysis table exists
     
     
-    # process to download table as flat file and reupload the entire file
 
 
 
