@@ -57,6 +57,45 @@ def EstablishConnection(CredentialFile, database):
     return conn 
 
 
+# use this function to create the table headers
+def GenerateTableHeader(CredentialFile, Table):
+    '''
+    (file, str) -> None
+    Take a file with database credentials and create a Table with columns if 
+    Table is not already in the database
+    '''
+    
+    # connect to database
+    conn = EstablishConnection(CredentialFile, 'EGAsub')
+    
+    # make a list of all tables
+    cur = conn.cursor()
+    cur.execute('SHOW TABLES')
+    Tables = [i[0] for i in cur]
+    
+    # get table header
+    if Table == 'Samples':
+        # create a list of valid fields
+        Columns = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
+                       'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
+                       'anonymizedName', 'phenotype', 'description', 'title',
+                       'attributes', 'caseOrControl', 'cellLine', 'organismPart',
+                       'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
+                       'creationTime', 'json', 'egaAccessionId']
+        
+    # create table if it doesn't exists
+    if Table not in Tables:
+        # create table with header
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(Table, Columns))
+        conn.commit()
+    # close connection
+    conn.close()
+
+
+
+
+
 # use this function to download a database table as a flat file
 def DownloadDbTable(args):
     '''
@@ -226,7 +265,10 @@ def ParseSamplesInputTable(TableFile):
                    'anonymizedName', 'phenotype', 'description', 'title',
                    'attributes', 'caseOrControl', 'cellLine', 'organismPart',
                    'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
-                   'EGAaccessionId', 'json']
+                   'egaAccessionId', 'json', 'creationTime']
+
+    # make a list of valid fields in lower case for comparison with file header
+    FieldsLower = '\t'.join(ValidFields).lower().split('\t')
 
     for line in infile:
         if line.rstrip() != '':
@@ -234,8 +276,9 @@ def ParseSamplesInputTable(TableFile):
             # check that required fields are present
             required_fields = ['alias', 'gender', 'phenotype', 'title', 'description']
             for field in required_fields:
-                if field not in header:
+                if field.lower() not in header.lower():
                     print('table format is not valid, 1 or more fields are missing')
+                    infile.close()
                     sys.exit(2)
             # extract key-value pairs, ignore non-valid fields
             # get the sample alias
@@ -247,8 +290,10 @@ def ParseSamplesInputTable(TableFile):
             Table[alias] = {}
             for i in range(len(line)):
                 # check that key is valid
-                if header[i] in ValidFields:
-                    Table[alias][header[i]] = line[i]
+                if header[i] in FieldsLower:
+                    # get the valid column name
+                    column = ValidFields[FieldsLower.index(header[i])]
+                    Table[alias][column] = line[i]
     infile.close()
     
     # add empty or hard-coded values to missing keys
@@ -272,11 +317,11 @@ def ParseSamplesInputTable(TableFile):
   
 
 # use this function to parse a database table into a dictionary
-def ParseDatabaseTable(CredentialFile, Database, Table):
+def ParseMetaDataDatabaseTable(CredentialFile, Database='EGA', Table):
     '''
     (file, str, str) -> dict
-    Take a file with credentials to connect to Database and return a dictionary
-    with all the data in the Database Table with ebiId as key of columns:value pairs
+    Take a file with credentials to connect to Metadata Database and return a dictionary
+    with all the data in the Metadata Database Table with ebiId as key of columns:value pairs
     '''
 
     # connect to database
@@ -307,15 +352,6 @@ def ParseDatabaseTable(CredentialFile, Database, Table):
     return TableData
 
 
-
-
-
-
-
-
-
-                      
-
 # use this function to add data to Samples Table
 def AddSamples(args):
     '''
@@ -327,36 +363,62 @@ def AddSamples(args):
     # parse input table, create a dict {sample: {attributes:values}}
     Samples = ParseSamplesInputTable(args.intable)
     
+    # look for samples in the metadata database
+    Metadata = ParseMetaDaDatabaseTable(args.credential, 'EGA', 'Samples')
+    # create a dict of samples with accessions {alias: ebiId}
+    RecordedSamples = {}
+    for i in Metadata:
+        j = Metadata[i]['alias']
+        assert j not in RecordedSamples
+        RecordedSamples[j] = i
+    
     # check if samples already have a accession number
-    # connect to metadata database
-    conn = EstablishConnection(args.credential, 'EGA')
-    # retrieve all samples from Samples table in metadata database
-    cur = conn.cursor()
+    for sample in Samples:
+        if sample in RecordedSamples:
+            # sample already has an accession number
+            # replace column:values for that sample with info from the Metadata db
+            # make a list of valid database table columns
+            
+            # if column is key in ebiid dict: replace value
+            
+            # if not, leave empty or hard-coded value
     
     
     
     
-    # add sample information to database
+    
+    
+    
+    
+    # connect to database
+    conn = EstablishConnection(args.credential, args.database)
     cur = conn.cusor()
     # list all tables in database
     cur.execute('SHOW TABLES')
     Tables = [i[0] for i in cur]
     # check if Samples table exists
     if 'Samples' in Tables:
-        # download data from table
-        cur.execute('SELECT * FROM {0}'.format(args.table))
-        # convert 
+        # make a list of samples that are already recorded in the Samples table
+        cur.execute('SELECT Samples.alias FROM Samples')
+        PresentSamples = [i[0] for i in cur]
+    else:
+        PresentSamples = []
         
-        
-        # check if samples already exist
+    # check if samples already exist
+    for sample in Samples:
+        if sample in PresentSamples:
+            print('sample {0} is already recorded'.format(sample))
+        else:
+            # need to add sample and its information to database
+    
+    
+    
+    
         # existing samples cannot be replaced
         
+        # if exist, do nothing
         
-        
-        
-    else:
-        pass
-        
+        # if doesn't exist add info to table
         
     
     
