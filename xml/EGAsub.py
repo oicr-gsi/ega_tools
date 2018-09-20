@@ -76,13 +76,22 @@ def GenerateTableHeader(CredentialFile, Table):
     # get table header
     if Table == 'Samples':
         # create a list of valid fields
-        Columns = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
+        ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
                        'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
                        'anonymizedName', 'phenotype', 'description', 'title',
                        'attributes', 'caseOrControl', 'cellLine', 'organismPart',
                        'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
                        'creationTime', 'json', 'egaAccessionId']
+        # format columns with data type
+        Columns = []
         
+        for i in range(len(ValidFields)):
+            if ValidFields[i] == 'json':
+                Columns.append(ValidFields[i] + ' MEDIUMTEXT NULL')
+            else:
+                Columns.append(L[i] + ' TEXT NULL')
+        Columns = ' '.join(Columns)        
+           
     # create table if it doesn't exists
     if Table not in Tables:
         # create table with header
@@ -133,37 +142,6 @@ def DownloadDbTable(args):
         sys.exit(2)
         
 
-# use this function to specify column type in database table
-def FormatTableHeader(L, table):
-    '''
-    (list, str) -> list
-    Take a list of column fields for a given table and return a string
-    that specify the column type in SQL
-    '''
-    # all columns hold string data, add 
-    Cols = []
-    
-    pass 
-
-#    for i in range(1, len(L)):
-#        if L[i] in ('title', 'description', 'designDescription'):
-#            if i == len(L) -1:
-#                Cols.append(L[i] + ' TEXT NULL')
-#            else:
-#                Cols.append(L[i] + ' TEXT NULL,')
-#        elif L[i] in ('files', 'xml'):
-#            if i == len(L) -1:
-#                Cols.append(L[i] + ' MEDIUMTEXT NULL')
-#            else:
-#                Cols.append(L[i] + ' MEDIUMTEXT NULL,')
-#        else:
-#            if i == len(L) -1:
-#                Cols.append(L[i] + ' VARCHAR(100) NULL')
-#            else:
-#                Cols.append(L[i] + ' VARCHAR(100) NULL,')
-#    # first column holds primary key
-#    Cols.insert(0, L[0] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
-#    return ' '.join(Cols)
 
 
 
