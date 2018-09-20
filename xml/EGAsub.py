@@ -132,17 +132,6 @@ def FormatDbTableData(L):
     return Values
 
 
-
-
-
-
-
-
-
-
-
-
-
 # use this function to download a database table as a flat file
 def DownloadDbTable(args):
     '''
@@ -192,21 +181,12 @@ def UploadDbTable(args):
     even if the database table contains more information than the file
     '''
     
+    # create table and its header in database if it doesn't exist
+    FirstTimeCreateTable(args.credential, args.database, args.table)
+    
     # connect to database
     conn = EstablishConnection(args.credential, args.database)
-        # list all tables
-    cur = conn.cursor()
-    cur.execute('SHOW TABLES')
-    Tables = [i[0] for i in cur]
-    
-    # check if table exists in database
-    if args.table not in Tables:
-        # create table with column headers
-        Columns = FormatDbTableHeader(args.table)
-        cur = conn.cursor()
-        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
-        conn.commit()
-    
+       
     # compare headers between input file and table in database
     cur = conn.cursor()
     cur.execute('SELECT * from {0}'.format(args.table))
@@ -340,11 +320,12 @@ def LoadSamples(TableFile, ValidFields):
   
 
 # use this function to parse a database table into a dictionary
-def ParseMetaDataDatabaseTable(CredentialFile, Database='EGA', Table):
+def ParseDatabaseTable(CredentialFile, Database, Table, Info):
     '''
-    (file, str, str) -> dict
-    Take a file with credentials to connect to Metadata Database and return a dictionary
-    with all the data in the Metadata Database Table with ebiId as key of columns:value pairs
+    (file, str, str, str) -> dict
+    Take a file with credentials to connect to Database and return a dictionary
+    with all the data in the Database Table with a MasterKey that depends on the
+    database type (Info) and the table as key to columns:value pairs
     '''
 
     # connect to database
@@ -353,22 +334,32 @@ def ParseMetaDataDatabaseTable(CredentialFile, Database='EGA', Table):
     cur = conn.cursor()
     cur.execute('SELECT * FROM {0}'.format(Table))
     
-    # create a dict {ebiId: {column:value}}
+    # create a dict {MasterKey: {column:value}}
     TableData = {}
+    
+    # check which should be the Master Key
+    if Info == 'Metadata':
+        # master key is ebiId, create a dict {ebiId: {column:value}}
+        MasterKey = 'ebiId'
+    elif Info == 'Submission':
+        # master key depends on table
+        if Table == 'Samples':
+            # Master key is alias
+            MasterKey = 'alias'
     
     # get the table header
     header = [i[0] for i in cur.description]
     
     # loop over table records
     for i in cur:
-        ebiId = i[header.index('ebiId')]
+        j = i[header.index(MasterKey)]
         # check that key is unique in database
-        assert ebiId not in TableData
+        assert j not in TableData
         # initialize inner dict
-        TableData[ebiId] = {}
+        TableData[j] = {}
         # populate inner dict with columns: value
-        for j in range(len(i)):
-            TableData[ebiId][header[j]] = i[j]
+        for k in range(len(i)):
+            TableData[j][header[k]] = i[k]
     # close connection
     conn.close()
     
@@ -382,64 +373,24 @@ def AddSamples(args):
     
     '''
 
+    # create table and its header in database if it doesn't exist
+    FirstTimeCreateTable(args.credential, args.database, args.table)
+    
     # connect to database
     conn = EstablishConnection(args.credential, args.database)
     
-    # parse input table, create a dict {sample: {attributes:values}}
-    Samples = ParseSamplesInputTable(args.intable)
-    
     # get the list of valid column fields
     cur = conn.cursor()
-    cur.execute('SHOW TABLES')
+    cur.execute('SELECT * FROM {0}'.format(args.table))
+    ValidFields = [i[0] for i in cur]
     
-    
-    # use this function to create the table headers
-    def FormatDbTableHeader(Table):
-    '''
-    (str) -> str
-    Take a database Table string name and return a string with column headers and datatype
-    to be used in  SQL command to create a tabkle and its header
-    '''
-    
-    # create a list of columns and datatype
-    Columns = []
-    
-    # check the table in database
-    if Table == 'Samples':
-        # create a list of valid fields
-        ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
-                       'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
-                       'anonymizedName', 'phenotype', 'description', 'title',
-                       'attributes', 'caseOrControl', 'cellLine', 'organismPart',
-                       'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
-                       'creationTime', 'json', 'egaAccessionId']
-        # format columns with data type
-        Columns = []
-        for i in range(len(ValidFields)):
-            if ValidFields[i] == 'json':
-                Columns.append(ValidFields[i] + ' MEDIUMTEXT NULL')
-            else:
-                Columns.append(L[i] + ' TEXT NULL')
-    
-    # convert list to string    
-    Columns = ' '.join(Columns)        
-    return Columns
-    
-    
-    
-    
-    
-    
-    # use this function to parse the input samples table
-def LoadSamples(TableFile, ValidFields):
-    
-    
-     
-    
+    # parse input table: into a dict {sample: {attributes:values}}
+    # remove non-valid fields, add missing values and hard-coded values for missing fields
+    Samples = LoadSamples(args.intable, ValidFields)
     
     # look for samples in the metadata database
-    Metadata = ParseMetaDaDatabaseTable(args.credential, 'EGA', 'Samples')
-    # create a dict of samples with accessions {alias: ebiId}
+    Metadata = ParseDatabaseTable(args.credential, 'EGA', args.table, 'Metadata')
+   # create a dict of samples with accessions {alias: ebiId}
     RecordedSamples = {}
     for i in Metadata:
         j = Metadata[i]['alias']
@@ -450,37 +401,27 @@ def LoadSamples(TableFile, ValidFields):
     for sample in Samples:
         if sample in RecordedSamples:
             # sample already has an accession number
-            # replace column:values for that sample with info from the Metadata db
-            # make a list of valid database table columns
+            # get the ebiId of that sample
+            ebiId = RecordedSamples[sample]
+            for field in Samples[sample]:
+                # replace with value from metadata if present; leave as is if not
+                if field in Metadata[ebiId]:
+                    # replace column:values for that sample with info from the Metadata db
+                    Samples[sample][field] = Metadata[ebiId][field]
             
-            # if column is key in ebiid dict: replace value
+    # make a list of samples that are already recorded in the Samples table
+    cur.execute('SELECT {0}.alias FROM {0}'.format(args.table))
+    PresentSamples = [i[0] for i in cur]
             
-            # if not, leave empty or hard-coded value
+    # check if samples already exist, existing records cannot be replaced
+    # create a list to store the data to be added
+    NewData = []
     
     
     
-    
-    
-    
-    
-    
-    # connect to database
-    conn = EstablishConnection(args.credential, args.database)
-    cur = conn.cusor()
-    # list all tables in database
-    cur.execute('SHOW TABLES')
-    Tables = [i[0] for i in cur]
-    # check if Samples table exists
-    if 'Samples' in Tables:
-        # make a list of samples that are already recorded in the Samples table
-        cur.execute('SELECT Samples.alias FROM Samples')
-        PresentSamples = [i[0] for i in cur]
-    else:
-        PresentSamples = []
-        
-    # check if samples already exist
     for sample in Samples:
         if sample in PresentSamples:
+            # existing recorded cannot be replaced
             print('sample {0} is already recorded'.format(sample))
         else:
             # need to add sample and its information to database
@@ -503,10 +444,7 @@ def LoadSamples(TableFile, ValidFields):
     
     
     
-    
-    
-    # pull down data from table
-    
+     
     
     # update
     
