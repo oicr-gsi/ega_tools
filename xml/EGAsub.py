@@ -153,8 +153,9 @@ def FormatData(L):
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
-    
-    
+    (list) -> None
+    Take a list of command line arguments and add sample information
+    to the Sample Table of the EGAsub database if samples are not already registered
     '''
     
     # connect to submission database
