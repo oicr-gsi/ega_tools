@@ -19,6 +19,14 @@ import argparse
 
 
 
+
+# resource for jaon formatting and api submission
+#https://ega-archive.org/submission/programmatic_submissions/json-message-format
+#https://ega-archive.org/submission/programmatic_submissions/submitting-metadata
+
+
+
+
 # use this function to extract credentials from file
 def ExtractCredentials(CredentialFile):
     '''
@@ -57,79 +65,166 @@ def EstablishConnection(CredentialFile, database):
     return conn 
 
 
-# use this function to create the table headers
-def FormatDbTableHeader(Table):
+# use this function to parse the input sample table
+def ParseSampleTable(Table):
     '''
-    (str) -> str
-    Take a database Table string name and return a string with column headers and datatype
-    to be used in  SQL command to create a tabkle and its header
+    (file) -> list
+    Take a tab-delimited file with sample information and return a list of dictionaries,
+    each dictionary storing the information of a unique sample
+    Preconditions: Required fields must be present or returned list is empty,
+    and missing entries are not permitted (can be '', NA or anything else)
     '''
     
-    # create a list of columns and datatype
-    Columns = []
+    # create list of dicts to store the sample data {sample: {attribute: key}}
+    L = []
     
-    # check the table in database
-    if Table == 'Samples':
-        # create a list of valid fields
-        ValidFields = ['alias', 'taxonId', 'speciesName', 'species', 'gender', 'gender:units',
-                       'subjectId', 'ExternalDataset', 'source', 'sourceId', 'bioSampleId', 'SRASample',
-                       'anonymizedName', 'phenotype', 'description', 'title',
-                       'attributes', 'caseOrControl', 'cellLine', 'organismPart',
-                       'region', 'sampleAge', 'sampleDetail', 'brokerName', 'centerName', 'runCenter',
-                       'creationTime', 'json', 'egaAccessionId']
-        # format columns with data type
-        Columns = []
-        for i in range(len(ValidFields)):
-            if ValidFields[i] == 'json':
-                Columns.append(ValidFields[i] + ' MEDIUMTEXT NULL')
-            else:
-                Columns.append(L[i] + ' TEXT NULL')
+    infile = open(Table)
+    # get file header
+    Header = infile.read().rstrip().split('\n')
+    # check that required fields are present
+    Missing = [i for i in ['alias', 'subjectId', 'gender', 'phenotype'] if i not in Header]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        # required fields are present, read the content of the file
+        Content = infile.read().rstrip().split('\n')
+        for S in Content:
+            S = S.split('\t')
+            # missing values are not permitted
+            assert len(Header) == len(S)
+            # create a dict to store the key: value pairs
+            D = {}
+            # get the sample name
+            sample = S[Header.index('alias')]
+            D[sample] = {}
+            for i in range(len(Header)):
+                assert Header[i] not in D[sample]
+                D[sample][Header[i]] = S[i]    
+            L.append(D)
+    infile.close()
+    return L        
+            
+ 
+# use this function to parse the sample config file
+def ParseSampleConfig(Config):
+    '''
+    (file) -> dict
+    Take a config file and return a dictionary of key: value pairs
+    '''
     
-    # convert list to string    
-    Columns = ' '.join(Columns)        
-    return Columns
+    infile = open(Config)
+    Header = infile.readline().rstrip().split('\t')
+    # create a dict {key: value}
+    D = {}
+    # check that required fields are present
+    RequiredFields = ['xmlns', 'xsi', 'taxon_id', 'scientific_name', 'common_name', 'title',
+                      'center_name', 'run_center', 'study_id', 'study_title', 'study_design', 'broker_name']
+    Missing = [i for i in RequiredFields if i not in Header]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        for line in infile:
+            if line.rstrip() != '':
+                line = line.rstrip().split('\t')
+                for i in range(len(Header)):
+                    D[Header[i]] = line[i]
+    infile.close()
+    return D
 
 
-# use this function to create a table and its header if the table doesn't exist in the database
-def FirstTimeCreateTable(CredentialFile, Database, Table):
-    '''
-    (file, str, str) -> None
-    Take a file with database credentials and create Table and its header in the
-    Database if doesn't already exists
-    '''
-    
-    # connect to database
-    conn = EstablishConnection(CredentialFile, Database)
-    # list all tables
-    cur = conn.cursor()
-    cur.execute('SHOW TABLES')
-    AllTables = [i[0] for i in cur]
-    # check if table exists in database
-    if Table not in AllTables:
-        # create table with column headers
-        Columns = FormatDbTableHeader(Table)
-        cur = conn.cursor()
-        cur.execute('CREATE TABLE {0} ({1})'.format(Table, Columns))
-        conn.commit()
-    #close connection to db
-    conn.close()
-
-# use this function to insert data in a database table
-def FormatDbTableData(L):
+# use this function convert data into data to be instered in a database table
+def FormatData(L):
     '''
     (list) -> tuple
     Take a list of data and return a tuple to be inserted in a database table 
     '''
     
     # create a tuple of strings data values
-    Values = ()
+    Values = []
     # loop over data 
     for i in range(len(L)):
         if L[i] == '' or L[i] == None or L[i] == 'NA':
-            Values = Values.__add__(('NULL',))
+            Values.append('NULL')
         else:
-            Values = Values.__add__((str(L[i]),))
-    return Values
+            Values.append(str(L[i]))
+    return tuple(Values)
+
+
+# use this function to add data to the sample table
+def AddSampleInfo(args):
+    '''
+    
+    
+    '''
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.database)
+    
+    # parse input table [{sample: {key:value}}] 
+    Data = ParseSampleTable(args.table)
+
+    # create table if table doesn't exist
+    cur = conn.cursor()
+    cur.execute('SHOW TABLES')
+    Tables = [i[0] for i in cur]
+    if args.table not in Tables:
+        Fields = ['alias', 'subjectId', 'title', 'description', 'caseOrControlId',  
+                  'gender', 'organismPart', 'cellLine', 'region', 'phenotype',
+                  'anonymizedName', 'biosampleId', 'sampleAge',
+                  'sampleDetail', 'attributes', 'Species', 'Taxon',
+                  'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
+                  'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
+                  'Json', 'Receipt', 'CreationTime', 'egaAccessionId', 'Box']
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
+        Fields = [i[0] for i in cur]
+        ColumnNames = ', '.join(Fields)
+        
+    # pull down sample alias and egaId from metadata db, alias should be unique
+    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
+    # create a dict {alias: accession}
+    Registered = {}
+    for i in cur:
+        assert i[0] not in Registered
+        Registered[i[0]] = i[1]
+            
+    # check that samples are not already in the database for that box
+    for D in Data:
+        # get sample alias
+        sample = list(D.keys())[0]
+        if sample in Registered:
+            # skip sample, already registered
+            print('{0} is already registered in box {1} under accession {2}'.format(sample, args.box, Registered[sample]))
+        else:
+            # add box to sample data
+            D[sample]['Box'] = args.box
+            # list values according to the table column order
+            L = [D[sample][field] for field in Fields]
+            # convert data to strings, converting missing values to NULL
+            Values = FormatData(L)
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    
+    conn.close()
+
+
+
+######### review code below
+
 
 
 # use this function to download a database table as a flat file
@@ -229,95 +324,6 @@ def UploadDbTable(args):
         conn.close()
     
     
-# use this function to parse the input sample table
-def ParseSamplesInputTable(TableFile):
-    '''
-    (file) -> dict
-    Take a tab-delimited file with sample information and return a dictionary
-    with sample alias as key and a dictionary of attributes as value.
-    Precondition: "alias" is a required in the table header 
-    '''
-    
-    Data = {}
-    infile = open(TableFile)
-    header = infile.readline().rstrip().split('\t')
-    assert 'alias' in header
-    for line in infile:
-        if line.rstrip() != '':
-            line = line.rstrip().split('\t')
-            alias = line[header.index('alias')]
-            assert alias not in Data
-            Data[alias] = {}
-            for i in range(len(line)):
-                Data[alias][header[i]] = line[i]
-    infile.close()
-    return Data
-
-
-# use this function to parse the input samples table
-def LoadSamples(TableFile, ValidFields):
-    '''
-    (file, list) -> dict
-    Take a file with sample information and a list of valid column fields in the
-    database Sample Table and return a dictionary with sample alias as key and
-    a dictionary of attributes as value. Non-valid attributes are ignored and
-    missing attributes are allowed
-    '''
-
-    # parse the input table file
-    Table = ParseSamplesInputTable(TableFile)
-    # get the fields of the input table and convert to lower cap
-    FileFields = list(map(lambda x: x.lower(), list(Table[list(Table.keys())[0]].keys())))
-    
-    # create a dictionary of dictionaries {sample: {key:values}}
-    Data = {}
-    # make a list of valid fields in lower case for comparison with fields in file
-    FieldsLower = '\t'.join(ValidFields).lower().split('\t')
-    # check if required fields are present
-    required_fields = ['alias', 'gender', 'phenotype', 'title', 'description']
-    for field in required_fields:
-        if field.lower() not in FileFields:
-            print('table format is not valid, 1 or more fields are missing')
-            return Data
-
-    # for each sample in input table:
-    # 1) remove non-valid fields: non-valid fields are ignored
-    # 2) add hard-coded fields: some fields are required but may be omitted in the input table
-    # 3) add empty string to missing fields: missing values are allowed for some fields
-    
-    # make a set of non-supported fields
-    NonSupportedFields = set()
-    # remove non-valid fields 
-    for sample in Table:
-        # initialize data inner dict
-        Data[sample] = {}
-        # loop over sample fields 
-        for field in Table[sample]:
-            # check if valid field, convert to lower caps to allow for mis-spelling in input table
-            if field.lower() in FieldsLower:
-                # valid field, get field valid name
-                field_name = ValidFields[FieldsLower.index(field)]
-                # add value to dict
-                Data[sample][field_name] = Table[sample][field]
-            else:
-                # print message for field only once
-                if field not in NonSupportedFields:
-                    print('{0} column is not supported in Samples table'.format(field))
-                    NonSupportedFields.add(field)
-    # add values to missing columns 
-    # some required fields are hard-coded and can be omitted from the input table
-    hard_coded_fields = {'taxonId': '9606', 'speciesName': 'Homo sapiens', 'species': 'human',
-                         'brokerName': 'EGA', 'centerName': 'OICR', 'runCenter': 'OICR'}
-    for sample in Data:
-        for field in ValidFields:
-            if field not in Data[sample]:
-                if field in hard_coded_fields:
-                    Data[sample][field] = hard_coded_fields[field]
-                else:
-                    Data[sample][field] = ''
-    return Data
-                        
-  
 
 # use this function to parse a database table into a dictionary
 def ParseDatabaseTable(CredentialFile, Database, Table, Info):
@@ -366,103 +372,6 @@ def ParseDatabaseTable(CredentialFile, Database, Table, Info):
     return TableData
 
 
-# use this function to add data to Samples Table
-def AddSamples(args):
-    '''
-    
-    
-    '''
-
-    # create table and its header in database if it doesn't exist
-    FirstTimeCreateTable(args.credential, args.database, args.table)
-    
-    # connect to database
-    conn = EstablishConnection(args.credential, args.database)
-    
-    # get the list of valid column fields
-    cur = conn.cursor()
-    cur.execute('SELECT * FROM {0}'.format(args.table))
-    ValidFields = [i[0] for i in cur]
-    
-    # parse input table: into a dict {sample: {attributes:values}}
-    # remove non-valid fields, add missing values and hard-coded values for missing fields
-    Samples = LoadSamples(args.intable, ValidFields)
-    
-    # look for samples in the metadata database
-    Metadata = ParseDatabaseTable(args.credential, 'EGA', args.table, 'Metadata')
-   # create a dict of samples with accessions {alias: ebiId}
-    RecordedSamples = {}
-    for i in Metadata:
-        j = Metadata[i]['alias']
-        assert j not in RecordedSamples
-        RecordedSamples[j] = i
-    
-    # check if samples already have a accession number
-    for sample in Samples:
-        if sample in RecordedSamples:
-            # sample already has an accession number
-            # get the ebiId of that sample
-            ebiId = RecordedSamples[sample]
-            for field in Samples[sample]:
-                # replace with value from metadata if present; leave as is if not
-                if field in Metadata[ebiId]:
-                    # replace column:values for that sample with info from the Metadata db
-                    Samples[sample][field] = Metadata[ebiId][field]
-            
-    # parse Samples table to extract information already in the Samples submission database
-    PresentSamples = ParseDatabaseTable(args.credential, 'EGAsub', args.table, 'Submission')
-    
-    # check if samples already exist, existing records cannot be replaced
-    # create a list to store the data to be added
-    NewData = []
-    for sample in Samples:
-        if sample in PresentSamples:
-            # existing recorded cannot be replaced
-            print('sample {0} is already recorded'.format(sample))
-        else:
-            # add sample and its information to database 
-            sample_data = [Samples[sample][field] for field in ValidFields]
-            NewData.append(sample_data)    
-            
-    # insert data in Samples table
-    cur = conn.cursor()
-    # make a string with column names
-    ColumnNames = ', '.join(ValidFields)
-    # loop over new sample data
-    for i in range(len(NewData)):
-        # get the values to be added to database table
-        Values = FormatDbTableData(NewData[i])
-        # add values into table
-        cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-        conn.commit()
-    
-    
-    
-    
-    
-    
-    # update sample fields without having to drop/create table
-    
-    
-    # need a working directory to save the json/xml
-    
-    
-    # need a submission xml: json?
-    
-    
-    # get receipt, store in db
-    
-    
-    # extract egan and strore in db
-
-    # get creation time
-
-    # check if analysis table exists
-    
-    
-
-
-
 
 
 
@@ -474,6 +383,44 @@ if __name__ == '__main__':
     # create top-level parser
     parser = argparse.ArgumentParser(prog = 'EGAsub.py', description='manages submission to EGA')
     subparsers = parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
+
+    # add samples to Samples Table
+    AddSamples = subparsers.add_parser('AddSamples', help ='Add sample information')
+    AddSamples.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddSamples.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. Default is EGAsub')
+    AddSamples.add_argument('-t', '--Table', dest='table', default='Samples', help='Samples table. Default is Samples')
+    AddSamples.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    AddSamples.add_argument('--Species', dest='species', default='Human', help='common species name')
+    AddSamples.add_argument('--Taxon', dest='taxon', default='9606', help='species ID')    
+    AddSamples.add_argument('--Name', dest='name', default='Homo sapiens', help='Species scientific name')
+    AddSamples.add_argument('--SampleTitle', dest='sampleTitle', help='Title associated with submission', required=True)
+    AddSamples.add_argument('--Center', dest='center', default='OICR_ICGC', help='Center name. Default is OICR_ICGC')
+    AddSamples.add_argument('--RunCenter', dest='run', default='OICR', help='Run center name. Default is OICR')
+    AddSamples.add_argument('--Study', dest='study', default=' EGAS00001000900', help='Study ID. default is  EGAS00001000900')
+    AddSamples.add_argument('--StudyTitle', dest='studyTitle', help='Title associated with study', required=True)
+    AddSamples.add_argument('--Design', dest='design', help='Study design')
+    AddSamples.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
+    AddSamples.add_argument('--Xlmns', dest='xmlns', default='http://www.w3.org/2001/XMLSchema-instance', help='Xml schema. Default is http://www.w3.org/2001/XMLSchema-instance')
+    AddSamples.add_argument('--Xsi', dest='xsi', default='ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd', help='Xsi model. Default is ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd')
+    AddSamples.set_defaults(func=AddSampleInfo)
+
+
+################### code below requires review
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # Download sub-commands
     Download_parser = subparsers.add_parser('DownloadTable', help ='Download database table to flat file')
@@ -496,7 +443,7 @@ if __name__ == '__main__':
   
     
     # AddSamples sub-commands
-    Samples_parser = subparsers.add_parser('UpdateSamples', help ='Download database table to flat file')
+    Samples_parser = subparsers.add_parser('AddSamples', help ='Add sample information to Samples table')
     
     # box name
     # input table
@@ -504,8 +451,16 @@ if __name__ == '__main__':
     # submission xml or json
     # submission alias
     
+    Samples_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    Samples_parser.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
+    Samples_parser.add_argument('-t', '--Table', dest='table', default='Samples', help='database table to be modified')
+    Samples_parser.add_argument('-i', '--InputFile', dest='intable', help='file with sample information to add to the Samples table', required=True)
     
-      
+    
+    
+    
+    
+    
     
     
     
