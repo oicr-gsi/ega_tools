@@ -488,6 +488,15 @@ if __name__ == '__main__':
     AddSamples.add_argument('--Xsi', dest='xsi', default='ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd', help='Xsi model. Default is ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd')
     AddSamples.set_defaults(func=AddSampleInfo)
 
+    # add jsons to table 
+    AddJson = subparsers.add_parser('AddJson', help ='Add object-formatted json to table for objects missing json and accession Id')
+    AddJson.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddJson.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. Default is EGAsub')
+    AddJson.add_argument('-t', '--Table', dest='table', help='Database table', required=True)
+    AddJson.add_argument('-o', '--Object', dest='object', choice=['sample', 'analysis', 'run', 'experiment'], help='Object type', required=True)
+    AddJson.set_defaults(func=AddJsonToTable)
+ 
+
 
 ################### code below requires review
 
