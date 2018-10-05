@@ -300,17 +300,6 @@ def AddJsonToTable(args):
     conn.close()
     
     
-    
-    
-    
-    
-    
-
-
-######### review code below
-
-
-
 # use this function to download a database table as a flat file
 def DownloadDbTable(args):
     '''
@@ -343,62 +332,9 @@ def DownloadDbTable(args):
         conn.close()
     else:
         print('table {0} is not in Database'.format(args.table))
-        # close connection and exit
         conn.close()
-        sys.exit(2)
         
-
-# use this function to parse a database table into a dictionary
-def ParseDatabaseTable(CredentialFile, Database, Table, Info):
-    '''
-    (file, str, str, str) -> dict
-    Take a file with credentials to connect to Database and return a dictionary
-    with all the data in the Database Table with a MasterKey that depends on the
-    database type (Info) and the table as key to columns:value pairs
-    '''
-
-    # connect to database
-    conn = EstablishConnection(CredentialFile, Database)
-    # select all fields from table
-    cur = conn.cursor()
-    cur.execute('SELECT * FROM {0}'.format(Table))
-    
-    # create a dict {MasterKey: {column:value}}
-    TableData = {}
-    
-    # check which should be the Master Key
-    if Info == 'Metadata':
-        # master key is ebiId, create a dict {ebiId: {column:value}}
-        MasterKey = 'ebiId'
-    elif Info == 'Submission':
-        # master key depends on table
-        if Table == 'Samples':
-            # Master key is alias
-            MasterKey = 'alias'
-    
-    # get the table header
-    header = [i[0] for i in cur.description]
-    
-    # loop over table records
-    for i in cur:
-        j = i[header.index(MasterKey)]
-        # check that key is unique in database
-        assert j not in TableData
-        # initialize inner dict
-        TableData[j] = {}
-        # populate inner dict with columns: value
-        for k in range(len(i)):
-            TableData[j][header[k]] = i[k]
-    # close connection
-    conn.close()
-    
-    return TableData
-
-
-
-
-
-
+        
 
 
 if __name__ == '__main__':
@@ -435,67 +371,14 @@ if __name__ == '__main__':
     AddJson.add_argument('-o', '--Object', dest='object', choice=['sample', 'analysis', 'run', 'experiment'], help='Object type', required=True)
     AddJson.set_defaults(func=AddJsonToTable)
  
-
-
-################### code below requires review
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # Download sub-commands
-    Download_parser = subparsers.add_parser('DownloadTable', help ='Download database table to flat file')
-    Download_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    Download_parser.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
-    Download_parser.add_argument('-t', '--Table', dest='table', help='database table to be downloaded', required=True)
-    Download_parser.add_argument('-o', '--Output', dest='outputfile', help='path to the tab-delimited file with database table content', required=True)
-    Download_parser.set_defaults(func=DownloadDbTable)
+    Download = subparsers.add_parser('DownloadTable', help ='Download database table to flat file')
+    Download.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    Download.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
+    Download.add_argument('-t', '--Table', dest='table', help='database table to be downloaded', required=True)
+    Download.add_argument('-o', '--Output', dest='outputfile', help='path to the tab-delimited file with database table content', required=True)
+    Download.set_defaults(func=DownloadDbTable)
 
-    # Upload sub-commands
-    Upload_parser = subparsers.add_parser('UploadTable', help ='Upload file to database table. This will either replace the entire table or update records')
-    Upload_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    Upload_parser.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
-    Upload_parser.add_argument('-t', '--Table', dest='table', help='database table to be modified', required=True)
-    Upload_parser.add_argument('-i', '--InputFile', dest='inputfile', help='file to upload to database table', required=True)
-    Upload_parser.set_defaults(func=UploadDbTable)
-    
-    
-    
-  
-    
-    # AddSamples sub-commands
-    Samples_parser = subparsers.add_parser('AddSamples', help ='Add sample information to Samples table')
-    
-    # box name
-    # input table
-    # directory where to save the json
-    # submission xml or json
-    # submission alias
-    
-    Samples_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    Samples_parser.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. default is EGAsub')
-    Samples_parser.add_argument('-t', '--Table', dest='table', default='Samples', help='database table to be modified')
-    Samples_parser.add_argument('-i', '--InputFile', dest='intable', help='file with sample information to add to the Samples table', required=True)
-    
-    
-    
-    
-    
-    
-    
-    
-    
     # get arguments from the command line
     args = parser.parse_args()
     # pass the args to the default function
