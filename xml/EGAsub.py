@@ -348,67 +348,6 @@ def DownloadDbTable(args):
         sys.exit(2)
         
 
-# use this function to upload content and replace table database
-def UploadDbTable(args):
-    '''
-    (file) -> None
-    Take a list of command line arguments including credentials to connect to 
-    database, a tab-delimited file and a table name as it appears in the databse
-    and replace this table with the file content if table format is compatible
-    Note: This potentially results in information loss as it will replace
-    any information in the database table with the file content,
-    even if the database table contains more information than the file
-    '''
-    
-    # create table and its header in database if it doesn't exist
-    FirstTimeCreateTable(args.credential, args.database, args.table)
-    
-    # connect to database
-    conn = EstablishConnection(args.credential, args.database)
-       
-    # compare headers between input file and table in database
-    cur = conn.cursor()
-    cur.execute('SELECT * from {0}'.format(args.table))
-    fields = [i[0] for i in cur.description]
-    infile = open(args.inputfile)
-    header = infile.readline().rstrip().split('\t')
-    if fields != header:
-        print('table headers should be identical')
-        conn.close()
-        sys.exit(2)
-    else:
-        # extract the file content as a list of lines
-        content = infile.read().rstrip().split('\n')
-        # specify the column type of each column
-        Columns = FormatDbTableHeader(args.table)            
-        SqlCommands = ['DROP TABLE IF EXISTS {0}'.format(args.table),
-                       'CREATE TABLE {0} ({1})'.format(args.table, Columns)]
-        # execute each command in turn with a new cursor
-        for i in range(len(SqlCommands)):
-            with conn.cursor() as cur:
-                cur.execute(SqlCommands[i])
-                conn.commit()
-        # insert data in table
-        cur = conn.cursor()
-        # make a string with column names
-        ColumnNames = ', '.join(header)
-        assert ColumnNames == ', '.join(fields)
-        # loop over list of lines from file content
-        for i in range(len(content)):
-            # convert line string to list of column entries
-            line = content[i].split('\t')
-            # get the values to be added to database table
-            Values = FormatDbTableData(line)
-            # check that all column data has been recorded for the current line
-            assert len(Values) == len(fields)
-            # add values into table
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
-        # close connection
-        conn.close()
-    
-    
-
 # use this function to parse a database table into a dictionary
 def ParseDatabaseTable(CredentialFile, Database, Table, Info):
     '''
