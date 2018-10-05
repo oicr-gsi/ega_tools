@@ -223,6 +223,74 @@ def AddSampleInfo(args):
     conn.close()
 
 
+# use this function to format the sample json
+def FormatJson(D, ObjectType):
+    '''
+    (dict, str) -> dict
+    Take a dictionary with information for an object and string describing the
+    object type and return a dictionary with the expected format for that object
+    '''
+    
+    if ObjectType == 'sample':
+        JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
+                    "organismPart", "cellLine", "region", "phenotype", "subjectId",
+                    "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+        # create a dict to be strored as a json. note: strings should have double quotes
+        J = {}
+        for field in D:
+            if field in JsonKeys:
+                if field == 'attributes':
+                    J[field] = [{"tag": i, "value": D[field][i]} for i in D[field]]
+                else:
+                    if D[field] == 'NULL':
+                        J[field] = ""
+                    else:
+                        J[field] = D[field]
+            else:
+                if field == 'gender':
+                    J["genderId"] = D['gender']
+    elif ObjectType == 'analysis':
+        JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
+                    "analysisCenter", "analysisDate", "analysisTypeId", "files",
+                    "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+
+    return J                
+    
+ 
+  
+# use this function to update table with json
+def AddJsonToTable(args):
+    '''
+    
+    
+    
+    '''
+  
+  
+    # connect to database
+    
+    
+    # pull data for samples without json and accession Id
+    
+    
+    # create json
+    
+    
+    
+    # add json back to table
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
 
 ######### review code below
 
