@@ -261,28 +261,43 @@ def FormatJson(D, ObjectType):
 # use this function to update table with json
 def AddJsonToTable(args):
     '''
-    
-    
-    
+    (list) -> None
+    Take a list of command line arguments and insert an object-formatted json as 
+    string in the Json column of each object missing the json and an accession Id
     '''
   
-  
-    # connect to database
-    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.database)
     
     # pull data for samples without json and accession Id
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM {0} WHERE {0}.Json=\"''\" and {0}.egaAccessionId=\"''\"'.format(args.table))
+    # get column headers
+    Header = [i[0] for i in cur.description]           
     
-    
-    # create json
-    
-    
-    
-    # add json back to table
-    
-    
-    
-    
-    
+    # extract all information from the pull down
+    Data = cur.fetchall()
+    # check that some objects are missing Jsons
+    if len(Data) != 0 and len(Header) != 0:
+        # create a list of dicts to sore the object info
+        L = []
+        for i in Data:
+            D = {}
+            assert len(i) == len(Header)
+            for j in range(len(i)):
+                D[Header[j]] = i[j]
+            L.append(D)
+        # create json from each dict formatted for the given object
+        Jsons = [FormatJson(D, args.object) for D in L]
+        # add json back to table
+        for D in Jsons:
+            # get the sample alias
+            alias = D["alias"]
+            # add json in table for that sample
+            # string need to be in double quotes for storing json as string 
+            cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(args.table, str(D).replace('\'', '\"'), alias))
+            conn.commit()
+    conn.close()
     
     
     
