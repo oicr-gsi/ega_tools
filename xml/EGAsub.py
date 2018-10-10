@@ -635,10 +635,17 @@ if __name__ == '__main__':
 
     # add analyses to Analyses Table
     AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information')
-
-
-
-
+    AddAnalyses.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddAnalyses.add_argument('-d', '--Database', dest='database', default='EGAsub', help='database name. Default is EGAsub')
+    AddAnalyses.add_argument('-t', '--Table', dest='table', default='Analyses', help='Samples table. Default is Analyses')
+    AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    AddAnalyses.add_argument('--Config', dest='config', help='Path to config file', required=True)
+    AddAnalyses.add_argument('--StagePath', dest='stagepath', help='Path on the staging server', required=True)
+    AddAnalyses.add_argument('--Center', dest='center', default='OICR_ICGC', help='Name of the Analysis Center')
+    AddAnalyses.add_argument('--StudyId', dest='study', help='Study accession Id', required =True)
+    AddAnalyses.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
+    AddAnalyses.add_argument('--Experiment', dest='experiment', default='Whole genome sequencing', choices=['Genotyping by array', 'Exome sequencing', 'Whole genome sequencing', 'transcriptomics'], help='Experiment type. Default is Whole genome sequencing')
+    AddAnalyses.set_defaults(func=AddAnalysesInfo)
 
     # add jsons to table 
     AddJson = subparsers.add_parser('AddJson', help ='Add object-formatted json to table for objects missing json and accession Id')
