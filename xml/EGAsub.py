@@ -66,23 +66,23 @@ def EstablishConnection(CredentialFile, database):
 
 
 # use this function to parse the input sample table
-def ParseSampleTable(Table):
+def ParseSampleInputTable(Table):
     '''
-    (file) -> list
-    Take a tab-delimited file with sample information and return a list of dictionaries,
-    each dictionary storing the information of a unique sample
+    (file, str) -> list
+    Take a tab-delimited file and return a list of dictionaries, each dictionary
+    storing the information for a uniqe sample
     Preconditions: Required fields must be present or returned list is empty,
-    and missing entries are not permitted (can be '', NA or anything else)
+    and missing entries are not permitted (e.g. can be '', NA)
     '''
     
-    # create list of dicts to store the sample data {sample: {attribute: key}}
+    # create list of dicts to store the object info {alias: {attribute: key}}
     L = []
     
     infile = open(Table)
     # get file header
     Header = infile.read().rstrip().split('\n')
     # check that required fields are present
-    Missing = [i for i in ['alias', 'subjectId', 'gender', 'phenotype'] if i not in Header]
+    Missing = [i for i in ['alias', 'subjectId', 'genderId', 'phenotype'] if i not in Header]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
@@ -94,44 +94,74 @@ def ParseSampleTable(Table):
             assert len(Header) == len(S)
             # create a dict to store the key: value pairs
             D = {}
-            # get the sample name
-            sample = S[Header.index('alias')]
-            D[sample] = {}
-            for i in range(len(Header)):
-                assert Header[i] not in D[sample]
-                D[sample][Header[i]] = S[i]    
+            # get the alias name
+            alias = S[Header.index('alias')]
+            D[alias] = {}
+            for i in range(len(S)):
+                if 'attribute' in S[i] or 'unit' in S[i]:
+                    # D[alias][attributes] is a dict {tag: {tag: val, value: val, unit: val}}
+                    assert ':' in S[i]
+                    # initialize list
+                    if 'attributes' not in D[alias]:
+                        D[alias]['attributes'] = {}
+                    if S[i].split(':')[1] not in D[alias]['attributes']:
+                        D[alias]['attributes'][S[i].split(':')[1]] = {}
+                    if 'attribute' in S[i]:
+                        assert S[i].split(':')[0] == 'attribute'
+                        D[alias]['attributes'][S[i].split(':')[1]]['tag'] = S[i].split(':')[1]
+                        D[alias]['attributes'][S[i].split(':')[1]]['value'] = S[i].split(':')[2]
+                    elif 'unit' in S[i]:
+                        assert S[i].split(':')[0] == 'unit'
+                        D[alias]['attributes'][S[i].split(':')[1]]['tag'] = S[i].split(':')[1]
+                        D[alias]['attributes'][S[i].split(':')[1]]['unit'] = S[i].split(':')[2]
+                else:
+                    assert Header[i] not in D[alias]
+                    D[alias][Header[i]] = S[i]    
             L.append(D)
     infile.close()
     return L        
-            
- 
-# use this function to parse the sample config file
-def ParseSampleConfig(Config):
+
+
+# use this function to parse the input analysis table
+def ParseAnalysisInputTable(Table):
     '''
-    (file) -> dict
-    Take a config file and return a dictionary of key: value pairs
+    (file) -> list
+    Take a tab-delimited file and return a list of dictionaries, each dictionary
+    storing the information for a uniqe analysis object
+    Preconditions: Required fields must be present or returned list is empty,
+    and missing entries are not permitted (e.g. can be '', NA)
     '''
     
-    infile = open(Config)
-    Header = infile.readline().rstrip().split('\t')
-    # create a dict {key: value}
-    D = {}
+    # create list of dicts to store the object info {alias: {attribute: key}}
+    L = []
+    
+    infile = open(Table)
+    # get file header
+    Header = infile.read().rstrip().split('\n')
     # check that required fields are present
-    RequiredFields = ['xmlns', 'xsi', 'taxon_id', 'scientific_name', 'common_name', 'title',
-                      'center_name', 'run_center', 'study_id', 'study_title', 'study_design', 'broker_name']
-    Missing = [i for i in RequiredFields if i not in Header]
+    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath', 'fileLink',  'checksum', 'encryptedPath', 'unencryptedChecksum'] if i not in Header]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
-        for line in infile:
-            if line.rstrip() != '':
-                line = line.rstrip().split('\t')
-                for i in range(len(Header)):
-                    D[Header[i]] = line[i]
+        # required fields are present, read the content of the file
+        Content = infile.read().rstrip().split('\n')
+        for S in Content:
+            S = S.split('\t')
+            # missing values are not permitted
+            assert len(Header) == len(S)
+            # create a dict to store the key: value pairs
+            D = {}
+            # get the alias name
+            alias = S[Header.index('alias')]
+            D[alias] = {}
+            for i in range(len(Header)):
+                assert Header[i] not in D[alias]
+                D[alias][Header[i]] = S[i]    
+            L.append(D)
     infile.close()
-    return D
+    return L        
 
-
+ 
 # use this function convert data into data to be instered in a database table
 def FormatData(L):
     '''
@@ -162,7 +192,7 @@ def AddSampleInfo(args):
     conn = EstablishConnection(args.credential, args.database)
     
     # parse input table [{sample: {key:value}}] 
-    Data = ParseSampleTable(args.table)
+    Data = ParseSampleInputTable(args.table)
 
     # create table if table doesn't exist
     cur = conn.cursor()
@@ -193,7 +223,9 @@ def AddSampleInfo(args):
         # get the column headers from the table
         cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
         Fields = [i[0] for i in cur]
-        ColumnNames = ', '.join(Fields)
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
         
     # pull down sample alias and egaId from metadata db, alias should be unique
     cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
@@ -211,10 +243,25 @@ def AddSampleInfo(args):
             # skip sample, already registered
             print('{0} is already registered in box {1} under accession {2}'.format(sample, args.box, Registered[sample]))
         else:
-            # add box to sample data
-            D[sample]['Box'] = args.box
+            # add fields from the command
+            for i in [['Box', args.box], ['Species', args.species], ['Taxon', args.name],
+                      ['Name', args.name], ['SampleTitle', args.sampleTitle], ['Center', args.center],
+                      ['RunCenter', args.run], ['StudyId', args.study], ['StudyTitle', args.studyTitle],
+                      ['StudyDesign', args.design], ['Broker', args.broker]]:
+                if i[0] not in D[sample]:
+                    D[sample][i[0]] = i[1]
             # list values according to the table column order
-            L = [D[sample][field] for field in Fields]
+            L = []
+            for field in Fields:
+                if field not in D[sample]:
+                    L.append('')
+                else:
+                    if field == 'attributes':
+                        attributes = [D[sample]['attributes'][i] for i in D[sample]['attributes']]
+                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")            
+                        L.append(attributes)
+                    else:
+                        L.append(D[sample][field])
             # convert data to strings, converting missing values to NULL
             Values = FormatData(L)
             cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
@@ -222,6 +269,166 @@ def AddSampleInfo(args):
     
     conn.close()
 
+    
+# use this function to parse the analysis config file
+def ParseAnalysisConfig(Config):
+    '''
+    (file) -> dict
+    Take a config file and return a dictionary of key: value pairs
+    '''
+    
+    infile = open(Config)
+    Header = infile.readline().rstrip().split('\t')
+    # create a dict {key: value}
+    D = {}
+    # check that required fields are present
+    Fields = ['title', 'description', 'reference', 'attributes', 'experiment']
+    Missing = [i for i in Fields if i not in Header]    
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        for line in infile:
+            if ':' in line:
+                line = line.rstrip().split(':')
+                if line[0] not in ['attribute', 'unit']:
+                    assert len(line) == 2
+                    D[line[0]] = line[1]
+                else:
+                    assert len(line) == 3
+                    if 'attributes' not in D:
+                        D['attributes'] = {}
+                    if line[1] not in D['attributes']:
+                        D['attributes'][line[1]] = {}                        
+                    if line[0] == 'attribute':
+                        if 'tag' not in D['attributes'][line[1]]:
+                            D['attributes'][line[1]]['tag'] = line[1]
+                        else:
+                            assert D['attributes'][line[1]]['tag'] == line[1]
+                        D['attributes'][line[1]]['value'] = line[2]
+                    elif line[0] == 'unit':
+                        if 'tag' not in D['attributes'][line[1]]:
+                            D['attributes'][line[1]]['tag'] = line[1]
+                        else:
+                            assert D['attributes'][line[1]]['tag'] == line[1]
+                        D['attributes'][line[1]]['unit'] = line[2]
+    infile.close()
+    return D
+    
+    
+# use this function to add data to the analysis table
+def AddAnalysesInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add analysis information
+    to the Analysis Table of the EGAsub database if files are not already registered
+    '''
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.database)
+    
+    # parse input table [{sample: {key:value}}] 
+    Data = ParseAnalysisInputTable(args.table)
+
+    # parse config table 
+    Config = ParseAnalysisConfig(args.config)
+
+    # create table if table doesn't exist
+    cur = conn.cursor()
+    cur.execute('SHOW TABLES')
+    Tables = [i[0] for i in cur]
+    if args.table not in Tables:
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title", "description", "studyId", 
+                  "sampleReferences", "analysisCenter",
+                  "analysisDate", "analysisTypeId", "fileId",
+                  "fileName", "checksum", "unencryptedChecksum",
+                  "fileTypeId", "attributes", "genomeId", 
+                  "chromosomeReferences", "experimentTypeId",
+                  "platform", "filePath", "fileLink", "ProjectId", "StudyTitle",
+                  "StudyDesign", "Broker", "StagePath", "filePath", "encryptedPath",
+                  "Json", "Receipt", "CreationTime", "egaAccessionId", "Box", "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
+        Fields = [i[0] for i in cur]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down analysis alias and egaId from metadata db, alias should be unique
+    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
+    # create a dict {alias: accession}
+    Registered = {}
+    for i in cur:
+        assert i[0] not in Registered
+        Registered[i[0]] = i[1]
+    
+    # check that analyses are not already in the database for that box
+    for D in Data:
+        # get analysis alias
+        alias = list(D.keys())[0]
+        if alias in Registered:
+            # skip analysis, already registered
+            print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+        else:
+            # add fields from the command
+            for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
+                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment]]:
+                if i[0] not in D[sample]:
+                    D[sample][i[0]] = i[1]
+            # add fields from the config
+            for i in Config:
+                if i not in D[alias]:
+                    if i == 'reference':
+                        D[alias]['genomeId'] = Config['reference']
+                    elif i == 'experiment':
+                        D[alias]['experimentTypeId'] = Config['experiment']
+                    elif i == 'attributes':
+                        attributes = [Config['attributes'][j] for j in Config['attributes']]
+                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                        D[alias]['attributes'] = attributes
+                    else:
+                        D[alias][i] = Config[i]
+            # add fileTypeId
+            fileTypeId, analysisTypeId = '', ''
+            if 'vcf' in D[alias]['filePath']:
+                assert 'vcf' in D[alias]['fileLink'] and 'vcf' in D[alias]['encryptedPath']
+                fileTypeId, analysisTypeId = 'vcf', 'Sequence variation (VCF)'
+            elif 'bam' in D[alias]['filePath']:
+                assert 'bam' in D[alias]['fileLink'] and 'bam' in D[alias]['encryptedPath']
+                fileTypeId, analysisTypeId = 'bam', 'Reference Alignment (BAM)'
+            elif 'bai' in D[alias]['filePath']:
+                assert 'bai' in D[alias]['fileLink'] and 'bai' in D[alias]['encryptedPath']
+                fileTypeId, analysisTypeId = 'bai', 'Reference Alignment (BAM)'
+            if 'fileTypeId' not in D[alias]:
+                    D[alias]['fileTYpeId'] = fileTypeId
+            if 'analysisTypeId' not in D[alias]:
+                D[alias]['analysisTypeId'] = analysisTypeId
+                    
+            # list values according to the table column order
+            L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+            
+    conn.close()            
+
+
+
+#############check attributes below ###################################
 
 # use this function to format the sample json
 def FormatJson(D, ObjectType):
@@ -253,6 +460,71 @@ def FormatJson(D, ObjectType):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+
+
+
+
+
+
+
+
+            
+
+
+
+       
+#Analysis
+#{
+#  "alias": "",
+#  "title": "",
+#  "description": "",
+#  "studyId": "",
+#  "sampleReferences": [
+#    {
+#      "value": "",
+#      "label": ""
+#    }
+#  ],
+#  "analysisCenter": "",
+#  "analysisDate": "",
+#  "analysisTypeId": "", → /enums/analysis_types
+#  "files": [
+#    {
+#      "fileId ": "",
+#      "fileName": "",
+#      "checksum": "",
+#      "unencryptedChecksum": ""
+#      "fileTypeId":"" -> /enums/analysis_file_types
+#    }
+#  ],
+#  "attributes": [
+#    {
+#      "tag": "",
+#      "value": "",
+#      "unit": ""
+#    }
+#  ],
+#  "genomeId": "", → /enums/reference_genomes
+#  "chromosomeReferences": [ → /enums/reference_chromosomes
+#    {
+#      "value": "",
+#      "label": ""
+#    }
+#  ],
+#  "experimentTypeId": [ "" ], → /enums/experiment_types
+#  "platform": ""
+#}
+
+
+
+
+
+
+
+
+
+
+
 
     return J                
     
@@ -359,9 +631,14 @@ if __name__ == '__main__':
     AddSamples.add_argument('--StudyTitle', dest='studyTitle', help='Title associated with study', required=True)
     AddSamples.add_argument('--Design', dest='design', help='Study design')
     AddSamples.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
-    AddSamples.add_argument('--Xlmns', dest='xmlns', default='http://www.w3.org/2001/XMLSchema-instance', help='Xml schema. Default is http://www.w3.org/2001/XMLSchema-instance')
-    AddSamples.add_argument('--Xsi', dest='xsi', default='ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd', help='Xsi model. Default is ftp://ftp.sra.ebi.ac.uk/meta/xsd/sra_1_5/SRA.run.xsd')
     AddSamples.set_defaults(func=AddSampleInfo)
+
+    # add analyses to Analyses Table
+    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information')
+
+
+
+
 
     # add jsons to table 
     AddJson = subparsers.add_parser('AddJson', help ='Add object-formatted json to table for objects missing json and accession Id')
