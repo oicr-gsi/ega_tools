@@ -438,82 +438,35 @@ def FormatJson(D, ObjectType):
     object type and return a dictionary with the expected format for that object
     '''
     
+    # create a dict to be strored as a json. note: strings should have double quotes
+    J = {}
+    
+    # check object type
     if ObjectType == 'sample':
         JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
                     "organismPart", "cellLine", "region", "phenotype", "subjectId",
                     "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
-        # create a dict to be strored as a json. note: strings should have double quotes
-        J = {}
         for field in D:
             if field in JsonKeys:
-                if field == 'attributes':
-                    J[field] = [{"tag": i, "value": D[field][i]} for i in D[field]]
+                if D[field] == 'NULL':
+                    J[field] = ""
                 else:
-                    if D[field] == 'NULL':
-                        J[field] = ""
+                    if field == 'attributes':
+                        J[field] = []
+                        attributes = D[field].replace("'", "\"")
+                        # convert string to dict
+                        if ';' in D[field]:
+                            attributes = attributes.split(';')
+                            for i in range(len(attributes)):
+                                J[field].append(json.loads(attributes[i]))
+                        else:
+                            J[field].append(json.loads(attributes))
                     else:
                         J[field] = D[field]
-            else:
-                if field == 'gender':
-                    J["genderId"] = D['gender']
     elif ObjectType == 'analysis':
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-
-
-
-
-
-
-
-
-            
-
-
-
-       
-#Analysis
-#{
-#  "alias": "",
-#  "title": "",
-#  "description": "",
-#  "studyId": "",
-#  "sampleReferences": [
-#    {
-#      "value": "",
-#      "label": ""
-#    }
-#  ],
-#  "analysisCenter": "",
-#  "analysisDate": "",
-#  "analysisTypeId": "", → /enums/analysis_types
-#  "files": [
-#    {
-#      "fileId ": "",
-#      "fileName": "",
-#      "checksum": "",
-#      "unencryptedChecksum": ""
-#      "fileTypeId":"" -> /enums/analysis_file_types
-#    }
-#  ],
-#  "attributes": [
-#    {
-#      "tag": "",
-#      "value": "",
-#      "unit": ""
-#    }
-#  ],
-#  "genomeId": "", → /enums/reference_genomes
-#  "chromosomeReferences": [ → /enums/reference_chromosomes
-#    {
-#      "value": "",
-#      "label": ""
-#    }
-#  ],
-#  "experimentTypeId": [ "" ], → /enums/experiment_types
-#  "platform": ""
-#}
 
 
 
