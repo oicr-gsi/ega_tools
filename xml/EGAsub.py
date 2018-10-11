@@ -132,8 +132,6 @@ def ParseAnalysisInputTable(Table):
     and missing entries are not permitted (e.g. can be '', NA)
     '''
     
-    
-    
     # create a dict to store the information about the files
     D = {}
     
@@ -293,27 +291,29 @@ def ParseAnalysisConfig(Config):
     '''
     
     infile = open(Config)
-    Header = infile.readline().rstrip().split('\t')
+    Content = infile.read().rstrip().split('\n')
+    infile.close()
     # create a dict {key: value}
     D = {}
     # check that required fields are present
-    Fields = ['title', 'description', 'reference', 'attributes', 'experiment']
-    Missing = [i for i in Fields if i not in Header]    
+    Expected = ['title', 'description', 'reference']
+    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
+    Missing = [i for i in Expected if i not in Fields]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
-        for line in infile:
-            if ':' in line:
-                line = line.rstrip().split(':')
-                if line[0] not in ['attribute', 'unit']:
-                    assert len(line) == 2
+        for S in Content:
+            if ':' in S:
+                S = list(map(lambda x: x.strip(), S.split(':')))
+                if S[0] not in ['attribute', 'unit']:
+                    assert S[0] in Expected and len(S) == 2
                     D[line[0]] = line[1]
                 else:
-                    assert len(line) == 3
+                    assert len(S) == 3
                     if 'attributes' not in D:
                         D['attributes'] = {}
                     if line[1] not in D['attributes']:
-                        D['attributes'][line[1]] = {}                        
+                        D['attributes'][line[1]] = {}    
                     if line[0] == 'attribute':
                         if 'tag' not in D['attributes'][line[1]]:
                             D['attributes'][line[1]]['tag'] = line[1]
@@ -341,24 +341,25 @@ def AddAnalysesInfo(args):
     # connect to submission database
     conn = EstablishConnection(args.credential, args.database)
     
-    # parse input table [{sample: {key:value}}] 
+    # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
     Data = ParseAnalysisInputTable(args.table)
 
     # parse config table 
     Config = ParseAnalysisConfig(args.config)
+
+    "fileId", "fileName", "checksum", "unencryptedChecksum", "fileTypeId"
+
 
     # create table if table doesn't exist
     cur = conn.cursor()
     cur.execute('SHOW TABLES')
     Tables = [i[0] for i in cur]
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title", "description", "studyId", 
-                  "sampleReferences", "analysisCenter",
-                  "analysisDate", "analysisTypeId", "fileId",
-                  "fileName", "checksum", "unencryptedChecksum",
-                  "fileTypeId", "attributes", "genomeId", 
-                  "chromosomeReferences", "experimentTypeId",
-                  "platform", "filePath", "fileLink", "ProjectId", "StudyTitle",
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
+                  "description", "studyId", "sampleReferences", "analysisCenter",
+                  "analysisDate", "analysisTypeId", "files", "attributes",
+                  "genomeId", "chromosomeReferences", "experimentTypeId",
+                  "platform", "ProjectId", "StudyTitle",
                   "StudyDesign", "Broker", "StagePath", "filePath", "encryptedPath",
                   "Json", "Receipt", "CreationTime", "egaAccessionId", "Box", "Status"]
         # format colums with datatype
