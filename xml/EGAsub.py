@@ -132,14 +132,16 @@ def ParseAnalysisInputTable(Table):
     and missing entries are not permitted (e.g. can be '', NA)
     '''
     
-    # create list of dicts to store the object info {alias: {attribute: key}}
-    L = []
+    
+    
+    # create a dict to store the information about the files
+    D = {}
     
     infile = open(Table)
     # get file header
     Header = infile.read().rstrip().split('\n')
     # check that required fields are present
-    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath', 'fileLink',  'checksum', 'encryptedPath', 'unencryptedChecksum'] if i not in Header]
+    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath', 'unencryptedChecksum', 'encryptedPath', 'checksum'] if i not in Header]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
@@ -148,17 +150,30 @@ def ParseAnalysisInputTable(Table):
         for S in Content:
             S = S.split('\t')
             # missing values are not permitted
-            assert len(Header) == len(S)
-            # create a dict to store the key: value pairs
-            D = {}
-            # get the alias name
-            alias = S[Header.index('alias')]
-            D[alias] = {}
-            for i in range(len(Header)):
-                assert Header[i] not in D[alias]
-                D[alias][Header[i]] = S[i]    
-            L.append(D)
+            assert len(Header) == len(S), 'missing values should be "" or NA'
+            # extract variables from line
+            L = ['alias', 'sampleAlias', 'filePath', 'unencryptedChecksum', 'encryptedPath', 'checksum']
+            alias, sampleAlias, filePath, originalmd5, encryptedPath, encryptedmd5 = [S[Header.index(L[i])] for i in range(len(L))]
+            # check if alias already recorded ( > 1 files for this alias)
+            if alias not in D:
+                # create inner dict, record sampleAlias and create files dict
+                D[alias] = {}
+                # record sampleAlias
+                D[alias]['sampleAlias'] = sampleAlias
+                D[alias]['files'] = {}
+            else:
+                # check that sample alias is the same as recorded for this alias
+                assert D[alias]['sampleAlias'] == sampleAlias
+                # record file info, filepath shouldn't be recorded already 
+                assert filePath not in D[alias]['files']
+                D[alias]['files'][filePath] = {'filePath': filePath, 'unencryptedChecksum': originalmd5,
+                 'encryptedPath': encryptedPath, 'checksum': encryptedmd5}
+                       
     infile.close()
+
+    # create list of dicts to store the info under a same alias
+    # [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
+    L = [{alias: D[alias]} for alias in D]             
     return L        
 
  
@@ -412,6 +427,7 @@ def AddAnalysesInfo(args):
             elif 'bai' in D[alias]['filePath']:
                 assert 'bai' in D[alias]['fileLink'] and 'bai' in D[alias]['encryptedPath']
                 fileTypeId, analysisTypeId = 'bai', 'Reference Alignment (BAM)'
+            assert fileTypeId != '' and analysisTypeId != ''
             if 'fileTypeId' not in D[alias]:
                     D[alias]['fileTYpeId'] = fileTypeId
             if 'analysisTypeId' not in D[alias]:
@@ -468,6 +484,67 @@ def FormatJson(D, ObjectType):
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
 
+        for key in D:
+            if field in JsonKeys:
+                if field == 'sampleReference':
+                    
+                    
+                    
+                    
+                    
+                    
+                elif field == 'files':
+                    
+                
+                    
+                elif field == 'attributes':
+                    
+
+
+
+
+       
+Analysis
+{
+  "alias": "",
+  "title": "",
+  "description": "",
+  "studyId": "",
+  "sampleReferences": [
+    {
+      "value": "",
+      "label": ""
+    }
+  ],
+  "analysisCenter": "",
+  "analysisDate": "",
+  "analysisTypeId": "", → /enums/analysis_types
+  "files": [
+    {
+      "fileId ": "",
+      "fileName": "",
+      "checksum": "",
+      "unencryptedChecksum": ""
+      "fileTypeId":"" -> /enums/analysis_file_types
+    }
+  ],
+  "attributes": [
+    {
+      "tag": "",
+      "value": "",
+      "unit": ""
+    }
+  ],
+  "genomeId": "", → /enums/reference_genomes
+  "chromosomeReferences": [ → /enums/reference_chromosomes
+    {
+      "value": "",
+      "label": ""
+    }
+  ],
+  "experimentTypeId": [ "" ], → /enums/experiment_types
+  "platform": ""
+}
 
 
 
