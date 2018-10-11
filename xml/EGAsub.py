@@ -424,7 +424,8 @@ def AddAnalysesInfo(args):
         else:
             # add fields from the command
             for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
-                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment]]:
+                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
+                      ['analysisTypeId', args.analysistype]]:
                 if i[0] not in D[sample]:
                     D[sample][i[0]] = i[1]
             # add fields from the config
@@ -440,7 +441,12 @@ def AddAnalysesInfo(args):
                         D[alias]['attributes'] = attributes
                     else:
                         D[alias][i] = Config[i]
-            # add fileTypeId
+            # add fileTypeId to each file
+            
+            
+            
+            
+            
             fileTypeId, analysisTypeId = '', ''
             if 'vcf' in D[alias]['filePath']:
                 assert 'vcf' in D[alias]['fileLink'] and 'vcf' in D[alias]['encryptedPath']
