@@ -371,8 +371,6 @@ def AddAnalysesInfo(args):
     # parse config table 
     Config = ParseAnalysisConfig(args.config)
 
-    "fileId", "fileName", "checksum", "unencryptedChecksum", "fileTypeId"
-
     # create table if table doesn't exist
     cur = conn.cursor()
     cur.execute('SHOW TABLES')
@@ -442,27 +440,19 @@ def AddAnalysesInfo(args):
                     else:
                         D[alias][i] = Config[i]
             # add fileTypeId to each file
-            
-            
-            
-            
-            
-            fileTypeId, analysisTypeId = '', ''
-            if 'vcf' in D[alias]['filePath']:
-                assert 'vcf' in D[alias]['fileLink'] and 'vcf' in D[alias]['encryptedPath']
-                fileTypeId, analysisTypeId = 'vcf', 'Sequence variation (VCF)'
-            elif 'bam' in D[alias]['filePath']:
-                assert 'bam' in D[alias]['fileLink'] and 'bam' in D[alias]['encryptedPath']
-                fileTypeId, analysisTypeId = 'bam', 'Reference Alignment (BAM)'
-            elif 'bai' in D[alias]['filePath']:
-                assert 'bai' in D[alias]['fileLink'] and 'bai' in D[alias]['encryptedPath']
-                fileTypeId, analysisTypeId = 'bai', 'Reference Alignment (BAM)'
-            assert fileTypeId != '' and analysisTypeId != ''
-            if 'fileTypeId' not in D[alias]:
-                    D[alias]['fileTYpeId'] = fileTypeId
-            if 'analysisTypeId' not in D[alias]:
-                D[alias]['analysisTypeId'] = analysisTypeId
-                    
+            for filePath in D[alias]['files']:
+                if 'vcf' in filePath:
+                    fileTypeId = 'vcf'
+                elif 'bam' in filePath:
+                    fileTypeId = 'bam'
+                elif 'bai' in filePath:
+                    fileTypeId = 'bai'
+                # check that file type Id is also in the encrypted file
+                assert fileTypeId in D[alias]['files'][filePath]['encryptedPath'], '{0} should be part of the encrypted file name'.format(fileTypeId)
+                # add fileTypeId to dict
+                assert 'fileTypeId' not in D[alias]['files'][filePath] 
+                D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
+                
             # list values according to the table column order
             L = [D[alias][field] if field in D[alias] else '' for field in Fields]
             # convert data to strings, converting missing values to NULL                    L
@@ -482,6 +472,7 @@ def FormatJson(D, ObjectType):
     (dict, str) -> dict
     Take a dictionary with information for an object and string describing the
     object type and return a dictionary with the expected format for that object
+    Precondition: strings in D have double-quotes
     '''
     
     # create a dict to be strored as a json. note: strings should have double quotes
@@ -495,13 +486,14 @@ def FormatJson(D, ObjectType):
         for field in D:
             if field in JsonKeys:
                 if D[field] == 'NULL':
+                    assert field not in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]
                     J[field] = ""
                 else:
                     if field == 'attributes':
                         J[field] = []
-                        attributes = D[field].replace("'", "\"")
+                        attributes = D[field]
                         # convert string to dict
-                        if ';' in D[field]:
+                        if ';' in attributes:
                             attributes = attributes.split(';')
                             for i in range(len(attributes)):
                                 J[field].append(json.loads(attributes[i]))
@@ -513,79 +505,48 @@ def FormatJson(D, ObjectType):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-
         for key in D:
             if field in JsonKeys:
-                if field == 'sampleReference':
+                if D[field] == 'NULL':
+                    assert field not in ["alias", "title", "description", "studyId", "sampleReferences",
+                    "analysisCenter", "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]
+                    J[field] = ""
+                else:
+                    if field == 'sampleReference':
+                        J[field] = []
+                        if ';' in D[field]:
+                            for accession in D[field].split(';'):
+                                J[field].append({"value": accession.strip(), "label":""})
+                        else:
+                            J[field].append({"value": D[field], "label":""})
+                    elif field == 'files':
+                        assert D[field] != 'NULL'
+                        J[field] = []
+                        # convert string to dict
+                        files = json.loads(D[field])
+                        # loop over file name
+                        for filePath in files:
+                            # create a dict to store file info
+                            fileName = files[filePath]['encryptedPath']   
+                            d = {"fileName": fileName[fileName.rfind("/")+1:],
+                                 "checksum": files[filePath]['checksum'],
+                                 "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
+                                 "fileTypeId": files[filePath]["fileTypeId"]}
+                            J[field].append(d)
+                    elif field == 'attributes':
+                        assert D[field] != 'NULL'
+                        J[field] = []
+                        # ensure strings are double-quoted
+                        attributes = D[field].replace("'", "\"")
+                        # convert string to dict
+                        if ';' in attributes:
+                            for i in range(len(attributes)):
+                                J[field].append(json.loads(attributes[i]))
+                        else:
+                            J[field].append(json.loads(attributes))
+                    else:
+                        J[field] = D[field]
                     
-                    
-                    
-                    
-                    
-                    
-                elif field == 'files':
-                    
-                
-                    
-                elif field == 'attributes':
-                    
-
-
-
-
-       
-Analysis
-{
-  "alias": "",
-  "title": "",
-  "description": "",
-  "studyId": "",
-  "sampleReferences": [
-    {
-      "value": "",
-      "label": ""
-    }
-  ],
-  "analysisCenter": "",
-  "analysisDate": "",
-  "analysisTypeId": "", → /enums/analysis_types
-  "files": [
-    {
-      "fileId ": "",
-      "fileName": "",
-      "checksum": "",
-      "unencryptedChecksum": ""
-      "fileTypeId":"" -> /enums/analysis_file_types
-    }
-  ],
-  "attributes": [
-    {
-      "tag": "",
-      "value": "",
-      "unit": ""
-    }
-  ],
-  "genomeId": "", → /enums/reference_genomes
-  "chromosomeReferences": [ → /enums/reference_chromosomes
-    {
-      "value": "",
-      "label": ""
-    }
-  ],
-  "experimentTypeId": [ "" ], → /enums/experiment_types
-  "platform": ""
-}
-
-
-
-
-
-
-
-
-
-
-
     return J                
     
  
@@ -661,11 +622,9 @@ def DownloadDbTable(args):
             newfile.write('\t'.join(data) + '\n')
         # close file and connection
         newfile.close()
-        conn.close()
     else:
         print('table {0} is not in Database'.format(args.table))
-        conn.close()
-        
+    conn.close()            
         
 
 
