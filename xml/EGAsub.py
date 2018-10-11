@@ -201,8 +201,20 @@ def AddSampleInfo(args):
     to the Sample Table of the EGAsub database if samples are not already registered
     '''
     
+    # connect to metadata database
+    conn = EstablishConnection(args.credential, args.metadatadb)
+    cur = conn.cursor()
+    # pull down sample alias and egaId from metadata db, alias should be unique
+    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
+    # create a dict {alias: accession}
+    Registered = {}
+    for i in cur:
+        assert i[0] not in Registered
+        Registered[i[0]] = i[1]
+    conn.close()
+
     # connect to submission database
-    conn = EstablishConnection(args.credential, args.database)
+    conn = EstablishConnection(args.credential, args.subdb)    
     
     # parse input table [{sample: {key:value}}] 
     Data = ParseSampleInputTable(args.table)
@@ -240,14 +252,11 @@ def AddSampleInfo(args):
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
         
-    # pull down sample alias and egaId from metadata db, alias should be unique
-    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
+    # pull down sample alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
     # create a dict {alias: accession}
-    Registered = {}
-    for i in cur:
-        assert i[0] not in Registered
-        Registered[i[0]] = i[1]
-            
+    Recorded = [i[0] for i in cur]
+                
     # check that samples are not already in the database for that box
     for D in Data:
         # get sample alias
@@ -255,6 +264,9 @@ def AddSampleInfo(args):
         if sample in Registered:
             # skip sample, already registered
             print('{0} is already registered in box {1} under accession {2}'.format(sample, args.box, Registered[sample]))
+        elif alias in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
         else:
             # add fields from the command
             for i in [['Box', args.box], ['Species', args.species], ['Taxon', args.name],
@@ -338,9 +350,21 @@ def AddAnalysesInfo(args):
     to the Analysis Table of the EGAsub database if files are not already registered
     '''
     
-    # connect to submission database
-    conn = EstablishConnection(args.credential, args.database)
+    # connect to metadata database
+    conn = EstablishConnection(args.credential, args.metadatadb)
+    cur = conn.cursor()
+    # pull down analysis alias and egaId from metadata db, alias should be unique
+    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
+    # create a dict {alias: accession}
+    Registered = {}
+    for i in cur:
+        assert i[0] not in Registered
+        Registered[i[0]] = i[1]
+    conn.close()
     
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+       
     # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
     Data = ParseAnalysisInputTable(args.table)
 
@@ -348,7 +372,6 @@ def AddAnalysesInfo(args):
     Config = ParseAnalysisConfig(args.config)
 
     "fileId", "fileName", "checksum", "unencryptedChecksum", "fileTypeId"
-
 
     # create table if table doesn't exist
     cur = conn.cursor()
@@ -383,21 +406,21 @@ def AddAnalysesInfo(args):
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
     
-    # pull down analysis alias and egaId from metadata db, alias should be unique
-    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
+    # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box)) 
     # create a dict {alias: accession}
-    Registered = {}
-    for i in cur:
-        assert i[0] not in Registered
-        Registered[i[0]] = i[1]
-    
+    Recorded = [i[0] for i in cur]
+        
     # check that analyses are not already in the database for that box
     for D in Data:
         # get analysis alias
         alias = list(D.keys())[0]
         if alias in Registered:
-            # skip analysis, already registered
+            # skip analysis, already registered in EGA
             print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+        elif alias in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
         else:
             # add fields from the command
             for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
