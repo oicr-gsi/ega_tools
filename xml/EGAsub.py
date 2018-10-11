@@ -89,7 +89,7 @@ def ParseSampleInputTable(Table):
         # required fields are present, read the content of the file
         Content = infile.read().rstrip().split('\n')
         for S in Content:
-            S = S.split('\t')
+            S = list(map(lambda x: x.strip(), S.split('\t')))
             # missing values are not permitted
             assert len(Header) == len(S)
             # create a dict to store the key: value pairs
