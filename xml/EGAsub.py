@@ -749,12 +749,12 @@ def SubmitSamples(args):
             # parse credentials to get userName and Password
             Credentials = ExtractCredentials(args.credential)
             if args.box == 'ega-box-12':
-                MyPassword, Username = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
+                MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
             elif args.box == 'ega-box-137':
-                MyPassword, Username = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+                MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
             
             # get the token
-            data = {"username": UserName, "password": MyPassWord, "loginType": "submitter"}
+            data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
             # get the adress of the submission portal
             if args.portal[-1] == '/':
                 URL = args.portal[:-1]
@@ -788,7 +788,7 @@ def SubmitSamples(args):
                             if SampleValidation.status_code == requests.codes.ok:
                                 # get sample status
                                 sampleStatus=SampleValidation.json()['response']['result'][0]['status']
-                                if sampleSatus == 'VALIDATED':
+                                if sampleStatus == 'VALIDATED':
                                     # submit sample
                                     SampleSubmission = requests.put(URL + '/samples/{0}?action=SUBMIT'.format(sampleId), headers=headers)
                                     # check if successfully submitted
