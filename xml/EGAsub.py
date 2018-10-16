@@ -602,7 +602,7 @@ def EncryptFiles(args):
             # get the time year_month_day
             Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
             # add time to directory name
-            args.outdir = os.path.join(args.outdir, '_' + Time)
+            args.outdir = os.path.join(args.outdir, 'EGA_submission_' + Time)
         # create outputdir if doesn't exist
         if os.path.isdir(args.outdir) == False:
             os.mkdir(args.outdir)
