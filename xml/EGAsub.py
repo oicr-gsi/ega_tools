@@ -597,13 +597,14 @@ def EncryptFiles(args):
             print('skipping {0}, file does not exist'.format(i))
             Files.remove(i)
     if len(Files) != 0:
-        # get the directory where to save the md5sums and encrypted files
+        # check if date is added to output directory
+        if args.time == True:
+            # get the time year_month_day
+            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+            # add time to directory name
+            args.outdir = os.path.join(args.outdir, '_' + Time)
+        # create outputdir if doesn't exist
         if os.path.isdir(args.outdir) == False:
-            if args.time == True:
-                # get the time year_month_day
-                Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                # add time to directory name
-                args.outdir = args.outdir + '_' + Time
             os.mkdir(args.outdir)
         # make a directory to save the qsubs
         qsubdir = os.path.join(args.outdir, 'qsub')
@@ -914,7 +915,7 @@ if __name__ == '__main__':
     SampleSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Samples table. Default is Analyses')
     SampleSubmission.add_argument('-d', '--Database', dest='database', default='EGAsub', help='Name of the database used to store object information for submission to EGA. Default is EGAsub')
     SampleSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
-    Encryption.set_defaults(func=SubmitSamples)
+    SampleSubmission.set_defaults(func=SubmitSamples)
 
 
     # get arguments from the command line
