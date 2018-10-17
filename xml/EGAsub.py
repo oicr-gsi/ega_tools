@@ -782,7 +782,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
         # check that some alias are in upload mode
         Data = cur.fetchall()
         if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}
+            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
                 D = {}
@@ -823,7 +823,69 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
         conn.close()            
     else:
         print('Table {0} does not exist in {1} database'.format(Table, DataBase))
-    
+
+
+# use this function to check that files are uploaded on the staging server
+def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
+    '''
+    (file, str, str, str) -> None
+    Take the file with credentials to connect to the database and to EGA,
+    and check that files with uploaded status are on the staging server
+    '''
+       
+    # check that Analysis table exists
+    Tables = ListTables(CredentialFile, DataBase)
+    if Table in Tables:
+        # parse the crdential file, get username and password for given box
+        Credentials = ExtractCredentials(CredentialFile)
+        if Box == 'ega-box-12':
+            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
+        elif Box == 'ega-box-137':
+            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+               
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        # extract files for alias in uploaded mode for given box
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        # check that some alias are in uploaded mode
+        Data = cur.fetchall()
+        if len(Data) != 0:
+            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath}}
+            L = []
+            for i in Data:
+                D = {}
+                assert i[0] not in D
+                D[i[0]] = {'files': json.loads(i[1]), 'StagePath': i[2]}
+                L.append(D)
+            # check stage folder, file directory
+            for D in L:
+                assert len(list(D.keys())) == 1
+                alias = list(D.keys())[0]
+                # create stage directory if doesn't exist
+                StagePath = D[alias]['StagePath']
+                assert StagePath != '/'
+                if StagePath[-1]:
+                    StagePath[:-1]
+                # list all files under the directory
+                Files = subprocess.check_output("lftp -u {0},{1} -e \" set ftp:ssl-allow false; ls {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip()
+                Files = Files.split('\n')
+                for i in range(len(Files)):
+                    Files[i] = Files[i].split()[-1]
+                # get the files, check that the files are on the staging server and change status
+                for filePath in D[alias]['files']:
+                    # get filename
+                    fileName = os.path.basename(filePath)
+                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+                    encryptedFile, originalMd5, encryptedMd5 = fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'
+                    if encryptedFile in Files and encryptedMd5 in Files and originalMd5 in Files:
+                        # update status in the Analysis table
+                        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box)) 
+                        conn.commit()
+                    else:
+                        print('At least one of these files is missing from the staging server: {0}, {1}, {2}'.format(encryptedFile, encryptedMd5, originalMd5))
+        conn.close()            
+ 
 
 # use this function to submit Sample objects
 def SubmitSamples(args):
@@ -976,39 +1038,19 @@ def SubmitAnalyses(args):
     
     if args.table in Tables:
         
-        ## update Analysis table in submission database with sample accessions
+        ## update Analysis table in submission database with sample accessions and change status ready -> upload
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
-        ## upload files
+        ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box)
         
-        ## check that files are uploaded
+        ## check that files are uploaded and change status uploading -> uploaded
+        CheckUploadedFiles(args.credential, args.subdb, args.table, args.box)
         
-        # check stage folder, file directory
-        
-        
-        # check that files are in the file directory
-        
-        # create stage folder if doesn't exist
-        
-        # upload files
-        
-        
-        
-                    
-                    
-                    
-  
-            
-            
-            
-            
-        
-        
-        ## form json for samples in ready mode, add to table and update status -> submit
+        ## form json for samples in ready mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.database, args.table, 'analysis', args.box)
 
-        
+        ## submit analyses
         
 
 
