@@ -758,14 +758,11 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 # use this function to upload the files
 def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
     '''
-
-
-
+    (file, str, str, str) -> None
+    Take the file with credentials to connect to the database and to EGA,
+    and upload files for aliases in upload status and update status to uploading
     '''
-
-
-    ## upload files
-    
+       
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
@@ -794,71 +791,39 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
                 L.append(D)
             # check stage folder, file directory
             for D in L:
+                assert len(list(D.keys())) == 1
+                alias = list(D.keys())[0]
                 # create stage directory if doesn't exist
-                StagePath = D[list(D.keys())[0]]['StagePath']
-                if StagePath != '/':
-                
-                    
-                    
-                
-                
-                
-                if StagePath[-1] == '/':
-                    StagePath = StagePath[:-1]
-                if StagePath    
-                    
-
-
-
-
-        
-        Python 3.6.3 |Anaconda custom (64-bit)| (default, Oct 13 2017, 12:02:49)
-[GCC 7.2.0] on linux
-Type "help", "copyright", "credits" or "license" for more information.
->>> import subprocess
->>> a = subprocess.check_output("lftp -u ega-box-12,pkcUoT6w -e \" set ftp:ssl-allow false;ls /CPCG/100PG/oncoscan; bye; \" ftp://ftp-private.ebi.ac.uk", shell=True).decode('utf-8')
->>> len(a)
-201420
->>> a = a.rstrip().split('\n')
->>> b = []
->>> a[0]
-'-rw-rw----    1 ftp      ftp       4677603 Jun 12 07:00 CPCG0001-B1.1.v3.AT.a520780-00-942560-043016-4230736-75784.CEL.gpg'
->>> for i in a:
-...     b.append(i.split()[-1])
-...
->>> b[0]
-'CPCG0001-B1.1.v3.AT.a520780-00-942560-043016-4230736-75784.CEL.gpg'
->>>
-
-        
-        
-        
-        
-        
-    # check that files are in the file directory
-        
-    # create stage folder if doesn't exist
-        
-    # upload files
- 
-    
-    
-    
-    
+                StagePath = D[alias]['StagePath']
+                assert StagePath != '/'
+                i = subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
+                if i == 0:
+                    FileDir = D[alias]['FileDirectory']
+                    # get the files, check that the files are in the directory, and upload
+                    for filePath in D[alias]['files']:
+                        # get filename
+                        fileName = os.path.basename(filePath)
+                        assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+                        encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
+                        originalMd5 = os.path.join(FileDir, fileName + '.md5')
+                        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+                        if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
+                            # upload files
+                            i = subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
+                            if i == 0:
+                                # update status in the Analysis table
+                                cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box)) 
+                                conn.commit()
+                            else:
+                                print('Did not successfully upload files {0} {1} {2}'.format(encryptedFile, encryptedMd5, originalMd5))
+                        else:
+                            print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
+                else:
+                    print("did not successfully create {0} on the staging server".format(StagePath))
+        conn.close()            
     else:
         print('Table {0} does not exist in {1} database'.format(Table, DataBase))
     
-    
-    
-   
-
-
-
-
-
-
-
-
 
 # use this function to submit Sample objects
 def SubmitSamples(args):
@@ -1015,6 +980,9 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## upload files
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box)
+        
+        ## check that files are uploaded
         
         # check stage folder, file directory
         
