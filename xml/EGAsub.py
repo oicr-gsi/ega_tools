@@ -755,6 +755,83 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
                 conn.commit()
     conn.close()    
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   
+# use this script to launch qsubs to encrypt the files and do a checksum
+def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime):
+    '''
+    (list) -> None
+    Take a list of command-line arguments and write bash and scripts to do a checksum
+    on specified files, encryption and checksum of the encrypted file
+    '''
+
+    # command to do a checksum and encryption
+    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
+    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1} -e {0} && \
+    md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
+
+    # check that FileName is valid
+    if of.path.isfile(filePath) ==False:
+        print('cannot encrypt {0}, not a valid file'.format(filePath))
+    else:
+        # check if date is added to output directory
+        if AddTime == True:
+            # get the date year_month_day
+            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+            OutDir = OutDir + '_' + Time
+        # check if OutDir exist
+        if os.path.isdir(OutDir) == False:
+            os.makedirs(OutDir)
+        
+        # make a directory to save the qsubs
+        qsubdir = os.path.join(OutDir, 'qsub')
+        if os.path.isdir(qsubdir) == False:
+            os.mkdir(qsubdir)
+        # create a log dir and a directory to keep qsubs already run
+        for i in ['log', 'done']:
+            if i not in os.listdir(qsubdir):
+                os.mkdir(os.path.join(qsubdir, i))
+            assert os.path.isdir(os.path.join(qsubdir, i))
+        
+        # get name of output file
+        OutFile = os.path.join(args.outdir, fileName)
+        # put command in shell script
+        BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
+        newfile = open(BashScript, 'w')
+        newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
+        newfile.close()
+        # write qsub
+        QsubScript = os.path.join(qsubdir, fileName + '_encrypt.qsub')
+        newfile = open(QsubScript, 'w')
+        LogDir = os.path.join(qsubdir, 'log')
+        newfile.write("qsub -b y -q {0} -l h_vmem={1}g -N Encrypt.{2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, filePath.replace('/', '_'), LogDir, BashScript))
+        newfile.close()
+        # launch qsub and return exit code
+        job = subprocess.call("bash {0}".format(QsubScript))
+        return job
+        
+        
 # use this function to upload the files
 def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
     '''
@@ -1056,18 +1133,6 @@ def SubmitAnalyses(args):
     
     '''
 
-   
-    # workflow for submitting analyses:
-    # add analysis info to sample table -> set status to ready
-    # grab sample Ids from Metadata db for status = submit -> update status -> upload
-    # upload files for status=upload, change status -> started_upload
-    # check that files are uploaded, change status to uploaded
-    # form json for samples in ready mode and store in table -> set status to submit
-    
-    
-    # status: ready -> grab_sample_ids -> upload files -> check_uploading -> check all_info -> form_json -> store_json
-    
-      
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
@@ -1149,6 +1214,13 @@ if __name__ == '__main__':
     Encryption.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue, default is production')
     Encryption.add_argument('-m', '--Mem', dest='mem', default='10', help='Memory, default is 10g')
     Encryption.set_defaults(func=EncryptFiles)
+
+
+
+'/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg'
+
+
+
 
     # submit samples to EGA
     SampleSubmission = subparsers.add_parser('SampleSubmission', help ='Submit samples to EGA')
