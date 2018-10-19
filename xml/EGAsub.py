@@ -887,6 +887,141 @@ def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
         conn.close()            
  
 
+
+
+
+# use this function to register objects
+def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
+    '''
+    (file, str, str, str, str, str) -> None
+    Take the file with credentials to connect to the submission database, 
+    extract the json for each Object in Table and register the objects
+    in EGA BOX using the submission Portal
+    '''
+    
+    ## submit objects with submit status                
+    # connect to the submission database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    
+    # pull json for objects with ready Status for given box
+    cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+    # extract all information 
+    Data = cur.fetchall()
+    # check that objects in submit mode do exist
+    if len(Data) != 0:
+        # make a list of jsons
+        L = [json.loads(i) for i in Data]
+        assert len(L) == len(Data)
+
+        # connect to EGA and get a token
+        # parse credentials to get userName and Password
+        Credentials = ExtractCredentials(CredentialFile)
+        if Box == 'ega-box-12':
+            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
+        elif Box == 'ega-box-137':
+            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+            
+        # get the token
+        data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
+        # get the adress of the submission portal
+        if Portal[-1] == '/':
+            URL = Portal[:-1]
+        else:
+            URL = Portal
+        Login = requests.post(URL + '/login', data=data)
+        # check that response code is OK
+        if Login.status_code == requests.codes.ok:
+            # response is OK, get Token
+            Token = Login.json()['response']['result'][0]['session']['sessionToken']
+            
+            # open a submission for each object
+            for J in L:
+                headers = {"Content-type": "application/json", "X-Token": Token}
+                submissionJson = {"title": "{0} submission", "description": "opening a submission for {0} {1}".format(Object, J["alias"])}
+                OpenSubmission = requests.post(URL + '/submissions', headers=headers, data=str(submissionJson).replace("'", "\""))
+                # check if submission is successfully open
+                if OpenSubmission.status_code == requests.codes.ok:
+                    # get submission Id
+                    submissionId = OpenSubmission.json()['response']['result'][0]['id']
+                    # create object
+                    ObjectCreation = requests.post(URL + '/submissions/{0}/{1}'.format(submissionId, Object), headers=headers, data=str(J).replace("'", "\""))
+                    # check response code
+                    if ObjectCreation.status_code == requests.codes.ok:
+                        # validate, get status (VALIDATED or VALITED_WITH_ERRORS) 
+                        ObjectId = ObjectCreation.json()['response']['result'][0]['Id']
+                        submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
+                        assert submissionStatus == 'DRAFT'
+                        # validate object
+                        ObjectValidation = requests.put(URL + '/{0}/{1}?action=VALIDATE'.format(Object, ObjectId), headers=headers)
+                        # check code and validation status
+                        if ObjectValidation.status_code == requests.codes.ok:
+                            # get object status
+                            ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
+                            if ObjectStatus == 'VALIDATED':
+                                # submit object
+                                ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
+                                # check if successfully submitted
+                                if ObjectSubmission.status_code == requests.codes.ok:
+                                    # check status
+                                    ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']
+                                    if ObjectStatus == 'SUBMITTED':
+                                        # get the receipt, and the accession id
+                                        Receipt, egaAccessionId = ObjectSubmission.json(), ObjectSubmission['response']['result'][0]['egaAccessionId']
+                                        # add Receipt and accession to table and change status
+                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt).replace("'", "\""), J["alias"]))
+                                        conn.commit()
+                                        cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
+                                        conn.commit()
+                                        cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                                        conn.commit()
+                                    else:
+                                        # delete sample
+                                        ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
+                                        print('deleting object {0} because status is {1}'.format(J["alias"], ObjectStatus))
+                                else:
+                                    print('cannot submit object {0}'.format(J["alias"]))
+                            else:
+                                #delete sample
+                                print('deleting sample {0} because status is {1}'.format(J["alias"], ObjectStatus))
+                                ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
+                        else:
+                            print('cannot validate object {0}'.format(J["alias"]))
+                    else:
+                        print('cannot create object for {0}'.format(J["alias"]))
+                else:
+                    print('cannot open a submission for object {0}'.format(J["alias"]))
+            
+            # disconnect by removing token
+            response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
+        else:
+            print('could not obtain a token')
+    else:
+        print('{0} table is not the submission database. Insert data first'.format(Table))
+    conn.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # use this function to submit Sample objects
 def SubmitSamples(args):
     
@@ -910,106 +1045,9 @@ def SubmitSamples(args):
         AddJsonToTable(args.credential, args.database, args.table, 'sample', args.box)
 
         ## submit samples with submit status                
+        RegisterObjects(args.credential, args.database, args.table, args.box, 'samples', args.portal)
 
-        # connect to the database
-        conn = EstablishConnection(args.credential, args.database)
-        cur = conn.cursor()
-    
-        # pull json for samples with ready Status for given box
-        cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.Box=\"{1}\"'.format(args.table. args.box))
-        # extract all information 
-        Data = cur.fetchall()
-        # check that samples are in submit mode
-        if len(Data) != 0:
-            # make a list of jsons
-            L = [json.loads(i) for i in Data]
-            assert len(L) == len(Data)
 
-            # connect to EGA and get a token
-            # parse credentials to get userName and Password
-            Credentials = ExtractCredentials(args.credential)
-            if args.box == 'ega-box-12':
-                MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-            elif args.box == 'ega-box-137':
-                MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
-            
-            # get the token
-            data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
-            # get the adress of the submission portal
-            if args.portal[-1] == '/':
-                URL = args.portal[:-1]
-            Login = requests.post(URL + '/login', data=data)
-            # check that response code is OK
-            if Login.status_code == requests.codes.ok:
-                # response is OK, get Token
-                Token = Login.json()['response']['result'][0]['session']['sessionToken']
-            
-                # open a submission for each sample
-                for J in L:
-                    headers = {"Content-type": "application/json", "X-Token": Token}
-                    submissionJson = {"title": "sample submission", "description": "opening a submission for sample {0}".format(J["alias"])}
-                    OpenSubmission = requests.post(URL + '/submissions', headers=headers, data=str(submissionJson).replace("'", "\""))
-                    # check if submission is successfully open
-                    if OpenSubmission.status_code == requests.codes.ok:
-                        # get submission Id
-                        submissionId = OpenSubmission.json()['response']['result'][0]['id']
-                        # create sample object
-                        SampleCreation = requests.post(URL + '/submissions/{0}/samples'.format(submissionId), headers=headers, data=str(J).replace("'", "\""))
-                        # check response code
-                        if SampleCreation.status_code == requests.codes.ok:
-                            # validate, get status (VALIDATED or VALITED_WITH_ERRORS) 
-                            sampleId = SampleCreation.json()['response']['result'][0]['Id']
-                            submissionStatus = SampleCreation.json()['response']['result'][0]['status']
-                            assert submissionStatus == 'DRAFT'
-                            # validate sample
-                            SampleValidation = requests.put(URL + '/samples/sampleId?action=VALIDATE', headers=headers)
-                            # check code and validation status
-                            if SampleValidation.status_code == requests.codes.ok:
-                                # get sample status
-                                sampleStatus=SampleValidation.json()['response']['result'][0]['status']
-                                if sampleStatus == 'VALIDATED':
-                                    # submit sample
-                                    SampleSubmission = requests.put(URL + '/samples/{0}?action=SUBMIT'.format(sampleId), headers=headers)
-                                    # check if successfully submitted
-                                    if SampleSubmission.status_code == requests.codes.ok:
-                                        # check status
-                                        Status = SampleValidation.json()['response']['result'][0]['status']
-                                        if Status == 'SUBMITTED':
-                                            # get the receipt, and the accession id
-                                            Receipt, egaAccessionId = SampleSubmission.json(), SampleSubmission['response']['result'][0]['egaAccessionId']
-                                            # add Receipt and accession to table and change status
-                                            cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(args.table, str(Receipt).replace("'", "\""), J["alias"]))
-                                            conn.commit()
-                                            cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(args.table, egaAccessionId, J["alias"]))
-                                            conn.commit()
-                                            cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(args.table, Status, J["alias"]))
-                                            conn.commit()
-                                        else:
-                                            # delete sample
-                                            SampleDeletion = requests.delete(URL + '/samples/{0}'.format(sampleId), headers=headers)
-                                            print('deleting sample {0} because status is {1}'.format(J["alias"], Status))
-                                    else:
-                                        print('cannot submit sample {0}'.format(J["alias"]))
-                                else:
-                                    #delete sample
-                                    print('deleting sample {0} because status is {1}'.format(J["alias"], sampleStatus))
-                                    SampleDeletion = requests.delete(URL + '/samples/{0}'.format(sampleId), headers=headers)
-                            else:
-                                print('cannot validate sample {0}'.format(J["alias"]))
-                        else:
-                            print('cannot create sample object for {0}'.format(J["alias"]))
-                    else:
-                        print('cannot open a submission for sample {0}'.format(J["alias"]))
-            
-                # disconnect by removing token
-                response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
-            else:
-                print('could not obtain a token')
-    else:
-        print('{0} table is not the submission database. Insert data first'.format(args.table))
-    conn.close()
-   
-   
 # use this function to submit Analyses objects
 def SubmitAnalyses(args):
     '''
@@ -1032,32 +1070,32 @@ def SubmitAnalyses(args):
       
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
-    
-    # connect to the database
-    conn = EstablishConnection(args.credential, args.subdb)
-    
     if args.table in Tables:
         
-        ## update Analysis table in submission database with sample accessions and change status ready -> upload
+        ## update Analysis table in submission database with sample accessions and change status ready -> encrypt
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
+        ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
+
+
+
+        ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
+
+
+
+
+        
         ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box)
         
         ## check that files are uploaded and change status uploading -> uploaded
         CheckUploadedFiles(args.credential, args.subdb, args.table, args.box)
         
-        ## form json for samples in ready mode, add to table and update status uploaded -> submit
+        ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.database, args.table, 'analysis', args.box)
 
-        ## submit analyses
-        
-
-
-
-
-
-
+        ## submit analyses with submit status                
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
     
 if __name__ == '__main__':
