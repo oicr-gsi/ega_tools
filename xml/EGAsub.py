@@ -692,9 +692,10 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 # use this script to launch qsubs to encrypt the files and do a checksum
 def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime):
     '''
-    (list) -> None
-    Take a list of command-line arguments and write bash and scripts to do a checksum
-    on specified files, encryption and checksum of the encrypted file
+    (file, str, str, str, bool) -> None
+    Take the full path to file, the name of the output file, the path to the
+    keys used during encryption, the directory where encrypted and cheksums are saved, 
+    and a bool specifiying if the date is added or not to the output directory
     '''
 
     # command to do a checksum and encryption
