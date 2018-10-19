@@ -595,73 +595,6 @@ def AddAnalysesInfo(args):
     conn.close()            
 
 
-# use this script to generate qsubs to encrypt the files and do a checksum
-def EncryptFiles(args):
-    '''
-    (list) -> None
-    Take a list of command-line arguments and write bash and scripts to do a checksum
-    on specified files, encryption and checksum of the encrypted file
-    '''
-
-    # command to do a cheksum and encryption
-    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
-    gpg --trust-model always -r EGA_Public_key -r SeqProdBio -o {1}.gpg -e {0} && \
-    md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
-
-    if args.inputdir:
-        # files to encrypt are in the input directory    
-        # make a list of files to encrypt
-        Files = [os.path.join(args.inputdir, filename) for filename in os.listdir(args.inputdir)]
-    elif args.inputfile:
-        # files to encrypt are listed in a file
-        # make a list of files to encrypt
-        infile = open(args.inputfile)
-        Files = infile.read().rstrip().split('\n')
-        infile.close()
-    
-    # check that files are valid
-    to_remove = [i for i in Files if os.path.isfile(i) == False]
-    if len(to_remove) != 0:
-        for i in to_remove:
-            print('skipping {0}, file does not exist'.format(i))
-            Files.remove(i)
-    if len(Files) != 0:
-        # check if date is added to output directory
-        if args.time == True:
-            # get the time year_month_day
-            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-            # add time to directory name
-            args.outdir = os.path.join(args.outdir, 'EGA_submission_' + Time)
-        # create outputdir if doesn't exist
-        if os.path.isdir(args.outdir) == False:
-            os.mkdir(args.outdir)
-        # make a directory to save the qsubs
-        qsubdir = os.path.join(args.outdir, 'qsub')
-        if os.path.isdir(qsubdir) == False:
-            os.mkdir(qsubdir)
-        # create a log dir and a directory to keep qsubs already run
-        for i in ['log', 'done']:
-            if i not in os.listdir(qsubdir):
-                os.mkdir(os.path.join(qsubdir, i))
-            assert os.path.isdir(os.path.join(qsubdir, i))
-        
-        # loop over files
-        for filePath in Files:
-            # get file name
-            assert filePath[-1] != '/'
-            fileName = os.path.basename(filePath)
-            OutFile = os.path.join(args.outdir, fileName)
-            BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
-            newfile = open(BashScript, 'w')
-            newfile.write(MyCmd.format(filePath, OutFile) + '\n')
-            newfile.close()
-            QsubScript = os.path.join(qsubdir, fileName + '_encrypt.qsub')
-            newfile = open(QsubScript, 'w')
-            LogDir = os.path.join(qsubdir, 'log')
-            newfile.write("qsub -cwd -b y -q {0} -l h_vmem={1}g -N Encrypt.{2} -e {3} -o {3} \"bash {4}\"".format(args.queue, args.mem, OutFile.replace('/', '_'), LogDir, BashScript))
-            newfile.close()
-            
-
 # use this function to form jsons and store to submission db
 def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
     '''
@@ -756,28 +689,6 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     conn.close()    
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   
 # use this script to launch qsubs to encrypt the files and do a checksum
 def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime):
     '''
@@ -830,6 +741,72 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime):
         # launch qsub and return exit code
         job = subprocess.call("bash {0}".format(QsubScript))
         return job
+
+
+
+# use this function to encrypt files and update status to encrypting
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime):
+    '''
+    (file, str, str, str, str, bool) -> None
+    Take a file with credentials to connect to Database, encrypt files in Table
+    with encrypt status for Box and update file status to encrypting if encryption and
+    md5sum jobs are successfully launched. Date is added to the outputdirectory
+    where encrypted and md5sum files are saved if AddTime is True    
+    '''
+    
+    # check if Table exist
+    Tables = ListTables(CredentialFile, DataBase)
+    if Table in Tables:
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+
+        # pull alias and files for status = encrypt
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        # check that some files are in encrypt mode
+        Data = cur.fetchall()
+        if len(Data) != 0:
+            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
+            L = []
+            for i in Data:
+                D = {}
+                assert i[0] not in D
+                D[i[0]] = {'files': json.loads(i[1]), 'FileDirectory': i[2]}
+                L.append(D)
+            # check file directory
+            for D in L:
+                assert len(list(D.keys())) == 1
+                alias = list(D.keys())[0]
+                # loop over files for that alias
+                for i in D[alias]['files']:
+                    # get the filePath and fileName
+                    filePath = D[alias]['files'][i]['filePath']
+                    fileName = D[alias]['files'][i]['fileName']
+                    # encrypt and run md5sums on original and encrypted files
+                    j = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], AddTime)
+                    # check if encription was launched successfully
+                    if j == 0:
+                        # encryotion and md5sums jobs launched succcessfully, update status -> encrypting
+                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                        conn.commit()
+                    else:
+                        print('encryption and md5sum jobs were not launched properly for {0}'.format(alias))
+                    
+                
+    else:
+        print('Table {0} does not exist in {1} database'.format(Table, DataBase))            
+      
+
+# use this function to check that encryption is done
+def CheckEncryption():
+    '''
+
+
+    '''        
+        
+    pass    
+        
+        
         
         
 # use this function to upload the files
