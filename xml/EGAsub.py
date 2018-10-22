@@ -1075,12 +1075,22 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         ObjectId = ObjectCreation.json()['response']['result'][0]['Id']
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
                         assert submissionStatus == 'DRAFT'
+                        # store submission json and status in db table
+                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()).replace("'", "\""), J["alias"]))
+                        conn.commit()
+                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, submissionStatus, J["alias"]))
+                        conn.commit()
                         # validate object
                         ObjectValidation = requests.put(URL + '/{0}/{1}?action=VALIDATE'.format(Object, ObjectId), headers=headers)
                         # check code and validation status
                         if ObjectValidation.status_code == requests.codes.ok:
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
+                            # store submission json and status in db table
+                            cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()).replace("'", "\""), J["alias"]))
+                            conn.commit()
+                            cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                            conn.commit()
                             if ObjectStatus == 'VALIDATED':
                                 # submit object
                                 ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
@@ -1097,6 +1107,15 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                                        conn.commit()
+                                        # store submission json and status in db table
+                                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectSubmission.json()).replace("'", "\""), J["alias"]))
+                                        conn.commit()
+                                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                                        conn.commit()
+                                        # store the date it was submitted
+                                        Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+                                        cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Time, J["alias"]))
                                         conn.commit()
                                     else:
                                         # delete sample
