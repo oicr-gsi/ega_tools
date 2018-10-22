@@ -422,7 +422,8 @@ def AddSampleInfo(args):
                   'sampleDetail', 'attributes', 'Species', 'Taxon',
                   'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
                   'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
-                  'Json', 'Receipt', 'CreationTime', 'egaAccessionId', 'Box']
+                  'Json', 'submissionJson', 'submissionStatus',
+                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box']
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -519,7 +520,8 @@ def AddAnalysesInfo(args):
                   "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
                   "genomeId", "chromosomeReferences", "experimentTypeId",
                   "platform", "ProjectId", "StudyTitle",
-                  "StudyDesign", "Broker", "StagePath", "Json", "Receipt",
+                  "StudyDesign", "Broker", "StagePath", "Json",
+                  "submissionJson", "submissionStatus", "Receipt",
                   "CreationTime", "egaAccessionId", "Box", "Status"]
         # format colums with datatype
         Columns = []
