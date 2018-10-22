@@ -613,13 +613,13 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
     
     if args.table in Tables:
        
-        ## form json for objects in ready mode, add to table and update status -> submit
+        ## form json, add to table and update status -> submit
               
-        # pull data for objects with ready Status for sample and upload Status for analyses
+        # pull data for objects with ready Status for sample and uploaded Status for analyses
         if Object == 'sample':
             Status = 'ready'
         elif Object == 'analysis':
-            Status = 'upload'
+            Status = 'uploaded'
         cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.Box=\"{2}\"'.format(Table, Status, Box))
         # get column headers
         Header = [i[0] for i in cur.description]
@@ -684,7 +684,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
                 cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsIds=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.Box=\"{3}\";'.format(Table, Registered[alias], alias, Box))
                 conn.commit()
                 # update status to upload
-                cur.execute('UPDATE {0} SET {0}.Status=\"upload\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
                 conn.commit()
     conn.close()    
 
@@ -805,7 +805,6 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime, Queue, 
 def CheckEncryption(CredentialFile, DataBase, Table, Box):
     '''
     (file, str, str, str) -> None
-
     '''        
         
     # check that table exists
