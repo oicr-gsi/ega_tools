@@ -878,11 +878,11 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         
         
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, N):
     '''
-    (file, str, str, str) -> None
+    (file, str, str, str, int) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files for aliases in upload status and update status to uploading
+    and upload files for the Nth first aliases in upload status and update status to uploading
     '''
        
     # check that Analysis table exists
@@ -904,6 +904,8 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box):
         # check that some alias are in upload mode
         Data = cur.fetchall()
         if len(Data) != 0:
+            # upload only the first Nth numbers of of object
+            Data = Data[:N]
             # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
