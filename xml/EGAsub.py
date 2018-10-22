@@ -690,7 +690,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime):
+def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem):
     '''
     (file, str, str, str, bool) -> None
     Take the full path to file, the name of the output file, the path to the
@@ -740,18 +740,21 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime):
         newfile.write("qsub -b y -q {0} -l h_vmem={1}g -N Encrypt.{2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, filePath.replace('/', '_'), LogDir, BashScript))
         newfile.close()
         # launch qsub and return exit code
-        job = subprocess.call("bash {0}".format(QsubScript))
+        job = subprocess.call("bash {0}".format(QsubScript), shell=True)
+        #move qsub and shell scripts to done directory
+        subprocess.call('mv {0} {1}'.format(QsubScript, os.path.join(qsubdir, 'done')), shell=True)
+        subprocess.call('mv {0} {1}'.format(BashScript, os.path.join(qsubdir, 'done')), shell=True)
         return job
 
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime, Queue, Mem):
     '''
-    (file, str, str, str, str, bool) -> None
+    (file, str, str, str, str, bool) -> int
     Take a file with credentials to connect to Database, encrypt files in Table
     with encrypt status for Box and update file status to encrypting if encryption and
-    md5sum jobs are successfully launched. Date is added to the outputdirectory
+    md5sum jobs are successfully launched and return the exit code. Date is added to the outputdirectory
     where encrypted and md5sum files are saved if AddTime is True    
     '''
     
@@ -784,7 +787,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime):
                     filePath = D[alias]['files'][i]['filePath']
                     fileName = D[alias]['files'][i]['fileName']
                     # encrypt and run md5sums on original and encrypted files
-                    j = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], AddTime)
+                    j = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], AddTime, Queue, Mem)
                     # check if encription was launched successfully
                     if j == 0:
                         # encryotion and md5sums jobs launched succcessfully, update status -> encrypting
@@ -799,15 +802,73 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime):
       
 
 # use this function to check that encryption is done
-def CheckEncryption():
+def CheckEncryption(CredentialFile, DataBase, Table, Box):
     '''
-
+    (file, str, str, str) -> None
 
     '''        
         
-    pass    
-        
-        
+    # check that table exists
+    Tables = ListTables(CredentialFile, DataBase)
+    if Table in Tables:
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+
+        # pull alias and files for status = encrypting
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        # check that some files are in encrypting mode
+        Data = cur.fetchall()
+        if len(Data) != 0:
+            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
+            L = []
+            for i in Data:
+                D = {}
+                assert i[0] not in D
+                D[i[0]] = {'files': json.loads(i[1]), 'FileDirectory': i[2]}
+                L.append(D)
+            # check file directory
+            for D in L:
+                assert len(list(D.keys())) == 1
+                alias = list(D.keys())[0]
+                # create a dict to store the updated file info
+                Files = {}
+                # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
+                Encrypted = True
+                # loop over files for that alias
+                for i in D[alias]['files']:
+                    # get the fileName
+                    fileName = D[alias]['files'][i]['fileName']
+                    # check that encryoted and md5sum files do exist
+                    originalMd5File = os.path.join(D[alias]['FileDirectory'], filename + '.md5')
+                    encryptedMd5File = os.path.join(D[alias]['FileDirectory'], filename + '.gpg.md5')
+                    encryptedFile = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg')
+                    if os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
+                        # get the name of the encrypted file
+                        encryptedName = fileName + '.gpg'
+                        # get the md5sums
+                        encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
+                        originaldMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
+                        if encryptedMd5 != '' and originalMd5 != '':
+                            # capture md5sums, build updated dict
+                            Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5} 
+                        else:
+                            # update boolean
+                            Encrypted = False
+                    else:
+                        print('encrypted and/or md5sums do not exist in {0} for file {1} under alias {2}'.format(D[alias]['FileDirectory'], fileName, alias))
+                        # update boollean
+                        Encrypted = False
+                # check if md5sums and encrypted files is available for all files
+                if Encrypted == True:
+                    # update file info and status only if all files do exist and md5sums can be extracted
+                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.Box=\"{3}\";'.format(Table, str(Files).replace("'", "\""), alias, Box))
+                    conn.commit()
+                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                    conn.commit()
+    else:
+        print('Table {0} does not exist in {1} database'.format(Table, DataBase))            
+    
         
         
 # use this function to upload the files
@@ -1058,25 +1119,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # use this function to submit Sample objects
 def SubmitSamples(args):
     
@@ -1119,15 +1161,11 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-
-
+        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.time)
 
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
+        CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
-
-
-
-        
         ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box)
         
@@ -1182,17 +1220,6 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('--Experiment', dest='experiment', default='Whole genome sequencing', choices=['Genotyping by array', 'Exome sequencing', 'Whole genome sequencing', 'transcriptomics'], help='Experiment type. Default is Whole genome sequencing')
     AddAnalyses.add_argument('--AnalysisType', dest='analysistype', choices=['Reference Alignment (BAM)', 'Sequence variation (VCF)'], help='Analysis type', required=True)
     AddAnalyses.set_defaults(func=AddAnalysesInfo)
-
-    # encrypt files and do a checksum
-    Encryption = subparsers.add_parser('Encryption', help ='Encrypt files and do a checksum')    
-    Encryption.add_argument('-d', '--InputDir', dest='inputdir', help='Directory with files to encrypt')
-    Encryption.add_argument('-f', '--InputFile', dest='inputfile', help='File with full paths of files to encrypt')
-    Encryption.add_argument('-o', '--OutDir', dest='outdir', default='/scratch2/groups/gsi/bis/ega', help='Directory where encrypted files and md5sums are saved. Default is /scratch2/groups/gsi/bis/ega')
-    Encryption.add_argument('-t', '--Time', dest='time', action='store_true', help='Add date to OutputDirectory if used')
-    Encryption.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue, default is production')
-    Encryption.add_argument('-m', '--Mem', dest='mem', default='10', help='Memory, default is 10g')
-    Encryption.set_defaults(func=EncryptFiles)
-
 
 
 '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg'
