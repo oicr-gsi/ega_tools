@@ -1151,7 +1151,7 @@ def SubmitSamples(args):
     '''
     (list) -> None
     Take a list of command line arguments and submit samples to EGA following
-    in sequential steps that depend on the sample status mode
+    sequential steps that depend on the sample status mode
     '''
    
     # workflow for submitting samples:
@@ -1174,9 +1174,9 @@ def SubmitSamples(args):
 # use this function to submit Analyses objects
 def SubmitAnalyses(args):
     '''
-    
-    
-    
+    (list) -> None
+    Take a list of command line arguments and encrypt, upload and register analysis
+    objects to EGA following sequential steps that depend on the analysis status mode
     '''
 
     # check if Analyses table exists
