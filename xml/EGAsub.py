@@ -155,7 +155,7 @@ def ParseAnalysisInputTable(Table):
     # get file header
     Header = infile.read().rstrip().split('\n')
     # check that required fields are present
-    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath', 'unencryptedChecksum', 'encryptedName', 'checksum'] if i not in Header]
+    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath'] if i not in Header]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
@@ -166,8 +166,16 @@ def ParseAnalysisInputTable(Table):
             # missing values are not permitted
             assert len(Header) == len(S), 'missing values should be "" or NA'
             # extract variables from line
-            L = ['alias', 'sampleAlias', 'filePath', 'unencryptedChecksum', 'encryptedName', 'checksum']
-            alias, sampleAlias, filePath, originalmd5, encryptedName, encryptedmd5 = [S[Header.index(L[i])] for i in range(len(L))]
+            if len(Header) == 3:
+                # file name is not supplied, use filename in filepath
+                L = ['alias', 'sampleAlias', 'filePath']
+                alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+                assert filePath != '/' and filePath[-1] != '/'
+                fileName = os.path.basename(filePath)                
+            elif len(Header) == 4:
+                # file name is supplied, use filename
+                L = ['alias', 'sampleAlias', 'filePath', 'fileName']
+                alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
             # check if alias already recorded ( > 1 files for this alias)
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
@@ -180,8 +188,7 @@ def ParseAnalysisInputTable(Table):
                 assert D[alias]['sampleAlias'] == sampleAlias
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
-                D[alias]['files'][filePath] = {'filePath': filePath, 'unencryptedChecksum': originalmd5,
-                 'encryptedName': encryptedName, 'checksum': encryptedmd5}
+                D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
                        
     infile.close()
 
@@ -1001,9 +1008,6 @@ def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
                         print('At least one of these files is missing from the staging server: {0}, {1}, {2}'.format(encryptedFile, encryptedMd5, originalMd5))
         conn.close()            
  
-
-
-
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
