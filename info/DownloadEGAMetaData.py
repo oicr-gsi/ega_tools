@@ -234,7 +234,7 @@ infile.close()
 # extract credential values
 UserNameBox12, MyPassWordBox12 = Credentials['UserNameBox12'], Credentials['MyPassWordBox12']
 UserNameBox137, MyPassWordBox137 = Credentials['UserNameBox137'], Credentials['MyPassWordBox137']
-DbHost, DbName = Credentials['DbHost'], Credentials['DbName']
+DbHost, DbName = Credentials['DbHost'], Credentials['metaDbName']
 DbUser, DbPasswd = Credentials['DbUser'], Credentials['DbPasswd']
 
 ### 2) Log in ega-box-12 ans ega-box-137
