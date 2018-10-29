@@ -504,7 +504,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem)
     md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
 
     # check that FileName is valid
-    if of.path.isfile(filePath) ==False:
+    if os.path.isfile(filePath) ==False:
         print('cannot encrypt {0}, not a valid file'.format(filePath))
     else:
         # check if date is added to output directory
@@ -639,15 +639,15 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                     # get the fileName
                     fileName = D[alias]['files'][i]['fileName']
                     # check that encryoted and md5sum files do exist
-                    originalMd5File = os.path.join(D[alias]['FileDirectory'], filename + '.md5')
-                    encryptedMd5File = os.path.join(D[alias]['FileDirectory'], filename + '.gpg.md5')
+                    originalMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.md5')
+                    encryptedMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg.md5')
                     encryptedFile = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg')
-                    if os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
+                    if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
                         # get the name of the encrypted file
                         encryptedName = fileName + '.gpg'
                         # get the md5sums
                         encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
-                        originaldMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
+                        originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
                         if encryptedMd5 != '' and originalMd5 != '':
                             # capture md5sums, build updated dict
                             Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5} 
