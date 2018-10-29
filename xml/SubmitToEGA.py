@@ -394,215 +394,6 @@ def RejectRoot(S):
         raise ValueError('The root is not allowed for the staging server')
     return S
 
-# use this function to add data to the sample table
-def AddSampleInfo(args):
-    '''
-    (list) -> None
-    Take a list of command line arguments and add sample information
-    to the Sample Table of the EGAsub database if samples are not already registered
-    '''
-    
-    # pull down sample alias and egaId from metadata db, alias should be unique
-    # create a dict {alias: accession} 
-    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
-    
-    # parse input table [{sample: {key:value}}] 
-    Data = ParseSampleInputTable(args.table)
-
-    # create table if table doesn't exist
-    Tables = ListTables(args.credential, args.subdb)
-
-    # connect to submission database
-    conn = EstablishConnection(args.credential, args.subdb)    
-
-    if args.table not in Tables:
-        Fields = ['alias', 'subjectId', 'title', 'description', 'caseOrControlId',  
-                  'gender', 'organismPart', 'cellLine', 'region', 'phenotype',
-                  'anonymizedName', 'biosampleId', 'sampleAge',
-                  'sampleDetail', 'attributes', 'Species', 'Taxon',
-                  'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
-                  'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
-                  'Json', 'submissionJson', 'submissionStatus',
-                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box']
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
-                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
-        # create table with column headers
-        cur = conn.cursor()
-        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
-        conn.commit()
-    else:
-        # get the column headers from the table
-        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
-        Fields = [i[0] for i in cur]
-    
-    # create a string with column headers
-    ColumnNames = ', '.join(Fields)
-        
-    # pull down sample alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
-    # create a dict {alias: accession}
-    Recorded = [i[0] for i in cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))]
-                
-    # check that samples are not already in the database for that box
-    for D in Data:
-        # get sample alias
-        sample = list(D.keys())[0]
-        if sample in Registered:
-            # skip sample, already registered
-            print('{0} is already registered in box {1} under accession {2}'.format(sample, args.box, Registered[sample]))
-        elif sample in Recorded:
-            # skip analysis, already recorded in submission database
-            print('{0} is already recorded for box {1} in the submission database'.format(sample, args.box))
-        else:
-            # add fields from the command
-            for i in [['Box', args.box], ['Species', args.species], ['Taxon', args.name],
-                      ['Name', args.name], ['SampleTitle', args.sampleTitle], ['Center', args.center],
-                      ['RunCenter', args.run], ['StudyId', args.study], ['StudyTitle', args.studyTitle],
-                      ['StudyDesign', args.design], ['Broker', args.broker]]:
-                if i[0] not in D[sample]:
-                    D[sample][i[0]] = i[1]
-            # set Status to ready
-            D[sample]["Status"] = "ready"
-            # list values according to the table column order
-            L = []
-            for field in Fields:
-                if field not in D[sample]:
-                    L.append('')
-                else:
-                    if field == 'attributes':
-                        attributes = [D[sample]['attributes'][i] for i in D[sample]['attributes']]
-                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")            
-                        L.append(attributes)
-                    else:
-                        L.append(D[sample][field])
-            # convert data to strings, converting missing values to NULL
-            Values = FormatData(L)
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
-    
-    conn.close()
-
-    
- 
-# use this function to add data to the analysis table
-def AddAnalysesInfo(args):
-    '''
-    (list) -> None
-    Take a list of command line arguments and add analysis information
-    to the Analysis Table of the EGAsub database if files are not already registered
-    '''
-    
-    # pull down analysis alias and egaId from metadata db, alias should be unique
-    # create a dict {alias: accession}
-    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
-    
-    # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
-    Data = ParseAnalysisInputTable(args.table)
-
-    # parse config table 
-    Config = ParseAnalysisConfig(args.config)
-
-    # create table if table doesn't exist
-    Tables = ListTables(args.credential, args.subdb)
-    
-    # connect to submission database
-    conn = EstablishConnection(args.credential, args.subdb)
-    
-    if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
-                  "description", "studyId", "sampleReferences", "analysisCenter",
-                  "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
-                  "genomeId", "chromosomeReferences", "experimentTypeId",
-                  "platform", "ProjectId", "StudyTitle",
-                  "StudyDesign", "Broker", "StagePath", "Json",
-                  "submissionJson", "submissionStatus", "Receipt",
-                  "CreationTime", "egaAccessionId", "Box", "Status"]
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
-                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
-        # create table with column headers
-        cur = conn.cursor()
-        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
-        conn.commit()
-    else:
-        # get the column headers from the table
-        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
-        Fields = [i[0] for i in cur]
-    
-    # create a string with column headers
-    ColumnNames = ', '.join(Fields)
-    
-    # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
-    # create a dict {alias: accession}
-    Recorded = [i[0] for i in cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))]
-        
-    # check that analyses are not already in the database for that box
-    for D in Data:
-        # get analysis alias
-        alias = list(D.keys())[0]
-        if alias in Registered:
-            # skip analysis, already registered in EGA
-            print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
-        elif alias in Recorded:
-            # skip analysis, already recorded in submission database
-            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
-        else:
-            # add fields from the command
-            for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
-                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                      ['analysisTypeId', args.analysistype], ['FileDir', args.filedir]]:
-                if i[0] not in D[alias]:
-                    D[alias][i[0]] = i[1]
-            # add fields from the config
-            for i in Config:
-                if i not in D[alias]:
-                    if i == 'reference':
-                        D[alias]['genomeId'] = Config['reference']
-                    elif i == 'experiment':
-                        D[alias]['experimentTypeId'] = Config['experiment']
-                    elif i == 'attributes':
-                        attributes = [Config['attributes'][j] for j in Config['attributes']]
-                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
-                        D[alias]['attributes'] = attributes
-                    else:
-                        D[alias][i] = Config[i]
-            # add fileTypeId to each file
-            for filePath in D[alias]['files']:
-                if 'vcf' in filePath:
-                    fileTypeId = 'vcf'
-                elif 'bam' in filePath:
-                    fileTypeId = 'bam'
-                elif 'bai' in filePath:
-                    fileTypeId = 'bai'
-                # check that file type Id is also in the encrypted file
-                assert fileTypeId in D[alias]['files'][filePath]['encryptedName'], '{0} should be part of the encrypted file name'.format(fileTypeId)
-                # add fileTypeId to dict
-                assert 'fileTypeId' not in D[alias]['files'][filePath] 
-                D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
-            # set Status to ready
-            D[alias]["Status"] = "ready"
-            
-            # list values according to the table column order
-            L = [D[alias][field] if field in D[alias] else '' for field in Fields]
-            # convert data to strings, converting missing values to NULL                    L
-            Values = FormatData(L)        
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
-            
-    conn.close()            
-
 
 # use this function to form jsons and store to submission db
 def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
@@ -1143,6 +934,218 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     conn.close()
 
 
+# use this function to add data to the sample table
+def AddSampleInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add sample information
+    to the Sample Table of the EGAsub database if samples are not already registered
+    '''
+    
+    # pull down sample alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accession} 
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+    # parse input table [{sample: {key:value}}] 
+    Data = ParseSampleInputTable(args.table)
+
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)    
+
+    if args.table not in Tables:
+        Fields = ['alias', 'subjectId', 'title', 'description', 'caseOrControlId',  
+                  'gender', 'organismPart', 'cellLine', 'region', 'phenotype',
+                  'anonymizedName', 'biosampleId', 'sampleAge',
+                  'sampleDetail', 'attributes', 'Species', 'Taxon',
+                  'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
+                  'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
+                  'Json', 'submissionJson', 'submissionStatus',
+                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box']
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
+        Fields = [i[0] for i in cur]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+        
+    # pull down sample alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    # create a dict {alias: accession}
+    Recorded = [i[0] for i in cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))]
+                
+    # check that samples are not already in the database for that box
+    for D in Data:
+        # get sample alias
+        sample = list(D.keys())[0]
+        if sample in Registered:
+            # skip sample, already registered
+            print('{0} is already registered in box {1} under accession {2}'.format(sample, args.box, Registered[sample]))
+        elif sample in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(sample, args.box))
+        else:
+            # add fields from the command
+            for i in [['Box', args.box], ['Species', args.species], ['Taxon', args.name],
+                      ['Name', args.name], ['SampleTitle', args.sampleTitle], ['Center', args.center],
+                      ['RunCenter', args.run], ['StudyId', args.study], ['StudyTitle', args.studyTitle],
+                      ['StudyDesign', args.design], ['Broker', args.broker]]:
+                if i[0] not in D[sample]:
+                    D[sample][i[0]] = i[1]
+            # set Status to ready
+            D[sample]["Status"] = "ready"
+            # list values according to the table column order
+            L = []
+            for field in Fields:
+                if field not in D[sample]:
+                    L.append('')
+                else:
+                    if field == 'attributes':
+                        attributes = [D[sample]['attributes'][i] for i in D[sample]['attributes']]
+                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")            
+                        L.append(attributes)
+                    else:
+                        L.append(D[sample][field])
+            # convert data to strings, converting missing values to NULL
+            Values = FormatData(L)
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    
+    conn.close()
+
+    
+ 
+# use this function to add data to the analysis table
+def AddAnalysesInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add analysis information
+    to the Analysis Table of the EGAsub database if files are not already registered
+    '''
+    
+    # pull down analysis alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accession}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+    # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
+    Data = ParseAnalysisInputTable(args.table)
+
+    # parse config table 
+    Config = ParseAnalysisConfig(args.config)
+
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    
+    if args.table not in Tables:
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
+                  "description", "studyId", "sampleReferences", "analysisCenter",
+                  "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
+                  "genomeId", "chromosomeReferences", "experimentTypeId",
+                  "platform", "ProjectId", "StudyTitle",
+                  "StudyDesign", "Broker", "StagePath", "Json",
+                  "submissionJson", "submissionStatus", "Receipt",
+                  "CreationTime", "egaAccessionId", "Box", "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
+        Fields = [i[0] for i in cur]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    # create a dict {alias: accession}
+    Recorded = [i[0] for i in cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))]
+        
+    # check that analyses are not already in the database for that box
+    for D in Data:
+        # get analysis alias
+        alias = list(D.keys())[0]
+        if alias in Registered:
+            # skip analysis, already registered in EGA
+            print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+        elif alias in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+        else:
+            # add fields from the command
+            for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
+                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
+                      ['analysisTypeId', args.analysistype], ['FileDir', args.filedir]]:
+                if i[0] not in D[alias]:
+                    D[alias][i[0]] = i[1]
+            # add fields from the config
+            for i in Config:
+                if i not in D[alias]:
+                    if i == 'reference':
+                        D[alias]['genomeId'] = Config['reference']
+                    elif i == 'experiment':
+                        D[alias]['experimentTypeId'] = Config['experiment']
+                    elif i == 'attributes':
+                        attributes = [Config['attributes'][j] for j in Config['attributes']]
+                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                        D[alias]['attributes'] = attributes
+                    else:
+                        D[alias][i] = Config[i]
+            # add fileTypeId to each file
+            for filePath in D[alias]['files']:
+                if 'vcf' in filePath:
+                    fileTypeId = 'vcf'
+                elif 'bam' in filePath:
+                    fileTypeId = 'bam'
+                elif 'bai' in filePath:
+                    fileTypeId = 'bai'
+                # check that file type Id is also in the encrypted file
+                assert fileTypeId in D[alias]['files'][filePath]['encryptedName'], '{0} should be part of the encrypted file name'.format(fileTypeId)
+                # add fileTypeId to dict
+                assert 'fileTypeId' not in D[alias]['files'][filePath] 
+                D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
+            # set Status to ready
+            D[alias]["Status"] = "ready"
+            
+            # list values according to the table column order
+            L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+            
+    conn.close()            
+
+
+
+
 
 
 # use this function to submit Sample objects
@@ -1233,7 +1236,7 @@ if __name__ == '__main__':
     # add analyses to Analyses Table
     AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information')
     AddAnalyses.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AddAnalyses.add_argument('-t', '--Table', dest='table', default='Analyses', help='Samples table. Default is Analyses')
+    AddAnalyses.add_argument('-t', '--Table', dest='table', default='Analyses', help='Analyses table. Default is Analyses')
     AddAnalyses.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AddAnalyses.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
