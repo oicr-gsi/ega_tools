@@ -492,10 +492,11 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 # use this script to launch qsubs to encrypt the files and do a checksum
 def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem):
     '''
-    (file, str, str, str, bool) -> None
+    (file, str, str, str, str, str) -> int
     Take the full path to file, the name of the output file, the path to the
     keys used during encryption, the directory where encrypted and cheksums are saved, 
-    and a bool specifiying if the date is added or not to the output directory
+    the queue and memory allocated to run the jobs and return the exit code 
+    specifying if the jobs were launched successfully or not
     '''
 
     # command to do a checksum and encryption
@@ -507,11 +508,6 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem)
     if os.path.isfile(filePath) ==False:
         print('cannot encrypt {0}, not a valid file'.format(filePath))
     else:
-        # check if date is added to output directory
-        if AddTime == True:
-            # get the date year_month_day
-            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-            OutDir = OutDir + '_' + Time
         # check if OutDir exist
         if os.path.isdir(OutDir) == False:
             os.makedirs(OutDir)
@@ -549,13 +545,12 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem)
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime, Queue, Mem):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
     '''
-    (file, str, str, str, str, bool) -> int
+    (file, str, str, str, str, str, str) -> None
     Take a file with credentials to connect to Database, encrypt files in Table
     with encrypt status for Box and update file status to encrypting if encryption and
-    md5sum jobs are successfully launched and return the exit code. Date is added to the outputdirectory
-    where encrypted and md5sum files are saved if AddTime is True    
+    md5sum jobs are successfully launched using the specified queue and memory
     '''
     
     # check if Table exist
@@ -587,7 +582,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, AddTime, Queue, 
                     filePath = D[alias]['files'][i]['filePath']
                     fileName = D[alias]['files'][i]['fileName']
                     # encrypt and run md5sums on original and encrypted files
-                    j = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], AddTime, Queue, Mem)
+                    j = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
                     # check if encription was launched successfully
                     if j == 0:
                         # encryotion and md5sums jobs launched succcessfully, update status -> encrypting
@@ -1102,9 +1097,16 @@ def AddAnalysesInfo(args):
             # add fields from the command
             for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
                       ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                      ['analysisTypeId', args.analysistype], ['FileDir', args.filedir]]:
+                      ['analysisTypeId', args.analysistype], ['FileDir', args.filedir, args.time]]:
                 if i[0] not in D[alias]:
-                    D[alias][i[0]] = i[1]
+                    if i[0] == 'FileDir':
+                        if i[2] == True:
+                            # get the date year_month_day
+                            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+                            i[1] = i[1] + '_' + Time
+                        D[alias][i[0]] = i[1]
+                    else:
+                        D[alias][i[0]] = i[1]
             # add fields from the config
             for i in Config:
                 if i not in D[alias]:
@@ -1241,6 +1243,7 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AddAnalyses.add_argument('-f', '--FileDir', dest='filedir', help='Directory with md5sums and encrypted files', required=True)
+    AddAnalyses.add_argument('--Time', dest='time', action='store_true', help='Add date to FileDir. Do not add date by default')
     AddAnalyses.add_argument('--Config', dest='config', help='Path to config file', required=True)
     AddAnalyses.add_argument('--StagePath', dest='stagepath', type=RejectRoot, help='Path on the staging server. Root is not allowed', required=True)
     AddAnalyses.add_argument('--Center', dest='center', default='OICR_ICGC', help='Name of the Analysis Center')
@@ -1267,7 +1270,6 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='ega-box-12', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
-    AnalysisSubmission.add_argument('--Time', dest='time', action='store_true', help='Add date to the directory wehere md5s and encrypted are saved. Do not add date by default')
     AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
