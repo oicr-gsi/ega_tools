@@ -938,7 +938,7 @@ def AddSampleInfo(args):
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
     
     # parse input table [{sample: {key:value}}] 
-    Data = ParseSampleInputTable(args.table)
+    Data = ParseSampleInputTable(args.input)
 
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
@@ -1034,7 +1034,7 @@ def AddAnalysesInfo(args):
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
     
     # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
-    Data = ParseAnalysisInputTable(args.table)
+    Data = ParseAnalysisInputTable(args.input)
 
     # parse config table 
     Config = ParseAnalysisConfig(args.config)
@@ -1219,6 +1219,7 @@ if __name__ == '__main__':
     AddSamples.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AddSamples.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AddSamples.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to store object information for submission to EGA. Default is EGASUB')
+    AddSamples.add_argument('-i', '--Input', dest='input', help='Input table with sample info to load to submission database', required=True)
     AddSamples.add_argument('--Species', dest='species', default='Human', help='common species name')
     AddSamples.add_argument('--Taxon', dest='taxon', default='9606', help='species ID')    
     AddSamples.add_argument('--Name', dest='name', default='Homo sapiens', help='Species scientific name')
@@ -1239,6 +1240,7 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AddAnalyses.add_argument('-f', '--FileDir', dest='filedir', help='Directory with md5sums and encrypted files', required=True)
+    AddAnalyses.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
     AddAnalyses.add_argument('--Time', dest='time', action='store_true', help='Add date to FileDir. Do not add date by default')
     AddAnalyses.add_argument('--Config', dest='config', help='Path to config file', required=True)
     AddAnalyses.add_argument('--StagePath', dest='stagepath', type=RejectRoot, help='Path on the staging server. Root is not allowed', required=True)
