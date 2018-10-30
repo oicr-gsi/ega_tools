@@ -666,7 +666,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         
         
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, N):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
     '''
     (file, str, str, str, int) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -692,8 +692,8 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, N):
         # check that some alias are in upload mode
         Data = cur.fetchall()
         if len(Data) != 0:
-            # upload only the first Nth numbers of of object
-            Data = Data[:N]
+            # upload only Max objects: the first Nth numbers of objects
+            Data = Data[:int(Max)]
             # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
@@ -1198,7 +1198,7 @@ def SubmitAnalyses(args):
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box)
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max)
         
         ## check that files are uploaded and change status uploading -> uploaded
         CheckUploadedFiles(args.credential, args.subdb, args.table, args.box)
@@ -1271,6 +1271,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='ega-box-12', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
     AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
+    AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
     # get arguments from the command line
