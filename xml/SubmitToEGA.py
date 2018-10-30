@@ -49,19 +49,15 @@ def ExtractCredentials(CredentialFile):
 def EstablishConnection(CredentialFile, database):
     '''
     (list, str) -> connection object    
-    Take a file with database credentials and a string specifying if the connection
-    if made to the Metadata or Submission database
+    Take a file with database credentials and the name of the database
     '''
     
     # extract database credentials from the command
     Credentials = ExtractCredentials(CredentialFile)
-    # determine the database name
-    if database == 'Metadata':
-        DbName = Credentials['DbMet']
-    elif database == 'Submission':
-        DbName = Credentials['DbSub']
+    # get the database name
+    assert database in [Credentials['DbMet'], Credentials['DbSub']]
     # connnect to the database
-    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'], password = Credentials['DbPasswd'], db = DbName, charset = "utf8")
+    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'], password = Credentials['DbPasswd'], db = database, charset = "utf8")
     return conn 
 
 
