@@ -72,7 +72,8 @@ def ListTables(CredentialFile, DataBase):
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
-    Tables = [i[0] for i in cur.execute('SHOW TABLES')]
+    cur.execute('SHOW TABLES')
+    Tables = [i[0] for i in cur]
     conn.close()
     return Tables
 
