@@ -72,7 +72,8 @@ def ListTables(CredentialFile, DataBase):
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
-    Tables = [i[0] for i in cur.execute('SHOW TABLES')]
+    cur.execute('SHOW TABLES')
+    Tables = [i[0] for i in cur]
     conn.close()
     return Tables
 
@@ -371,9 +372,9 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
     # pull down analysis alias and egaId from metadata db, alias should be unique
     cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(Table, Box)) 
     # create a dict {alias: accession}
+    # some PCSI aliases are not unique, 1 sample is chosen arbitrarily
     Registered = {}
     for i in cur:
-        assert i[0] not in Registered
         Registered[i[0]] = i[1]
     conn.close()
     return Registered
@@ -461,9 +462,9 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     and update the analyses status to upload
     '''
     
-    # grab sample EGA accessions from metadata database, create a dict {alias: accessions}
+    # grab sample EGA accessions from metadata database, create a dict {alias: accession}
     Registered = ExtractAccessions(CredentialFile, MetadataDataBase, Box, 'Samples')
-    
+            
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
@@ -936,7 +937,7 @@ def AddSampleInfo(args):
     # pull down sample alias and egaId from metadata db, alias should be unique
     # create a dict {alias: accession} 
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
-    
+            
     # parse input table [{sample: {key:value}}] 
     Data = ParseSampleInputTable(args.input)
 
@@ -1030,9 +1031,9 @@ def AddAnalysesInfo(args):
     '''
     
     # pull down analysis alias and egaId from metadata db, alias should be unique
-    # create a dict {alias: accession}
+    # create a dict {alias: accessions}
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
-    
+            
     # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
     Data = ParseAnalysisInputTable(args.input)
 
