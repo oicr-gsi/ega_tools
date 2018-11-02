@@ -1210,7 +1210,7 @@ def SubmitAnalyses(args):
 if __name__ == '__main__':
 
     # create top-level parser
-    parser = argparse.ArgumentParser(prog = 'EGAsub.py', description='manages submission to EGA')
+    parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages submission to EGA')
     subparsers = parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
 
     # add samples to Samples Table
@@ -1246,7 +1246,7 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('--Config', dest='config', help='Path to config file', required=True)
     AddAnalyses.add_argument('--StagePath', dest='stagepath', type=RejectRoot, help='Path on the staging server. Root is not allowed', required=True)
     AddAnalyses.add_argument('--Center', dest='center', default='OICR_ICGC', help='Name of the Analysis Center')
-    AddAnalyses.add_argument('--StudyId', dest='study', default='EGAS00001000900', help='Study accession Id. Default is EGAS00001000900')
+    AddAnalyses.add_argument('--Study', dest='study', default='EGAS00001000900', help='Study accession Id. Default is EGAS00001000900')
     AddAnalyses.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
     AddAnalyses.add_argument('--Experiment', dest='experiment', default='Whole genome sequencing', choices=['Genotyping by array', 'Exome sequencing', 'Whole genome sequencing', 'transcriptomics'], help='Experiment type. Default is Whole genome sequencing')
     AddAnalyses.add_argument('--AnalysisType', dest='analysistype', choices=['Reference Alignment (BAM)', 'Sequence variation (VCF)'], help='Analysis type', required=True)
