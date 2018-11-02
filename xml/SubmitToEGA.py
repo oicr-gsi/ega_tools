@@ -93,7 +93,7 @@ def ParseSampleInputTable(Table):
     
     infile = open(Table)
     # get file header
-    Header = infile.read().rstrip().split('\n')
+    Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
     Missing = [i for i in ['alias', 'subjectId', 'genderId', 'phenotype'] if i not in Header]
     if len(Missing) != 0:
@@ -150,7 +150,7 @@ def ParseAnalysisInputTable(Table):
     
     infile = open(Table)
     # get file header
-    Header = infile.read().rstrip().split('\n')
+    Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
     Missing =  [i for i in ['alias', 'sampleAlias', 'filePath'] if i not in Header]
     if len(Missing) != 0:
