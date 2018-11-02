@@ -955,7 +955,7 @@ def AddSampleInfo(args):
                   'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
                   'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
                   'Json', 'submissionJson', 'submissionStatus',
-                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box', 'Status']
+                  'Receipt', 'CreationTime', 'egaAccessionId', 'egaBox', 'Status']
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -1056,7 +1056,7 @@ def AddAnalysesInfo(args):
                   "platform", "ProjectId", "StudyTitle",
                   "StudyDesign", "Broker", "StagePath", "Json",
                   "submissionJson", "submissionStatus", "Receipt",
-                  "CreationTime", "egaAccessionId", "Box", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
