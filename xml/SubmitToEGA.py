@@ -982,7 +982,8 @@ def AddSampleInfo(args):
         
     # pull down sample alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
     # create a dict {alias: accession}
-    Recorded = [i[0] for i in cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))]
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur] 
                 
     # check that samples are not already in the database for that box
     for D in Data:
@@ -1084,7 +1085,8 @@ def AddAnalysesInfo(args):
     
     # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
     # create a dict {alias: accession}
-    Recorded = [i[0] for i in cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))]
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
         
     # check that analyses are not already in the database for that box
     for D in Data:
