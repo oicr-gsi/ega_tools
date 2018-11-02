@@ -955,14 +955,16 @@ def AddSampleInfo(args):
                   'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
                   'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
                   'Json', 'submissionJson', 'submissionStatus',
-                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box']
+                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box', 'Status']
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
-            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
-                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')    
+            elif Fields[i] == 'Json' or Fields[i] == 'Receipt':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
             else:
-                Columns.append(Fields[i] + ' TEXT NULL')
+                Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
         Columns = ' '.join(Columns)        
         # create table with column headers
@@ -1058,10 +1060,12 @@ def AddAnalysesInfo(args):
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
-            if Fields[i] == 'Json' or Fields[i] == 'Receipt':
-                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
-            else:
+            if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] == 'Json' or Fields[i] == 'Receipt':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
         Columns = ' '.join(Columns)        
         # create table with column headers
