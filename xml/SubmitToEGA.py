@@ -945,7 +945,8 @@ def AddSampleInfo(args):
     Tables = ListTables(args.credential, args.subdb)
 
     # connect to submission database
-    conn = EstablishConnection(args.credential, args.subdb)    
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()    
 
     if args.table not in Tables:
         Fields = ['alias', 'subjectId', 'title', 'description', 'caseOrControlId',  
@@ -1047,6 +1048,7 @@ def AddAnalysesInfo(args):
     
     # connect to submission database
     conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
     
     if args.table not in Tables:
         Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
