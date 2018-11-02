@@ -93,7 +93,7 @@ def ParseSampleInputTable(Table):
     
     infile = open(Table)
     # get file header
-    Header = infile.read().rstrip().split('\n')
+    Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
     Missing = [i for i in ['alias', 'subjectId', 'genderId', 'phenotype'] if i not in Header]
     if len(Missing) != 0:
@@ -150,7 +150,7 @@ def ParseAnalysisInputTable(Table):
     
     infile = open(Table)
     # get file header
-    Header = infile.read().rstrip().split('\n')
+    Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
     Missing =  [i for i in ['alias', 'sampleAlias', 'filePath'] if i not in Header]
     if len(Missing) != 0:
@@ -945,7 +945,8 @@ def AddSampleInfo(args):
     Tables = ListTables(args.credential, args.subdb)
 
     # connect to submission database
-    conn = EstablishConnection(args.credential, args.subdb)    
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()    
 
     if args.table not in Tables:
         Fields = ['alias', 'subjectId', 'title', 'description', 'caseOrControlId',  
@@ -955,7 +956,7 @@ def AddSampleInfo(args):
                   'ScientificName', 'SampleTitle', 'Center', 'RunCenter',
                   'StudyId', 'ProjectId', 'StudyTitle', 'StudyDesign', 'Broker',
                   'Json', 'submissionJson', 'submissionStatus',
-                  'Receipt', 'CreationTime', 'egaAccessionId', 'Box', 'Status']
+                  'Receipt', 'CreationTime', 'egaAccessionId', 'egaBox', 'Status']
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -1047,6 +1048,7 @@ def AddAnalysesInfo(args):
     
     # connect to submission database
     conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
     
     if args.table not in Tables:
         Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
@@ -1056,7 +1058,7 @@ def AddAnalysesInfo(args):
                   "platform", "ProjectId", "StudyTitle",
                   "StudyDesign", "Broker", "StagePath", "Json",
                   "submissionJson", "submissionStatus", "Receipt",
-                  "CreationTime", "egaAccessionId", "Box", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
