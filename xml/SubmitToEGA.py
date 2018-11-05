@@ -974,8 +974,8 @@ def AddSampleInfo(args):
         conn.commit()
     else:
         # get the column headers from the table
-        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
-        Fields = [i[0] for i in cur]
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
     
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
@@ -1077,11 +1077,14 @@ def AddAnalysesInfo(args):
         conn.commit()
     else:
         # get the column headers from the table
-        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='{0}'".format(args.table))
-        Fields = [i[0] for i in cur]
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
     
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
+    
+    print(ColumnNames)
+    
     
     # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
     # create a dict {alias: accession}
