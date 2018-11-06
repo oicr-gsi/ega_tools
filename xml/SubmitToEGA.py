@@ -490,7 +490,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem):
+def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
     '''
     (file, str, str, str, str, str) -> int
     Take the full path to file, the name of the output file, the path to the
