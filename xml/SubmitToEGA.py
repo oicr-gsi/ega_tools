@@ -500,9 +500,9 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
     '''
 
     # command to do a checksum and encryption
-    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {0}.md5; \
-    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1} -e {0} && \
-    md5sum {1} | cut -f1 -d \' \' > {1}.md5'
+    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
+    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0} && \
+    md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
 
     # check that FileName is valid
     if os.path.isfile(filePath) ==False:
@@ -523,7 +523,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
             assert os.path.isdir(os.path.join(qsubdir, i))
         
         # get name of output file
-        OutFile = os.path.join(OutDir, fileName) + '.gpg'
+        OutFile = os.path.join(OutDir, fileName)
         # put command in shell script
         BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
         newfile = open(BashScript, 'w')
