@@ -177,12 +177,15 @@ def ParseAnalysisInputTable(Table):
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
                 D[alias] = {}
+                # record alias
+                D[alias]['alias'] = alias
                 # record sampleAlias
                 D[alias]['sampleAlias'] = sampleAlias
                 D[alias]['files'] = {}
+                D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
             else:
-                # check that sample alias is the same as recorded for this alias
-                assert D[alias]['sampleAlias'] == sampleAlias
+                # check that sample alias and alias are the same as recorded for this alias
+                assert D[alias]['sampleAlias'] == sampleAlias and D[alias]['alias'] == alias
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
@@ -1065,7 +1068,7 @@ def AddAnalysesInfo(args):
         for i in range(len(Fields)):
             if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
-            elif Fields[i] == 'Json' or Fields[i] == 'Receipt':
+            elif Fields[i] in ['Json', 'Receipt', 'files', 'attributes']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
@@ -1082,9 +1085,6 @@ def AddAnalysesInfo(args):
     
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
-    
-    print(ColumnNames)
-    
     
     # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
     # create a dict {alias: accession}
@@ -1105,9 +1105,9 @@ def AddAnalysesInfo(args):
             # add fields from the command
             for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
                       ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                      ['analysisTypeId', args.analysistype], ['FileDir', args.filedir, args.time]]:
+                      ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
                 if i[0] not in D[alias]:
-                    if i[0] == 'FileDir':
+                    if i[0] == 'FileDirectory':
                         if i[2] == True:
                             # get the date year_month_day
                             Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
@@ -1136,8 +1136,8 @@ def AddAnalysesInfo(args):
                     fileTypeId = 'bam'
                 elif 'bai' in filePath:
                     fileTypeId = 'bai'
-                # check that file type Id is also in the encrypted file
-                assert fileTypeId in D[alias]['files'][filePath]['encryptedName'], '{0} should be part of the encrypted file name'.format(fileTypeId)
+                # check that file type Id is also in the filename
+                assert fileTypeId in D[alias]['files'][filePath]['fileName'], '{0} should be part of the file name'.format(fileTypeId)
                 # add fileTypeId to dict
                 assert 'fileTypeId' not in D[alias]['files'][filePath] 
                 D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
