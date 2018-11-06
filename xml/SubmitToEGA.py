@@ -481,7 +481,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
             assert Samples[alias] == 'NULL'
             if alias in Registered:
                 # update sample accession
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsIds=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
+                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
                 conn.commit()
                 # update status to upload
                 cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
