@@ -177,12 +177,14 @@ def ParseAnalysisInputTable(Table):
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
                 D[alias] = {}
+                # record alias
+                D[alias]['alias'] = alias
                 # record sampleAlias
                 D[alias]['sampleAlias'] = sampleAlias
                 D[alias]['files'] = {}
             else:
-                # check that sample alias is the same as recorded for this alias
-                assert D[alias]['sampleAlias'] == sampleAlias
+                # check that sample alias and alias are the same as recorded for this alias
+                assert D[alias]['sampleAlias'] == sampleAlias and D[alias]['alias'] == alias
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
@@ -1082,9 +1084,6 @@ def AddAnalysesInfo(args):
     
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
-    
-    print(ColumnNames)
-    
     
     # pull down analysis alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
     # create a dict {alias: accession}
