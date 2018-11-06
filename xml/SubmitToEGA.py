@@ -1105,9 +1105,9 @@ def AddAnalysesInfo(args):
             # add fields from the command
             for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
                       ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                      ['analysisTypeId', args.analysistype], ['FileDir', args.filedir, args.time]]:
+                      ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
                 if i[0] not in D[alias]:
-                    if i[0] == 'FileDir':
+                    if i[0] == 'FileDirectory':
                         if i[2] == True:
                             # get the date year_month_day
                             Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
