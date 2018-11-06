@@ -545,10 +545,10 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max):
     '''
-    (file, str, str, str, str, str, str) -> None
-    Take a file with credentials to connect to Database, encrypt files in Table
+    (file, str, str, str, str, str, int, int) -> None
+    Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
     with encrypt status for Box and update file status to encrypting if encryption and
     md5sum jobs are successfully launched using the specified queue and memory
     '''
@@ -565,6 +565,8 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
         # check that some files are in encrypt mode
         Data = cur.fetchall()
         if len(Data) != 0:
+            # encrypt only the Maxth files
+            Data = Data[:int(Max)]
             # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
