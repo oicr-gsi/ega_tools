@@ -478,7 +478,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
         Samples[i[0]] = i[1]
     if len(Samples) != 0:
         for alias in Samples:
-            assert Samples[alias] == 'NUll'
+            assert Samples[alias] == 'NULL'
             if alias in Registered:
                 # update sample accession
                 cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsIds=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
