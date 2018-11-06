@@ -570,7 +570,9 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
             for i in Data:
                 D = {}
                 assert i[0] not in D
-                D[i[0]] = {'files': json.loads(i[1]), 'FileDirectory': i[2]}
+                # convert single quotes to double quotes for str -> json conversion
+                files = i[1].replace("'", "\"")
+                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
