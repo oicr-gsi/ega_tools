@@ -50,7 +50,7 @@ my $file;
 if($opts{file}){
 	$file=$opts{file};
 }elsif($opts{qdir}){
-	my $file=`ls $opts{qdir} | head -n 1`;chomp $file;   ### grab one file
+	$file=`ls $opts{qdir} | head -n 1`;chomp $file;   ### grab one file
 	$file="$opts{qdir}/$file";
 }else{
 	die "no file or qdir provided\n";
