@@ -420,7 +420,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
             Status = 'ready'
         elif Object == 'analysis':
             Status = 'uploaded'
-        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.Box=\"{2}\"'.format(Table, Status, Box))
+        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
         # get column headers
         Header = [i[0] for i in cur.description]
         # extract all information 
@@ -446,10 +446,10 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                     # add json back in table and update status
                     alias = D['alias']
                     # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.Box=\"{3}\";'.format(Table, str(D).replace("'", "\""), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D).replace("'", "\""), alias, Box))
                     conn.commit()
                     # update status to submit
-                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                     conn.commit()
     else:
         print('Table {0} does not exist')
@@ -472,19 +472,19 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     Samples = {}
     for i in cur:
         Samples[i[0]] = i[1]
     if len(Samples) != 0:
         for alias in Samples:
-            assert Samples[alias] == 'NUll'
+            assert Samples[alias] == 'NULL'
             if alias in Registered:
                 # update sample accession
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsIds=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.Box=\"{3}\";'.format(Table, Registered[alias], alias, Box))
+                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
                 conn.commit()
                 # update status to upload
-                cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                 conn.commit()
     conn.close()    
 
@@ -561,7 +561,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
         cur = conn.cursor()
 
         # pull alias and files for status = encrypt
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some files are in encrypt mode
         Data = cur.fetchall()
         if len(Data) != 0:
@@ -586,7 +586,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
                     # check if encription was launched successfully
                     if j == 0:
                         # encryotion and md5sums jobs launched succcessfully, update status -> encrypting
-                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                         conn.commit()
                     else:
                         print('encryption and md5sum jobs were not launched properly for {0}'.format(alias))
@@ -610,7 +610,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         cur = conn.cursor()
 
         # pull alias and files for status = encrypting
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some files are in encrypting mode
         Data = cur.fetchall()
         if len(Data) != 0:
@@ -656,9 +656,9 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                 # check if md5sums and encrypted files is available for all files
                 if Encrypted == True:
                     # update file info and status only if all files do exist and md5sums can be extracted
-                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.Box=\"{3}\";'.format(Table, str(Files).replace("'", "\""), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(Files).replace("'", "\""), alias, Box))
                     conn.commit()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                     conn.commit()
     else:
         print('Table {0} does not exist in {1} database'.format(Table, DataBase))            
@@ -688,7 +688,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         if len(Data) != 0:
@@ -724,7 +724,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                             i = subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
                             if i == 0:
                                 # update status in the Analysis table
-                                cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box)) 
+                                cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
                                 conn.commit()
                             else:
                                 print('Did not successfully upload files {0} {1} {2}'.format(encryptedFile, encryptedMd5, originalMd5))
@@ -759,7 +759,7 @@ def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in uploaded mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in uploaded mode
         Data = cur.fetchall()
         if len(Data) != 0:
@@ -792,7 +792,7 @@ def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
                     encryptedFile, originalMd5, encryptedMd5 = fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'
                     if encryptedFile in Files and encryptedMd5 in Files and originalMd5 in Files:
                         # update status in the Analysis table
-                        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.Box=\"{2}\";'.format(Table, alias, Box)) 
+                        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
                         conn.commit()
                     else:
                         print('At least one of these files is missing from the staging server: {0}, {1}, {2}'.format(encryptedFile, encryptedMd5, originalMd5))
@@ -814,7 +814,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     cur = conn.cursor()
     
     # pull json for objects with ready Status for given box
-    cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.Box=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     # extract all information 
     Data = cur.fetchall()
     # check that objects in submit mode do exist
