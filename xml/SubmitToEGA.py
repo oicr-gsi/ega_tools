@@ -1136,8 +1136,8 @@ def AddAnalysesInfo(args):
                     fileTypeId = 'bam'
                 elif 'bai' in filePath:
                     fileTypeId = 'bai'
-                # check that file type Id is also in the encrypted file
-                assert fileTypeId in D[alias]['files'][filePath]['encryptedName'], '{0} should be part of the encrypted file name'.format(fileTypeId)
+                # check that file type Id is also in the filename
+                assert fileTypeId in D[alias]['files'][filePath]['fileName'], '{0} should be part of the file name'.format(fileTypeId)
                 # add fileTypeId to dict
                 assert 'fileTypeId' not in D[alias]['files'][filePath] 
                 D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
