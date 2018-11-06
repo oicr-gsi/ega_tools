@@ -500,9 +500,9 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
     '''
 
     # command to do a checksum and encryption
-    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
+    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {0}.md5; \
     gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1} -e {0} && \
-    md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
+    md5sum {1} | cut -f1 -d \' \' > {1}.md5'
 
     # check that FileName is valid
     if os.path.isfile(filePath) ==False:
@@ -523,7 +523,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
             assert os.path.isdir(os.path.join(qsubdir, i))
         
         # get name of output file
-        OutFile = os.path.join(OutDir, fileName)
+        OutFile = os.path.join(OutDir, fileName) + '.gpg'
         # put command in shell script
         BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
         newfile = open(BashScript, 'w')
@@ -1281,7 +1281,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AnalysisSubmission.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='ega-box-12', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
+    AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
     AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
