@@ -1090,7 +1090,7 @@ def AddAnalysesInfo(args):
     # create a dict {alias: accession}
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
-        
+    
     # check that analyses are not already in the database for that box
     for D in Data:
         # get analysis alias
@@ -1103,7 +1103,7 @@ def AddAnalysesInfo(args):
             print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
         else:
             # add fields from the command
-            for i in [['Box', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
+            for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
                       ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
                       ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
                 if i[0] not in D[alias]:
