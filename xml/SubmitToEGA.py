@@ -490,7 +490,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem):
+def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
     '''
     (file, str, str, str, str, str) -> int
     Take the full path to file, the name of the output file, the path to the
@@ -501,7 +501,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem)
 
     # command to do a checksum and encryption
     MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
-    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1} -e {0} && \
+    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0} && \
     md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
 
     # check that FileName is valid
@@ -523,7 +523,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem)
             assert os.path.isdir(os.path.join(qsubdir, i))
         
         # get name of output file
-        OutFile = os.path.join(args.outdir, fileName)
+        OutFile = os.path.join(OutDir, fileName)
         # put command in shell script
         BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
         newfile = open(BashScript, 'w')
@@ -545,10 +545,10 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, AddTime, Queue, Mem)
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max):
     '''
-    (file, str, str, str, str, str, str) -> None
-    Take a file with credentials to connect to Database, encrypt files in Table
+    (file, str, str, str, str, str, int, int) -> None
+    Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
     with encrypt status for Box and update file status to encrypting if encryption and
     md5sum jobs are successfully launched using the specified queue and memory
     '''
@@ -565,12 +565,16 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
         # check that some files are in encrypt mode
         Data = cur.fetchall()
         if len(Data) != 0:
+            # encrypt only the Maxth files
+            Data = Data[:int(Max)]
             # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
                 D = {}
                 assert i[0] not in D
-                D[i[0]] = {'files': json.loads(i[1]), 'FileDirectory': i[2]}
+                # convert single quotes to double quotes for str -> json conversion
+                files = i[1].replace("'", "\"")
+                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -1279,7 +1283,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AnalysisSubmission.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='ega-box-12', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
+    AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
     AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
