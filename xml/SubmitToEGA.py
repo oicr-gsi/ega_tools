@@ -1200,8 +1200,8 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.time)
-
+        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory)
+        
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
@@ -1281,6 +1281,8 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='ega-box-12', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
     AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
+    AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+    AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
