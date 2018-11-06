@@ -182,6 +182,7 @@ def ParseAnalysisInputTable(Table):
                 # record sampleAlias
                 D[alias]['sampleAlias'] = sampleAlias
                 D[alias]['files'] = {}
+                D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
             else:
                 # check that sample alias and alias are the same as recorded for this alias
                 assert D[alias]['sampleAlias'] == sampleAlias and D[alias]['alias'] == alias
