@@ -1068,7 +1068,7 @@ def AddAnalysesInfo(args):
         for i in range(len(Fields)):
             if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
-            elif Fields[i] == 'Json' or Fields[i] == 'Receipt' or Fields[i] == 'files' or Fields[i] == 'attributes':
+            elif Fields[i] in ['Json', 'Receipt', 'files', 'attributes']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
