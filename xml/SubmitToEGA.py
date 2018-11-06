@@ -523,7 +523,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
             assert os.path.isdir(os.path.join(qsubdir, i))
         
         # get name of output file
-        OutFile = os.path.join(args.outdir, fileName)
+        OutFile = os.path.join(OutDir, fileName)
         # put command in shell script
         BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
         newfile = open(BashScript, 'w')
