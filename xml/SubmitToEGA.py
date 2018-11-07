@@ -930,8 +930,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
         else:
             print('could not obtain a token')
-    else:
-        print('{0} table is not the submission database. Insert data first'.format(Table))
     conn.close()
 
 
