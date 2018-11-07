@@ -538,8 +538,8 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
         # launch qsub and return exit code
         job = subprocess.call("bash {0}".format(QsubScript), shell=True)
         #move qsub and shell scripts to done directory
-        subprocess.call('mv {0} {1}'.format(QsubScript, os.path.join(qsubdir, 'done')), shell=True)
-        subprocess.call('mv {0} {1}'.format(BashScript, os.path.join(qsubdir, 'done')), shell=True)
+        #subprocess.call('mv {0} {1}'.format(QsubScript, os.path.join(qsubdir, 'done')), shell=True)
+        #subprocess.call('mv {0} {1}'.format(BashScript, os.path.join(qsubdir, 'done')), shell=True)
         return job
 
 
@@ -623,7 +623,9 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
             for i in Data:
                 D = {}
                 assert i[0] not in D
-                D[i[0]] = {'files': json.loads(i[1]), 'FileDirectory': i[2]}
+                # convert single quotes to double quotes for str -> json conversion
+                files = i[1].replace("'", "\"")
+                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -928,8 +930,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
         else:
             print('could not obtain a token')
-    else:
-        print('{0} table is not the submission database. Insert data first'.format(Table))
     conn.close()
 
 
@@ -1095,71 +1095,66 @@ def AddAnalysesInfo(args):
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
     
-    # check that analyses are not already in the database for that box
-    for D in Data:
-        # get analysis alias
-        alias = list(D.keys())[0]
-        if alias in Registered:
-            # skip analysis, already registered in EGA
-            print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
-        elif alias in Recorded:
-            # skip analysis, already recorded in submission database
-            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
-        else:
-            # add fields from the command
-            for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
-                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                      ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
-                if i[0] not in D[alias]:
-                    if i[0] == 'FileDirectory':
-                        if i[2] == True:
-                            # get the date year_month_day
-                            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                            i[1] = i[1] + '_' + Time
-                        D[alias][i[0]] = i[1]
-                    else:
-                        D[alias][i[0]] = i[1]
-            # add fields from the config
-            for i in Config:
-                if i not in D[alias]:
-                    if i == 'reference':
-                        D[alias]['genomeId'] = Config['reference']
-                    elif i == 'experiment':
-                        D[alias]['experimentTypeId'] = Config['experiment']
-                    elif i == 'attributes':
-                        attributes = [Config['attributes'][j] for j in Config['attributes']]
-                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
-                        D[alias]['attributes'] = attributes
-                    else:
-                        D[alias][i] = Config[i]
-            # add fileTypeId to each file
-            for filePath in D[alias]['files']:
-                if 'vcf' in filePath:
-                    fileTypeId = 'vcf'
-                elif 'bam' in filePath:
-                    fileTypeId = 'bam'
-                elif 'bai' in filePath:
-                    fileTypeId = 'bai'
-                # check that file type Id is also in the filename
-                assert fileTypeId in D[alias]['files'][filePath]['fileName'], '{0} should be part of the file name'.format(fileTypeId)
-                # add fileTypeId to dict
-                assert 'fileTypeId' not in D[alias]['files'][filePath] 
-                D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
-            # set Status to ready
-            D[alias]["Status"] = "ready"
+    # record objects only if config and input table have been provided with required fields
+    if len(Config) != 0 and len(Data) != 0:
+        # check that analyses are not already in the database for that box
+        for D in Data:
+            # get analysis alias
+            alias = list(D.keys())[0]
+            if alias in Registered:
+                # skip analysis, already registered in EGA
+                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+            elif alias in Recorded:
+                # skip analysis, already recorded in submission database
+                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+            else:
+                # add fields from the command
+                for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
+                          ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
+                          ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
+                    if i[0] not in D[alias]:
+                        if i[0] == 'FileDirectory':
+                            if i[2] == True:
+                                # get the date year_month_day
+                                Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+                                i[1] = i[1] + '_' + Time
+                            D[alias][i[0]] = i[1]
+                        else:
+                            D[alias][i[0]] = i[1]
+                # add fields from the config
+                for i in Config:
+                    if i not in D[alias]:
+                        if i == 'reference':
+                            D[alias]['genomeId'] = Config['reference']
+                        elif i == 'experiment':
+                            D[alias]['experimentTypeId'] = Config['experiment']
+                        elif i == 'attributes':
+                            attributes = [Config['attributes'][j] for j in Config['attributes']]
+                            attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                            D[alias]['attributes'] = attributes
+                        else:
+                            D[alias][i] = Config[i]
+                # add fileTypeId to each file
+                for filePath in D[alias]['files']:
+                    fileTypeId = ''
+                    fileTypeId = filePath[-3:]
+                    assert fileTypeId in ['bam', 'bai', 'vcf']
+                    # check that file type Id is also in the filename
+                    assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
+                    # add fileTypeId to dict
+                    assert 'fileTypeId' not in D[alias]['files'][filePath] 
+                    D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
+                # set Status to ready
+                D[alias]["Status"] = "ready"
             
-            # list values according to the table column order
-            L = [D[alias][field] if field in D[alias] else '' for field in Fields]
-            # convert data to strings, converting missing values to NULL                    L
-            Values = FormatData(L)        
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
+                # list values according to the table column order
+                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                # convert data to strings, converting missing values to NULL                    L
+                Values = FormatData(L)        
+                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                conn.commit()
             
     conn.close()            
-
-
-
-
 
 
 # use this function to submit Sample objects
@@ -1204,7 +1199,7 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory)
+        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
