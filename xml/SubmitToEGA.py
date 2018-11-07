@@ -1136,14 +1136,11 @@ def AddAnalysesInfo(args):
                             D[alias][i] = Config[i]
                 # add fileTypeId to each file
                 for filePath in D[alias]['files']:
-                    if 'vcf' in filePath:
-                        fileTypeId = 'vcf'
-                    elif 'bam' in filePath:
-                        fileTypeId = 'bam'
-                    elif 'bai' in filePath:
-                        fileTypeId = 'bai'
+                    fileTypeId = ''
+                    fileTypeId = filePath[-3:]
+                    assert fileTypeId in ['bam', 'bai', 'vcf']
                     # check that file type Id is also in the filename
-                    assert fileTypeId in D[alias]['files'][filePath]['fileName'], '{0} should be part of the file name'.format(fileTypeId)
+                    assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                     # add fileTypeId to dict
                     assert 'fileTypeId' not in D[alias]['files'][filePath] 
                     D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
