@@ -538,8 +538,8 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
         # launch qsub and return exit code
         job = subprocess.call("bash {0}".format(QsubScript), shell=True)
         #move qsub and shell scripts to done directory
-        subprocess.call('mv {0} {1}'.format(QsubScript, os.path.join(qsubdir, 'done')), shell=True)
-        subprocess.call('mv {0} {1}'.format(BashScript, os.path.join(qsubdir, 'done')), shell=True)
+        #subprocess.call('mv {0} {1}'.format(QsubScript, os.path.join(qsubdir, 'done')), shell=True)
+        #subprocess.call('mv {0} {1}'.format(BashScript, os.path.join(qsubdir, 'done')), shell=True)
         return job
 
 
@@ -1204,7 +1204,7 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory)
+        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
