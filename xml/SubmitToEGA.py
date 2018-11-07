@@ -1095,71 +1095,69 @@ def AddAnalysesInfo(args):
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
     
-    # check that analyses are not already in the database for that box
-    for D in Data:
-        # get analysis alias
-        alias = list(D.keys())[0]
-        if alias in Registered:
-            # skip analysis, already registered in EGA
-            print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
-        elif alias in Recorded:
-            # skip analysis, already recorded in submission database
-            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
-        else:
-            # add fields from the command
-            for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
-                      ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                      ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
-                if i[0] not in D[alias]:
-                    if i[0] == 'FileDirectory':
-                        if i[2] == True:
-                            # get the date year_month_day
-                            Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                            i[1] = i[1] + '_' + Time
-                        D[alias][i[0]] = i[1]
-                    else:
-                        D[alias][i[0]] = i[1]
-            # add fields from the config
-            for i in Config:
-                if i not in D[alias]:
-                    if i == 'reference':
-                        D[alias]['genomeId'] = Config['reference']
-                    elif i == 'experiment':
-                        D[alias]['experimentTypeId'] = Config['experiment']
-                    elif i == 'attributes':
-                        attributes = [Config['attributes'][j] for j in Config['attributes']]
-                        attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
-                        D[alias]['attributes'] = attributes
-                    else:
-                        D[alias][i] = Config[i]
-            # add fileTypeId to each file
-            for filePath in D[alias]['files']:
-                if 'vcf' in filePath:
-                    fileTypeId = 'vcf'
-                elif 'bam' in filePath:
-                    fileTypeId = 'bam'
-                elif 'bai' in filePath:
-                    fileTypeId = 'bai'
-                # check that file type Id is also in the filename
-                assert fileTypeId in D[alias]['files'][filePath]['fileName'], '{0} should be part of the file name'.format(fileTypeId)
-                # add fileTypeId to dict
-                assert 'fileTypeId' not in D[alias]['files'][filePath] 
-                D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
-            # set Status to ready
-            D[alias]["Status"] = "ready"
+    # record objects only if config and input table have been provided with required fields
+    if len(Config) != 0 and len(Data) != 0:
+        # check that analyses are not already in the database for that box
+        for D in Data:
+            # get analysis alias
+            alias = list(D.keys())[0]
+            if alias in Registered:
+                # skip analysis, already registered in EGA
+                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+            elif alias in Recorded:
+                # skip analysis, already recorded in submission database
+                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+            else:
+                # add fields from the command
+                for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
+                          ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
+                          ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
+                    if i[0] not in D[alias]:
+                        if i[0] == 'FileDirectory':
+                            if i[2] == True:
+                                # get the date year_month_day
+                                Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+                                i[1] = i[1] + '_' + Time
+                            D[alias][i[0]] = i[1]
+                        else:
+                            D[alias][i[0]] = i[1]
+                # add fields from the config
+                for i in Config:
+                    if i not in D[alias]:
+                        if i == 'reference':
+                            D[alias]['genomeId'] = Config['reference']
+                        elif i == 'experiment':
+                            D[alias]['experimentTypeId'] = Config['experiment']
+                        elif i == 'attributes':
+                            attributes = [Config['attributes'][j] for j in Config['attributes']]
+                            attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                            D[alias]['attributes'] = attributes
+                        else:
+                            D[alias][i] = Config[i]
+                # add fileTypeId to each file
+                for filePath in D[alias]['files']:
+                    if 'vcf' in filePath:
+                        fileTypeId = 'vcf'
+                    elif 'bam' in filePath:
+                        fileTypeId = 'bam'
+                    elif 'bai' in filePath:
+                        fileTypeId = 'bai'
+                    # check that file type Id is also in the filename
+                    assert fileTypeId in D[alias]['files'][filePath]['fileName'], '{0} should be part of the file name'.format(fileTypeId)
+                    # add fileTypeId to dict
+                    assert 'fileTypeId' not in D[alias]['files'][filePath] 
+                    D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
+                # set Status to ready
+                D[alias]["Status"] = "ready"
             
-            # list values according to the table column order
-            L = [D[alias][field] if field in D[alias] else '' for field in Fields]
-            # convert data to strings, converting missing values to NULL                    L
-            Values = FormatData(L)        
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
+                # list values according to the table column order
+                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                # convert data to strings, converting missing values to NULL                    L
+                Values = FormatData(L)        
+                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                conn.commit()
             
     conn.close()            
-
-
-
-
 
 
 # use this function to submit Sample objects
