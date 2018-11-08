@@ -740,8 +740,6 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 else:
                     print("did not successfully create {0} on the staging server".format(StagePath))
         conn.close()            
-    else:
-        print('Table {0} does not exist in {1} database'.format(Table, DataBase))
 
 
 # use this function to check that files are uploaded on the staging server
