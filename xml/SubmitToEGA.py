@@ -776,9 +776,9 @@ def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        # extract files for alias in uploaded mode for given box
+        # extract files for alias in uploading mode for given box
         cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        # check that some alias are in uploaded mode
+        # check that some alias are in uploading mode
         Data = cur.fetchall()
         if len(Data) != 0:
             # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath}}
@@ -786,7 +786,8 @@ def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
             for i in Data:
                 D = {}
                 assert i[0] not in D
-                D[i[0]] = {'files': json.loads(i[1]), 'StagePath': i[2]}
+                files = i[1].replace("'", "\"")
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2]}
                 L.append(D)
             # check stage folder, file directory
             for D in L:
