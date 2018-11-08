@@ -715,30 +715,43 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 # create stage directory if doesn't exist
                 StagePath = D[alias]['StagePath']
                 assert StagePath != '/'
-                i = subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
-                if i == 0:
-                    FileDir = D[alias]['FileDirectory']
-                    # get the files, check that the files are in the directory, and upload
-                    for filePath in D[alias]['files']:
-                        # get filename
-                        fileName = os.path.basename(filePath)
-                        assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                        encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
-                        originalMd5 = os.path.join(FileDir, fileName + '.md5')
-                        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
-                        if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
-                            # upload files
-                            i = subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
-                            if i == 0:
-                                # update status in the Analysis table
-                                cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
-                                conn.commit()
-                            else:
-                                print('Did not successfully upload files {0} {1} {2}'.format(encryptedFile, encryptedMd5, originalMd5))
-                        else:
-                            print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
-                else:
-                    print("did not successfully create {0} on the staging server".format(StagePath))
+                subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
+                FileDir = D[alias]['FileDirectory']
+                
+                # set up a boolean to True, change to False if condition is not met,
+                # and check that it's True before updating status for that alias
+                UpdateStatus = True
+                
+                # get the files, check that the files are in the directory, and upload
+                for filePath in D[alias]['files']:
+                    # get filename
+                    fileName = os.path.basename(filePath)
+                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+                    encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
+                    originalMd5 = os.path.join(FileDir, fileName + '.md5')
+                    encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+                    if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
+                        # upload files
+                        subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
+                        # check if file is uploaded
+                        uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
+                        for i in range(len(uploaded_files)):
+                            uploaded_files[i] = uploaded_files[i].split()[-1]
+                        # set boolean to False if any file is not uploaded
+                        if os.path.basename(encryptedFile) not in uploaded_files:
+                            UpdateStatus = False
+                        if os.path.basename(encryptedMd5) not in uploaded_files:
+                            UpdateStatus = False
+                        if os.path.basename(originalMd5) not in uploaded_files:
+                            UpdateStatus = False
+                    else:
+                        print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
+                        # set boolean to False if any file is not uploaded
+                        UpdateStatus = False
+                # update status if all files for that alias have been uploaded
+                if UpdateStatus == True:
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
+                    conn.commit()                                
         conn.close()            
 
 
