@@ -662,7 +662,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                 # check if md5sums and encrypted files is available for all files
                 if Encrypted == True:
                     # update file info and status only if all files do exist and md5sums can be extracted
-                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(Files).replace("'", "\""), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(Files), alias, Box))
                     conn.commit()
                     cur.execute('UPDATE {0} SET {0}.Status=\"upload\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                     conn.commit()
@@ -705,7 +705,8 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
             for i in Data:
                 D = {}
                 assert i[0] not in D
-                D[i[0]] = {'files': json.loads(i[1]), 'StagePath': i[2], 'FileDirectory': i[3]}
+                files = i[1].replace("'", "\"")
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
                 L.append(D)
             # check stage folder, file directory
             for D in L:
@@ -739,8 +740,6 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 else:
                     print("did not successfully create {0} on the staging server".format(StagePath))
         conn.close()            
-    else:
-        print('Table {0} does not exist in {1} database'.format(Table, DataBase))
 
 
 # use this function to check that files are uploaded on the staging server
