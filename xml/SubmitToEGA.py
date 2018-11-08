@@ -1154,7 +1154,7 @@ def SubmitAnalyses(args):
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
-        ## upload files and change the status upload -> uploading 
+        ## upload files and change the status upload -> uploaded 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
