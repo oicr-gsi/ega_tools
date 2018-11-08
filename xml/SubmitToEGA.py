@@ -446,7 +446,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                     # add json back in table and update status
                     alias = D['alias']
                     # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D).replace("'", "\""), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
                     conn.commit()
                     # update status to submit
                     cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
@@ -776,7 +776,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     # check that objects in submit mode do exist
     if len(Data) != 0:
         # make a list of jsons
-        L = [json.loads(i) for i in Data]
+        L = [json.loads(i.replace("'", "\"")) for i in Data]
         assert len(L) == len(Data)
 
         # connect to EGA and get a token
@@ -818,7 +818,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
                         assert submissionStatus == 'DRAFT'
                         # store submission json and status in db table
-                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()).replace("'", "\""), J["alias"]))
+                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()), J["alias"]))
                         conn.commit()
                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, submissionStatus, J["alias"]))
                         conn.commit()
@@ -829,7 +829,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
                             # store submission json and status in db table
-                            cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()).replace("'", "\""), J["alias"]))
+                            cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()), J["alias"]))
                             conn.commit()
                             cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                             conn.commit()
@@ -844,14 +844,14 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         # get the receipt, and the accession id
                                         Receipt, egaAccessionId = ObjectSubmission.json(), ObjectSubmission['response']['result'][0]['egaAccessionId']
                                         # add Receipt and accession to table and change status
-                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt).replace("'", "\""), J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt), J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, ObjectStatus, J["alias"]))
                                         conn.commit()
                                         # store submission json and status in db table
-                                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectSubmission.json()).replace("'", "\""), J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectSubmission.json()), J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                                         conn.commit()
