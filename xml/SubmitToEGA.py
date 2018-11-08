@@ -446,7 +446,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                     # add json back in table and update status
                     alias = D['alias']
                     # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D).replace("'", "\""), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
                     conn.commit()
                     # update status to submit
                     cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
@@ -715,94 +715,45 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 # create stage directory if doesn't exist
                 StagePath = D[alias]['StagePath']
                 assert StagePath != '/'
-                i = subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
-                if i == 0:
-                    FileDir = D[alias]['FileDirectory']
-                    # get the files, check that the files are in the directory, and upload
-                    for filePath in D[alias]['files']:
-                        # get filename
-                        fileName = os.path.basename(filePath)
-                        assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                        encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
-                        originalMd5 = os.path.join(FileDir, fileName + '.md5')
-                        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
-                        if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
-                            # upload files
-                            i = subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
-                            if i == 0:
-                                # update status in the Analysis table
-                                cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
-                                conn.commit()
-                            else:
-                                print('Did not successfully upload files {0} {1} {2}'.format(encryptedFile, encryptedMd5, originalMd5))
-                        else:
-                            print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
-                else:
-                    print("did not successfully create {0} on the staging server".format(StagePath))
-        conn.close()            
-
-
-# use this function to check that files are uploaded on the staging server
-def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
-    '''
-    (file, str, str, str) -> None
-    Take the file with credentials to connect to the database and to EGA,
-    and check that files with uploaded status are on the staging server
-    '''
-       
-    # check that Analysis table exists
-    Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
-        # parse the crdential file, get username and password for given box
-        Credentials = ExtractCredentials(CredentialFile)
-        if Box == 'ega-box-12':
-            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-        elif Box == 'ega-box-137':
-            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
-               
-        # connect to database
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()
-        # extract files for alias in uploaded mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        # check that some alias are in uploaded mode
-        Data = cur.fetchall()
-        if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath}}
-            L = []
-            for i in Data:
-                D = {}
-                assert i[0] not in D
-                D[i[0]] = {'files': json.loads(i[1]), 'StagePath': i[2]}
-                L.append(D)
-            # check stage folder, file directory
-            for D in L:
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
-                # create stage directory if doesn't exist
-                StagePath = D[alias]['StagePath']
-                assert StagePath != '/'
-                if StagePath[-1]:
-                    StagePath[:-1]
-                # list all files under the directory
-                Files = subprocess.check_output("lftp -u {0},{1} -e \" set ftp:ssl-allow false; ls {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip()
-                Files = Files.split('\n')
-                for i in range(len(Files)):
-                    Files[i] = Files[i].split()[-1]
-                # get the files, check that the files are on the staging server and change status
+                subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
+                FileDir = D[alias]['FileDirectory']
+                
+                # set up a boolean to True, change to False if condition is not met,
+                # and check that it's True before updating status for that alias
+                UpdateStatus = True
+                
+                # get the files, check that the files are in the directory, and upload
                 for filePath in D[alias]['files']:
                     # get filename
                     fileName = os.path.basename(filePath)
                     assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                    encryptedFile, originalMd5, encryptedMd5 = fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'
-                    if encryptedFile in Files and encryptedMd5 in Files and originalMd5 in Files:
-                        # update status in the Analysis table
-                        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
-                        conn.commit()
+                    encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
+                    originalMd5 = os.path.join(FileDir, fileName + '.md5')
+                    encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+                    if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
+                        # upload files
+                        subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
+                        # check if file is uploaded
+                        uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
+                        for i in range(len(uploaded_files)):
+                            uploaded_files[i] = uploaded_files[i].split()[-1]
+                        # set boolean to False if any file is not uploaded
+                        if os.path.basename(encryptedFile) not in uploaded_files:
+                            UpdateStatus = False
+                        if os.path.basename(encryptedMd5) not in uploaded_files:
+                            UpdateStatus = False
+                        if os.path.basename(originalMd5) not in uploaded_files:
+                            UpdateStatus = False
                     else:
-                        print('At least one of these files is missing from the staging server: {0}, {1}, {2}'.format(encryptedFile, encryptedMd5, originalMd5))
+                        print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
+                        # set boolean to False if any file is not uploaded
+                        UpdateStatus = False
+                # update status if all files for that alias have been uploaded
+                if UpdateStatus == True:
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
+                    conn.commit()                                
         conn.close()            
- 
+
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -825,7 +776,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     # check that objects in submit mode do exist
     if len(Data) != 0:
         # make a list of jsons
-        L = [json.loads(i) for i in Data]
+        L = [json.loads(i.replace("'", "\"")) for i in Data]
         assert len(L) == len(Data)
 
         # connect to EGA and get a token
@@ -867,7 +818,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
                         assert submissionStatus == 'DRAFT'
                         # store submission json and status in db table
-                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()).replace("'", "\""), J["alias"]))
+                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()), J["alias"]))
                         conn.commit()
                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, submissionStatus, J["alias"]))
                         conn.commit()
@@ -878,7 +829,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
                             # store submission json and status in db table
-                            cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()).replace("'", "\""), J["alias"]))
+                            cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()), J["alias"]))
                             conn.commit()
                             cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                             conn.commit()
@@ -893,14 +844,14 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         # get the receipt, and the accession id
                                         Receipt, egaAccessionId = ObjectSubmission.json(), ObjectSubmission['response']['result'][0]['egaAccessionId']
                                         # add Receipt and accession to table and change status
-                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt).replace("'", "\""), J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt), J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, ObjectStatus, J["alias"]))
                                         conn.commit()
                                         # store submission json and status in db table
-                                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectSubmission.json()).replace("'", "\""), J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectSubmission.json()), J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                                         conn.commit()
@@ -1203,11 +1154,8 @@ def SubmitAnalyses(args):
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
-        ## upload files and change the status upload -> uploading 
+        ## upload files and change the status upload -> uploaded 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max)
-        
-        ## check that files are uploaded and change status uploading -> uploaded
-        CheckUploadedFiles(args.credential, args.subdb, args.table, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
