@@ -750,73 +750,10 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                         UpdateStatus = False
                 # update status if all files for that alias have been uploaded
                 if UpdateStatus == True:
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
                     conn.commit()                                
         conn.close()            
 
-
-# use this function to check that files are uploaded on the staging server
-def CheckUploadedFiles(CredentialFile, DataBase, Table, Box):
-    '''
-    (file, str, str, str) -> None
-    Take the file with credentials to connect to the database and to EGA,
-    and check that files with uploaded status are on the staging server
-    '''
-       
-    # check that Analysis table exists
-    Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
-        # parse the crdential file, get username and password for given box
-        Credentials = ExtractCredentials(CredentialFile)
-        if Box == 'ega-box-12':
-            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-        elif Box == 'ega-box-137':
-            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
-               
-        # connect to database
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()
-        # extract files for alias in uploading mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        # check that some alias are in uploading mode
-        Data = cur.fetchall()
-        if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath}}
-            L = []
-            for i in Data:
-                D = {}
-                assert i[0] not in D
-                files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2]}
-                L.append(D)
-            # check stage folder, file directory
-            for D in L:
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
-                # create stage directory if doesn't exist
-                StagePath = D[alias]['StagePath']
-                assert StagePath != '/'
-                if StagePath[-1]:
-                    StagePath[:-1]
-                # list all files under the directory
-                Files = subprocess.check_output("lftp -u {0},{1} -e \" set ftp:ssl-allow false; ls {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip()
-                Files = Files.split('\n')
-                for i in range(len(Files)):
-                    Files[i] = Files[i].split()[-1]
-                # get the files, check that the files are on the staging server and change status
-                for filePath in D[alias]['files']:
-                    # get filename
-                    fileName = os.path.basename(filePath)
-                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                    encryptedFile, originalMd5, encryptedMd5 = fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'
-                    if encryptedFile in Files and encryptedMd5 in Files and originalMd5 in Files:
-                        # update status in the Analysis table
-                        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
-                        conn.commit()
-                    else:
-                        print('At least one of these files is missing from the staging server: {0}, {1}, {2}'.format(encryptedFile, encryptedMd5, originalMd5))
-        conn.close()            
- 
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -1219,9 +1156,6 @@ def SubmitAnalyses(args):
 
         ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max)
-        
-        ## check that files are uploaded and change status uploading -> uploaded
-        CheckUploadedFiles(args.credential, args.subdb, args.table, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
