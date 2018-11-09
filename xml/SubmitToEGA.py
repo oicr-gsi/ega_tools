@@ -697,6 +697,9 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
         cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
+        # close connection
+        conn.close()
+        
         if len(Data) != 0:
             # upload only Max objects: the first Nth numbers of objects
             Data = Data[:int(Max)]
@@ -750,9 +753,12 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                         UpdateStatus = False
                 # update status if all files for that alias have been uploaded
                 if UpdateStatus == True:
+                    # connect to database, updatestatus and close connection
+                    conn = EstablishConnection(CredentialFile, DataBase)
+                    cur = conn.cursor()
                     cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
                     conn.commit()                                
-        conn.close()            
+                    conn.close()            
 
 
 # use this function to register objects
