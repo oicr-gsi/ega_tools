@@ -314,8 +314,8 @@ def FormatJson(D, ObjectType):
             if field in JsonKeys:
                 if D[field] == 'NULL':
                     # some fields are required, return empty dict if field is empty
-                    if field in ["alias", "title", "description", "studyId", "sampleReferences",
-                    "analysisCenter", "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
+                    if field in ["alias", "title", "description", "studyId", "analysisCenter",
+                                 "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
                         # erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
@@ -437,6 +437,12 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                 L.append(D)
             # create object-formatted jsons from each dict 
             Jsons = [FormatJson(D, Object) for D in L]
+            
+            
+            print('json', Jsons)
+            
+            
+            
             # add json back to table and update status
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
@@ -1167,7 +1173,7 @@ def SubmitAnalyses(args):
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
     
 if __name__ == '__main__':
