@@ -310,7 +310,7 @@ def FormatJson(D, ObjectType):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-        for key in D:
+        for field in D:
             if field in JsonKeys:
                 if D[field] == 'NULL':
                     # some fields are required, return empty dict if field is empty
