@@ -335,7 +335,8 @@ def FormatJson(D, ObjectType):
                         assert D[field] != 'NULL'
                         J[field] = []
                         # convert string to dict
-                        files = json.loads(D[field])
+                        files = D[field].replace("'", "\"")
+                        files = json.loads(files)
                         # loop over file name
                         for filePath in files:
                             # create a dict to store file info
@@ -351,7 +352,10 @@ def FormatJson(D, ObjectType):
                         attributes = D[field].replace("'", "\"")
                         # convert string to dict
                         if ';' in attributes:
+                            # loop over all attributes
+                            attributes = attributes.split(';')
                             for i in range(len(attributes)):
+                                attributes[i] = attributes[i].strip().replace("'", "\"")
                                 J[field].append(json.loads(attributes[i]))
                         else:
                             J[field].append(json.loads(attributes))
@@ -437,12 +441,6 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                 L.append(D)
             # create object-formatted jsons from each dict 
             Jsons = [FormatJson(D, Object) for D in L]
-            
-            
-            print('json', Jsons)
-            
-            
-            
             # add json back to table and update status
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
@@ -645,6 +643,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                 for i in D[alias]['files']:
                     # get the fileName
                     fileName = D[alias]['files'][i]['fileName']
+                    fileTypeId = D[alias]['files'][i]['fileTypeId']
                     # check that encryoted and md5sum files do exist
                     originalMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.md5')
                     encryptedMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg.md5')
@@ -657,7 +656,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                         originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
                         if encryptedMd5 != '' and originalMd5 != '':
                             # capture md5sums, build updated dict
-                            Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5} 
+                            Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
                         else:
                             # update boolean
                             Encrypted = False
@@ -1173,7 +1172,7 @@ def SubmitAnalyses(args):
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
     
 if __name__ == '__main__':
