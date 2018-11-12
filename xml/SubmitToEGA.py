@@ -902,7 +902,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     cur = conn.cursor()
     
     # pull json for objects with ready Status for given box
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
     cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    conn.close()
+    
+    
+    
     # extract all information 
     Data = cur.fetchall()
     # check that objects in submit mode do exist
@@ -950,10 +956,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
                         assert submissionStatus == 'DRAFT'
                         # store submission json and status in db table
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
                         cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()), J["alias"]))
                         conn.commit()
                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, submissionStatus, J["alias"]))
                         conn.commit()
+                        conn.close()
                         # validate object
                         ObjectValidation = requests.put(URL + '/{0}/{1}?action=VALIDATE'.format(Object, ObjectId), headers=headers)
                         # check code and validation status
@@ -961,10 +970,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
                             # store submission json and status in db table
+                            conn = EstablishConnection(CredentialFile, DataBase)
+                            cur = conn.cursor()
                             cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()), J["alias"]))
                             conn.commit()
                             cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                             conn.commit()
+                            conn.close()
                             if ObjectStatus == 'VALIDATED':
                                 # submit object
                                 ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
@@ -976,6 +988,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         # get the receipt, and the accession id
                                         Receipt, egaAccessionId = ObjectSubmission.json(), ObjectSubmission['response']['result'][0]['egaAccessionId']
                                         # add Receipt and accession to table and change status
+                                        conn = EstablishConnection(CredentialFile, DataBase)
+                                        cur = conn.cursor()
                                         cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt), J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
@@ -991,6 +1005,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
                                         cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Time, J["alias"]))
                                         conn.commit()
+                                        close()
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
