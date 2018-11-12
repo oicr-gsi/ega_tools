@@ -776,7 +776,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
     '''
     (file, str, str, str, int) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Nth first aliases in upload status and update status to uploading
+    and upload files for the Nth first aliases in upload status and update status to uploaded
     '''
        
     # check that Analysis table exists
@@ -804,12 +804,8 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 files = i[1].replace("'", "\"")
                 D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
                 L.append(D)
-            
             # create a list of argument lists
-            Arguments = []
-            for D in L:
-                Arguments.append([CredentialFile, DataBase, Table, Box, D])
-                
+            Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
             # use multithreading for uploading 
             with ThreadPoolExecutor(len(Data)) as ex:
                 results = ex.map(UploadAliasAnalyses, Arguments)
@@ -819,9 +815,10 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
 # use this function to upload the files
 def UploadAliasAnalyses(L):
     '''
-    (file, str, str, str, int) -> None
-    Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Nth first aliases in upload status and update status to uploading
+    (list) -> None
+    Take a list of parameters including the file with Credentials to connect to
+    the Database and to EGA, and upload all files for agiven alias/object
+    and update status to uploaded when upload is complete
     '''
     
     # extract variables from list
