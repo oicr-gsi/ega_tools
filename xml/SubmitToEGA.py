@@ -787,7 +787,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     # check that objects in submit mode do exist
     if len(Data) != 0:
         # make a list of jsons
-        L = [json.loads(i.replace("'", "\"")) for i in Data]
+        L = [json.loads(i[0].replace("'", "\"")) for i in Data]
         assert len(L) == len(Data)
 
         # connect to EGA and get a token
