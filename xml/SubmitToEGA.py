@@ -17,7 +17,7 @@ import os
 import time
 import argparse
 import requests
-
+from concurrent.futures import ThreadPoolExecutor
 
 
 # resource for jaon formatting and api submission
@@ -310,12 +310,12 @@ def FormatJson(D, ObjectType):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-        for key in D:
+        for field in D:
             if field in JsonKeys:
                 if D[field] == 'NULL':
                     # some fields are required, return empty dict if field is empty
-                    if field in ["alias", "title", "description", "studyId", "sampleReferences",
-                    "analysisCenter", "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
+                    if field in ["alias", "title", "description", "studyId", "analysisCenter",
+                                 "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
                         # erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
@@ -335,7 +335,8 @@ def FormatJson(D, ObjectType):
                         assert D[field] != 'NULL'
                         J[field] = []
                         # convert string to dict
-                        files = json.loads(D[field])
+                        files = D[field].replace("'", "\"")
+                        files = json.loads(files)
                         # loop over file name
                         for filePath in files:
                             # create a dict to store file info
@@ -351,7 +352,10 @@ def FormatJson(D, ObjectType):
                         attributes = D[field].replace("'", "\"")
                         # convert string to dict
                         if ';' in attributes:
+                            # loop over all attributes
+                            attributes = attributes.split(';')
                             for i in range(len(attributes)):
+                                attributes[i] = attributes[i].strip().replace("'", "\"")
                                 J[field].append(json.loads(attributes[i]))
                         else:
                             J[field].append(json.loads(attributes))
@@ -639,6 +643,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                 for i in D[alias]['files']:
                     # get the fileName
                     fileName = D[alias]['files'][i]['fileName']
+                    fileTypeId = D[alias]['files'][i]['fileTypeId']
                     # check that encryoted and md5sum files do exist
                     originalMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.md5')
                     encryptedMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg.md5')
@@ -651,7 +656,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                         originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
                         if encryptedMd5 != '' and originalMd5 != '':
                             # capture md5sums, build updated dict
-                            Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5} 
+                            Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
                         else:
                             # update boolean
                             Encrypted = False
@@ -671,6 +676,101 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
     
         
         
+## use this function to upload the files
+#def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
+#    '''
+#    (file, str, str, str, int) -> None
+#    Take the file with credentials to connect to the database and to EGA,
+#    and upload files for the Nth first aliases in upload status and update status to uploading
+#    '''
+#       
+#    # check that Analysis table exists
+#    Tables = ListTables(CredentialFile, DataBase)
+#    if Table in Tables:
+#        
+#        # parse the crdential file, get username and password for given box
+#        Credentials = ExtractCredentials(CredentialFile)
+#        if Box == 'ega-box-12':
+#            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
+#        elif Box == 'ega-box-137':
+#            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+#               
+#        # connect to database
+#        conn = EstablishConnection(CredentialFile, DataBase)
+#        cur = conn.cursor()
+#        # extract files for alias in upload mode for given box
+#        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+#        # check that some alias are in upload mode
+#        Data = cur.fetchall()
+#        # close connection
+#        conn.close()
+#        
+#        if len(Data) != 0:
+#            # upload only Max objects: the first Nth numbers of objects
+#            Data = Data[:int(Max)]
+#            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
+#            L = []
+#            for i in Data:
+#                D = {}
+#                assert i[0] not in D
+#                files = i[1].replace("'", "\"")
+#                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
+#                L.append(D)
+#            # check stage folder, file directory
+#            for D in L:
+#                assert len(list(D.keys())) == 1
+#                alias = list(D.keys())[0]
+#                # create stage directory if doesn't exist
+#                StagePath = D[alias]['StagePath']
+#                assert StagePath != '/'
+#                subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
+#                FileDir = D[alias]['FileDirectory']
+#                
+#                # set up a boolean to True, change to False if condition is not met,
+#                # and check that it's True before updating status for that alias
+#                UpdateStatus = True
+#                
+#                # get the files, check that the files are in the directory, and upload
+#                for filePath in D[alias]['files']:
+#                    # get filename
+#                    fileName = os.path.basename(filePath)
+#                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+#                    encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
+#                    originalMd5 = os.path.join(FileDir, fileName + '.md5')
+#                    encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+#                    if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
+#                        # upload files
+#                        subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
+#                        # check if file is uploaded
+#                        uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
+#                        for i in range(len(uploaded_files)):
+#                            uploaded_files[i] = uploaded_files[i].split()[-1]
+#                        # set boolean to False if any file is not uploaded
+#                        if os.path.basename(encryptedFile) not in uploaded_files:
+#                            UpdateStatus = False
+#                        if os.path.basename(encryptedMd5) not in uploaded_files:
+#                            UpdateStatus = False
+#                        if os.path.basename(originalMd5) not in uploaded_files:
+#                            UpdateStatus = False
+#                    else:
+#                        print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
+#                        # set boolean to False if any file is not uploaded
+#                        UpdateStatus = False
+#                # update status if all files for that alias have been uploaded
+#                if UpdateStatus == True:
+#                    # connect to database, updatestatus and close connection
+#                    conn = EstablishConnection(CredentialFile, DataBase)
+#                    cur = conn.cursor()
+#                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
+#                    conn.commit()                                
+#                    conn.close()            
+
+
+#############################################
+
+
+
+
 # use this function to upload the files
 def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
     '''
@@ -683,13 +783,6 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
         
-        # parse the crdential file, get username and password for given box
-        Credentials = ExtractCredentials(CredentialFile)
-        if Box == 'ega-box-12':
-            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-        elif Box == 'ega-box-137':
-            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
-               
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
@@ -697,6 +790,9 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
         cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
+        # close connection
+        conn.close()
+        
         if len(Data) != 0:
             # upload only Max objects: the first Nth numbers of objects
             Data = Data[:int(Max)]
@@ -708,51 +804,87 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 files = i[1].replace("'", "\"")
                 D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
                 L.append(D)
-            # check stage folder, file directory
+            
+            # create a list of argument lists
+            Arguments = []
             for D in L:
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
-                # create stage directory if doesn't exist
-                StagePath = D[alias]['StagePath']
-                assert StagePath != '/'
-                subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
-                FileDir = D[alias]['FileDirectory']
+                Arguments.append([CredentialFile, DataBase, Table, Box, D])
                 
-                # set up a boolean to True, change to False if condition is not met,
-                # and check that it's True before updating status for that alias
-                UpdateStatus = True
+            # use multithreading for uploading 
+            with ThreadPoolExecutor(len(Data)) as ex:
+                results = ex.map(UploadAliasAnalyses, Arguments)
+        return list(results)
+            
+
+# use this function to upload the files
+def UploadAliasAnalyses(L):
+    '''
+    (file, str, str, str, int) -> None
+    Take the file with credentials to connect to the database and to EGA,
+    and upload files for the Nth first aliases in upload status and update status to uploading
+    '''
+    
+    # extract variables from list
+    CredentialFile, DataBase, Table, Box, D = L[0], L[1], L[2], L[3], L[4]
+    
+    # parse the crdential file, get username and password for given box
+    Credentials = ExtractCredentials(CredentialFile)
+    if Box == 'ega-box-12':
+        MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
+    elif Box == 'ega-box-137':
+        MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+    
+    # get alias
+    assert len(list(D.keys())) == 1
+    alias = list(D.keys())[0]
+    # create stage directory if doesn't exist
+    StagePath = D[alias]['StagePath']
+    assert StagePath != '/'
+    subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
+    FileDir = D[alias]['FileDirectory']
                 
-                # get the files, check that the files are in the directory, and upload
-                for filePath in D[alias]['files']:
-                    # get filename
-                    fileName = os.path.basename(filePath)
-                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                    encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
-                    originalMd5 = os.path.join(FileDir, fileName + '.md5')
-                    encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
-                    if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
-                        # upload files
-                        subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
-                        # check if file is uploaded
-                        uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
-                        for i in range(len(uploaded_files)):
-                            uploaded_files[i] = uploaded_files[i].split()[-1]
-                        # set boolean to False if any file is not uploaded
-                        if os.path.basename(encryptedFile) not in uploaded_files:
-                            UpdateStatus = False
-                        if os.path.basename(encryptedMd5) not in uploaded_files:
-                            UpdateStatus = False
-                        if os.path.basename(originalMd5) not in uploaded_files:
-                            UpdateStatus = False
-                    else:
-                        print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
-                        # set boolean to False if any file is not uploaded
-                        UpdateStatus = False
-                # update status if all files for that alias have been uploaded
-                if UpdateStatus == True:
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
-                    conn.commit()                                
+    # set up a boolean to True, change to False if condition is not met,
+    # and check that it's True before updating status for that alias
+    UpdateStatus = True
+                
+    # get the files, check that the files are in the directory, and upload
+    for filePath in D[alias]['files']:
+        # get filename
+        fileName = os.path.basename(filePath)
+        assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+        encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
+        originalMd5 = os.path.join(FileDir, fileName + '.md5')
+        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+        if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
+            # upload files
+            subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
+            
+            # check if file is uploaded
+            uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
+            # make a list of uploaded files          
+            for i in range(len(uploaded_files)):
+                uploaded_files[i] = uploaded_files[i].split()[-1]
+            # set boolean to False if any file is not uploaded
+            if os.path.basename(encryptedFile) not in uploaded_files:
+                UpdateStatus = False
+            if os.path.basename(encryptedMd5) not in uploaded_files:
+                UpdateStatus = False
+            if os.path.basename(originalMd5) not in uploaded_files:
+                UpdateStatus = False
+        else:
+            print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
+            # set boolean to False if any file is not uploaded
+            UpdateStatus = False
+            # update status if all files for that alias have been uploaded
+    if UpdateStatus == True:
+        # connect to database, updatestatus and close connection
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
+        conn.commit()                                
         conn.close()            
+
+#################################################
 
 
 # use this function to register objects
@@ -776,7 +908,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     # check that objects in submit mode do exist
     if len(Data) != 0:
         # make a list of jsons
-        L = [json.loads(i.replace("'", "\"")) for i in Data]
+        L = [json.loads(i[0].replace("'", "\"")) for i in Data]
         assert len(L) == len(Data)
 
         # connect to EGA and get a token
@@ -1161,7 +1293,7 @@ def SubmitAnalyses(args):
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
     
 if __name__ == '__main__':
