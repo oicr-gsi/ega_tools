@@ -794,22 +794,41 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
         conn.close()
         
         if len(Data) != 0:
-            # upload only Max objects: the first Nth numbers of objects
+            # upload only Max objects in group of 10 aliases/objects: (the first Nth numbers of objects)
             Data = Data[:int(Max)]
+            # upload 10 objects at once using 10 threads
+            T = 10
             # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
-            L = []
-            for i in Data:
-                D = {}
-                assert i[0] not in D
-                files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
-                L.append(D)
-            # create a list of argument lists
-            Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
-            # use multithreading for uploading 
-            with ThreadPoolExecutor(len(Data)) as ex:
-                results = ex.map(UploadAliasAnalyses, Arguments)
-        return list(results)
+            for i in range(0, len(Data), T):
+                # splice Data to get a group of <=10 objects/aliases
+                K = Data[i: i+T]
+                # loop over tuples in sublist
+                L = []
+                for j in K:
+                    D = {}
+                    assert j[0] not in D
+                    files = j[1].replace("'", "\"")
+                    D[j[0]] = {'files': json.loads(files), 'StagePath': j[2], 'FileDirectory': j[3]}
+                    L.append(D)         
+                # create a list of argument lists
+                Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
+                # use multithreading for uploading 
+                with ThreadPoolExecutor(T) as ex:
+                    ex.map(UploadAliasAnalyses, Arguments)
+                    
+#            L = []
+#            for i in Data:
+#                D = {}
+#                assert i[0] not in D
+#                files = i[1].replace("'", "\"")
+#                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
+#                L.append(D)
+#            # create a list of argument lists
+#            Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
+#            # use multithreading for uploading 
+#            with ThreadPoolExecutor(len(Data)) as ex:
+#                results = ex.map(UploadAliasAnalyses, Arguments)
+        
             
 
 # use this function to upload the files
