@@ -776,7 +776,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
     '''
     (file, str, str, str, int) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Nth first aliases in upload status and update status to uploading
+    and upload files for the Nth first aliases in upload status and update status to uploaded
     '''
        
     # check that Analysis table exists
@@ -794,34 +794,50 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
         conn.close()
         
         if len(Data) != 0:
-            # upload only Max objects: the first Nth numbers of objects
+            # upload only Max objects in group of 10 aliases/objects: (the first Nth numbers of objects)
             Data = Data[:int(Max)]
+            # upload 10 objects at once using 10 threads
+            T = 10
             # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
-            L = []
-            for i in Data:
-                D = {}
-                assert i[0] not in D
-                files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
-                L.append(D)
-            
-            # create a list of argument lists
-            Arguments = []
-            for D in L:
-                Arguments.append([CredentialFile, DataBase, Table, Box, D])
-                
-            # use multithreading for uploading 
-            with ThreadPoolExecutor(len(Data)) as ex:
-                results = ex.map(UploadAliasAnalyses, Arguments)
-        return list(results)
+            for i in range(0, len(Data), T):
+                # splice Data to get a group of <=10 objects/aliases
+                K = Data[i: i+T]
+                # loop over tuples in sublist
+                L = []
+                for j in K:
+                    D = {}
+                    assert j[0] not in D
+                    files = j[1].replace("'", "\"")
+                    D[j[0]] = {'files': json.loads(files), 'StagePath': j[2], 'FileDirectory': j[3]}
+                    L.append(D)         
+                # create a list of argument lists
+                Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
+                # use multithreading for uploading 
+                with ThreadPoolExecutor(T) as ex:
+                    ex.map(UploadAliasAnalyses, Arguments)
+                    
+#            L = []
+#            for i in Data:
+#                D = {}
+#                assert i[0] not in D
+#                files = i[1].replace("'", "\"")
+#                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
+#                L.append(D)
+#            # create a list of argument lists
+#            Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
+#            # use multithreading for uploading 
+#            with ThreadPoolExecutor(len(Data)) as ex:
+#                results = ex.map(UploadAliasAnalyses, Arguments)
+        
             
 
 # use this function to upload the files
 def UploadAliasAnalyses(L):
     '''
-    (file, str, str, str, int) -> None
-    Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Nth first aliases in upload status and update status to uploading
+    (list) -> None
+    Take a list of parameters including the file with Credentials to connect to
+    the Database and to EGA, and upload all files for agiven alias/object
+    and update status to uploaded when upload is complete
     '''
     
     # extract variables from list
@@ -902,7 +918,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     cur = conn.cursor()
     
     # pull json for objects with ready Status for given box
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
     cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    conn.close()
+    
+    
+    
     # extract all information 
     Data = cur.fetchall()
     # check that objects in submit mode do exist
@@ -950,10 +972,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
                         assert submissionStatus == 'DRAFT'
                         # store submission json and status in db table
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
                         cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()), J["alias"]))
                         conn.commit()
                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, submissionStatus, J["alias"]))
                         conn.commit()
+                        conn.close()
                         # validate object
                         ObjectValidation = requests.put(URL + '/{0}/{1}?action=VALIDATE'.format(Object, ObjectId), headers=headers)
                         # check code and validation status
@@ -961,10 +986,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
                             # store submission json and status in db table
+                            conn = EstablishConnection(CredentialFile, DataBase)
+                            cur = conn.cursor()
                             cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()), J["alias"]))
                             conn.commit()
                             cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                             conn.commit()
+                            conn.close()
                             if ObjectStatus == 'VALIDATED':
                                 # submit object
                                 ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
@@ -976,6 +1004,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         # get the receipt, and the accession id
                                         Receipt, egaAccessionId = ObjectSubmission.json(), ObjectSubmission['response']['result'][0]['egaAccessionId']
                                         # add Receipt and accession to table and change status
+                                        conn = EstablishConnection(CredentialFile, DataBase)
+                                        cur = conn.cursor()
                                         cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt), J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
@@ -991,6 +1021,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
                                         cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Time, J["alias"]))
                                         conn.commit()
+                                        close()
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
