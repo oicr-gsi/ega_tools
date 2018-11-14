@@ -179,13 +179,14 @@ def ParseAnalysisInputTable(Table):
                 D[alias] = {}
                 # record alias
                 D[alias]['alias'] = alias
-                # record sampleAlias
-                D[alias]['sampleAlias'] = sampleAlias
+                # record sampleAlias. multiple sample alias are allowed, eg for VCFs
+                D[alias]['sampleAlias'] = [sampleAlias]
                 D[alias]['files'] = {}
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
             else:
-                # check that sample alias and alias are the same as recorded for this alias
-                assert D[alias]['sampleAlias'] == sampleAlias and D[alias]['alias'] == alias
+                assert D[alias]['alias'] == alias
+                # record sampleAlias
+                D[alias]['sampleAlias'].append(sampleAlias)
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
@@ -479,12 +480,27 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     Samples = {}
     for i in cur:
-        Samples[i[0]] = i[1]
+        # check if multiple samples are recorded
+        if ':' in i[0]:
+            # make a list of sampleAlias
+            sampleAlias = i[0].split(':')
+            # make a list of sample accessions
+            sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
+            # add sample accessions only if all sample aliases have accessions
+            if len(sampleAlias) == len(sampleAccessions):
+                Samples[i[0]] = ':'.join(sampleAccessions)
+            else:
+                Samples[i[0]] = i[1]
+        else:
+            # check if sample has accession
+            if i[0] in Registered:
+                Samples[i[0]] = Registered[i[0]]
+            else:
+                Samples[i[0]] = i[1]
     if len(Samples) != 0:
         for alias in Samples:
-            assert Samples[alias] == 'NULL'
-            if alias in Registered:
-                # update sample accession
+            if Samples[alias] != 'NULL':
+                # update sample accessions
                 cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
                 conn.commit()
                 # update status to upload
@@ -1158,7 +1174,7 @@ def AddAnalysesInfo(args):
     # create a dict {alias: accessions}
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
             
-    # parse input table [{alias: {'sampleAlias':sampleAlias, 'files': {filePath: {attributes: key}}}}]
+    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {attributes: key}}}}]
     Data = ParseAnalysisInputTable(args.input)
 
     # parse config table 
@@ -1257,9 +1273,17 @@ def AddAnalysesInfo(args):
                     # add fileTypeId to dict
                     assert 'fileTypeId' not in D[alias]['files'][filePath] 
                     D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
+                # check if multiple sample alias are used. store sampleAlias as string
+                sampleAlias = list(set(D[alias]['sampleAlias']))
+                if len(sampleAlias) == 1:
+                    # only 1 sampleAlias is used
+                    sampleAlias = sampleAlias[0]
+                else:
+                    # multiple sample aliases are used
+                    sampleAlias = ':'.join(sampleAlias)
+                D[alias]['sampleAlias'] = sampleAlias    
                 # set Status to ready
                 D[alias]["Status"] = "ready"
-            
                 # list values according to the table column order
                 L = [D[alias][field] if field in D[alias] else '' for field in Fields]
                 # convert data to strings, converting missing values to NULL                    L
