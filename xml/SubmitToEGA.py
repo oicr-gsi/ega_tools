@@ -326,12 +326,13 @@ def FormatJson(D, ObjectType):
                         J[field] = ""
                 else:
                     if field == 'sampleReferences':
+                        # populate with sample accessions
                         J[field] = []
-                        if ';' in D[field]:
-                            for accession in D[field].split(';'):
+                        if ':' in D['sampleEgaAccessionsId']:
+                            for accession in D['sampleEgaAccessionsId'].split(':'):
                                 J[field].append({"value": accession.strip(), "label":""})
                         else:
-                            J[field].append({"value": D[field], "label":""})
+                            J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
                     elif field == 'files':
                         assert D[field] != 'NULL'
                         J[field] = []
