@@ -325,7 +325,7 @@ def FormatJson(D, ObjectType):
                     else:
                         J[field] = ""
                 else:
-                    if field == 'sampleReference':
+                    if field == 'sampleReferences':
                         J[field] = []
                         if ';' in D[field]:
                             for accession in D[field].split(';'):
