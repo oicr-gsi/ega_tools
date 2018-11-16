@@ -996,10 +996,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
     if object analysis object is successfully submitted and if OptionalParameter is True
     '''
     
-    # check if encrypted and md5 files need to be removed after successfull submission
-    if 'Remove' in OptionalParameter:
-        Remove = OptionalParameter['Remove']
-        
     # pull json for objects with ready Status for given box
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
@@ -1112,25 +1108,15 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                                         conn.commit()
                                         conn.close()
                                         
-                                        # print encrypted files
-                                        if Remove == True:
-                                            conn = EstablishConnection(CredentialFile, DataBase)
-                                            cur = conn.cursor()
-                                            # get the directory with encrypted and md5 files
-                                            cur.execute('SELECT {0}.FileDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, J["alias"], Box))
-                                            FileDirectory = [i[0] for i in cur][0]
-                                            # get the file names
-                                            cur.execute('SELECT {0}.files FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, J["alias"], Box))
-                                            files = json.loads(str([i[0] for i in cur][0]).replace("'", "\""))
-                                            files = [files[i]['encryptedName'] for i in files]
-                                            for i in files:
-                                                a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                                                print(os.path.join(FileDirectory, i), os.path.isfile(os.path.join(FileDirectory, i)))
-                                                print(os.path.join(FileDirectory, a), os.path.isfile(os.path.join(FileDirectory, a)))
-                                                print(os.path.join(FileDirectory, b), os.path.isfile(os.path.join(FileDirectory, b)))
-                                        
-                                        
-                                        
+                                        # check if object is analyses
+                                        if Object == 'analyses':
+                                            # check if encrypted and md5sums need to be deleted
+                                            if 'Remove' in OptionalParameter:
+                                                Remove = OptionalParameter['Remove']
+                                            else:
+                                                Remove = False
+                                            if Remove == True:
+                                                RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box)
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
