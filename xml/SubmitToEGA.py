@@ -960,6 +960,32 @@ def CleanUpError(errorMessages):
     return errorMessages
 
 
+
+# use this function to remove encrypted and md5 files
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box):
+    '''
+    (str, str, str, str, str) -> None
+    Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
+    files corresponding to the given Alias and Box in Table and delete them
+    '''
+    
+    # connect to database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    # get the directory with encrypted and md5 files
+    cur.execute('SELECT {0}.FileDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    FileDirectory = [i[0] for i in cur][0]
+    # get the file names
+    cur.execute('SELECT {0}.files FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    files = json.loads(str([i[0] for i in cur][0]).replace("'", "\""))
+    files = [files[i]['encryptedName'] for i in files]
+    for i in files:
+        a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
+        print(os.path.join(FileDirectory, i), os.path.isfile(os.path.join(FileDirectory, i)))
+        print(os.path.join(FileDirectory, a), os.path.isfile(os.path.join(FileDirectory, a)))
+        print(os.path.join(FileDirectory, b), os.path.isfile(os.path.join(FileDirectory, b)))
+
+
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **OptionalParameter):
     '''
