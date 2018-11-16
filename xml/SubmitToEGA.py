@@ -311,8 +311,9 @@ def FormatJson(D, ObjectType):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-        for field in D:
-            if field in JsonKeys:
+        # loop over required json keys
+        for field in JsonKeys:
+            if field in D:
                 if D[field] == 'NULL':
                     # some fields are required, return empty dict if field is empty
                     if field in ["alias", "title", "description", "studyId", "analysisCenter",
@@ -323,17 +324,12 @@ def FormatJson(D, ObjectType):
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = ""
-                else:
-                    if field == 'sampleReferences':
-                        # populate with sample accessions
-                        J[field] = []
-                        if ':' in D['sampleEgaAccessionsId']:
-                            for accession in D['sampleEgaAccessionsId'].split(':'):
-                                J[field].append({"value": accession.strip(), "label":""})
+                        if field == "chromosomeReferences":
+                            J[field] = []
                         else:
-                            J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
-                    elif field == 'files':
+                            J[field] = ""
+                else:
+                    if field == 'files':
                         assert D[field] != 'NULL'
                         J[field] = []
                         # convert string to dict
@@ -342,10 +338,15 @@ def FormatJson(D, ObjectType):
                         # loop over file name
                         for filePath in files:
                             # create a dict to store file info
-                            d = {"fileName": files[filePath]['encryptedName'],
+                            if files[filePath]["fileTypeId"].lower() == 'bam':
+                                fileTypeId = '1'
+                            elif files[filePath]["fileTypeId"].lower() == 'bai':
+                                fileTypeId = '2'
+                            # create dict with file info, add path to file names
+                            d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                                  "checksum": files[filePath]['checksum'],
                                  "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
-                                 "fileTypeId": files[filePath]["fileTypeId"]}
+                                 "fileTypeId": fileTypeId}
                             J[field].append(d)
                     elif field == 'attributes':
                         assert D[field] != 'NULL'
@@ -363,7 +364,23 @@ def FormatJson(D, ObjectType):
                             J[field].append(json.loads(attributes))
                     else:
                         J[field] = D[field]
-                    
+            
+            
+            # use tags for experimentId and analysisTypeId
+            if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
+                J[field] = ["0"] 
+            if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
+                J[field] = "0"
+            
+            else:
+                if field == 'sampleReferences':
+                    # populate with sample accessions
+                    J[field] = []
+                    if ':' in D['sampleEgaAccessionsId']:
+                        for accession in D['sampleEgaAccessionsId'].split(':'):
+                            J[field].append({"value": accession.strip(), "label":""})
+                    else:
+                        J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
     return J                
 
 
@@ -929,18 +946,11 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     in EGA BOX using the submission Portal
     '''
     
-    ## submit objects with submit status                
-    # connect to the submission database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    
     # pull json for objects with ready Status for given box
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     conn.close()
-    
-    
     
     # extract all information 
     Data = cur.fetchall()
@@ -985,15 +995,16 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                     # check response code
                     if ObjectCreation.status_code == requests.codes.ok:
                         # validate, get status (VALIDATED or VALITED_WITH_ERRORS) 
-                        ObjectId = ObjectCreation.json()['response']['result'][0]['Id']
+                        ObjectId = ObjectCreation.json()['response']['result'][0]['id']
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
+                        
+                        print(J["alias"], submissionStatus)
+                        
                         assert submissionStatus == 'DRAFT'
                         # store submission json and status in db table
                         conn = EstablishConnection(CredentialFile, DataBase)
                         cur = conn.cursor()
-                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectCreation.json()), J["alias"]))
-                        conn.commit()
-                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, submissionStatus, J["alias"]))
+                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, submissionStatus, J["alias"]))
                         conn.commit()
                         conn.close()
                         # validate object
@@ -1002,24 +1013,79 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         if ObjectValidation.status_code == requests.codes.ok:
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
+                                                        
+                            # record error messages
+                            errorMessages = ObjectValidation.json()['response']['result'][0]['validationErrorMessages']
+                            if type(errorMessages) == list:
+                                if len(errorMessages)  ==1:
+                                    errorMessages = errorMessages[0].replace("\"", "")
+                                elif len(errorMessages) > 1:
+                                    errorMessages = ':'.join(errorMessages)
+                                    errorMessages = errorMessages.replace("\"", "")
+                                elif len(errorMessages) == 0:
+                                    errorMessages = 'None'
+                            else:
+                                errorMessages = str(errorMessages).replace("\"", "")
+                                
+                            print(errorMessages, type(errorMessages))
+                            
+                            
                             # store submission json and status in db table
                             conn = EstablishConnection(CredentialFile, DataBase)
                             cur = conn.cursor()
-                            cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectValidation.json()), J["alias"]))
+                            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, str(errorMessages), J["alias"]))
                             conn.commit()
-                            cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                            cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, ObjectStatus, J["alias"]))
                             conn.commit()
                             conn.close()
+                            
+                            
+                            print(J["alias"], ObjectStatus)
+                            
+                            
                             if ObjectStatus == 'VALIDATED':
                                 # submit object
                                 ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
                                 # check if successfully submitted
                                 if ObjectSubmission.status_code == requests.codes.ok:
+                                    # record error messages
+                                    
+                                    
+                                    
+                                    
+                                    errorMessages = ObjectValidation.json()['response']['result'][0]['submissionErrorMessages']
+                                    if type(errorMessages) == list:
+                                        if len(errorMessages) == 1:
+                                            errorMessages = errorMessages[0].replace("\"", "")
+                                        elif len(errorMessages) > 1:
+                                            errorMessages = ':'.join(errorMessages)
+                                            errorMessages = errorMessages.replace("\"", "")
+                                        elif len(errorMessages) == 0:
+                                            errorMessages = 'None'
+                                    else:
+                                        errorMessages = str(errorMessages).replace("\"", "")
+                                
+                                    print(errorMessages, type(errorMessages))
+                                    
+                                    
+                                    # store submission json and status in db table
+                                    conn = EstablishConnection(CredentialFile, DataBase)
+                                    cur = conn.cursor()
+                                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, str(errorMessages), J["alias"]))
+                                    conn.commit()
+                                    conn.close()
+                                    
+                                    
                                     # check status
                                     ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']
+                                    
+                                    
+                                    print(J["alias"], ObjectStatus)
+                                    
+                                    
                                     if ObjectStatus == 'SUBMITTED':
                                         # get the receipt, and the accession id
-                                        Receipt, egaAccessionId = ObjectSubmission.json(), ObjectSubmission['response']['result'][0]['egaAccessionId']
+                                        Receipt, egaAccessionId = ObjectSubmission.json().replace("\"", ""), ObjectSubmission['response']['result'][0]['egaAccessionId']
                                         # add Receipt and accession to table and change status
                                         conn = EstablishConnection(CredentialFile, DataBase)
                                         cur = conn.cursor()
@@ -1029,16 +1095,13 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, ObjectStatus, J["alias"]))
                                         conn.commit()
-                                        # store submission json and status in db table
-                                        cur.execute('UPDATE {0} SET {0}.submissionJson=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(ObjectSubmission.json()), J["alias"]))
-                                        conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
                                         conn.commit()
                                         # store the date it was submitted
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
                                         cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Time, J["alias"]))
                                         conn.commit()
-                                        close()
+                                        conn.close()
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
@@ -1060,8 +1123,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
         else:
             print('could not obtain a token')
-    conn.close()
-
+      
 
 # use this function to add data to the sample table
 def AddSampleInfo(args):
@@ -1190,13 +1252,12 @@ def AddAnalysesInfo(args):
     
     if args.table not in Tables:
         Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
-                  "description", "studyId", "sampleReferences", "analysisCenter",
+                  "description", "studyId", "analysisCenter",
                   "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
                   "genomeId", "chromosomeReferences", "experimentTypeId",
                   "platform", "ProjectId", "StudyTitle",
-                  "StudyDesign", "Broker", "StagePath", "Json",
-                  "submissionJson", "submissionStatus", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "Status"]
+                  "StudyDesign", "Broker", "StagePath", "Json", "submissionStatus",
+                  "errorMessages", "Receipt", "CreationTime", "egaAccessionId", "egaBox", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -1349,7 +1410,7 @@ def SubmitAnalyses(args):
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
     
 if __name__ == '__main__':
