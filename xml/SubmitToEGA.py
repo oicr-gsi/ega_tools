@@ -936,6 +936,29 @@ def UploadAliasAnalyses(L):
 
 #################################################
 
+# use this function to format the error Messages prior saving into db table
+def CleanUpError(errorMessages):
+    '''
+    (str or list or None) -> str
+    Take the errorMessages from the api json and format it to be added as
+    a string in the database table
+    '''
+    # check how error Messages is returned from the api 
+    if type(errorMessages) == list:
+        if len(errorMessages) == 1:
+            # get the string message
+            errorMessages = errorMessages[0]
+        elif len(errorMessages) > 1:
+            # combine the messages as single string
+            errorMessages = ':'.join(errorMessages)
+        elif len(errorMessages) == 0:
+            errorMessages = 'None'
+    else:
+        errorMessages = str(errorMessages)
+    # remove double quotes to save in table
+    errorMessages = str(errorMessages).replace("\"", "")
+    return errorMessages
+
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -997,9 +1020,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         # validate, get status (VALIDATED or VALITED_WITH_ERRORS) 
                         ObjectId = ObjectCreation.json()['response']['result'][0]['id']
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
-                        
-                        print(J["alias"], submissionStatus)
-                        
                         assert submissionStatus == 'DRAFT'
                         # store submission json and status in db table
                         conn = EstablishConnection(CredentialFile, DataBase)
@@ -1013,23 +1033,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         if ObjectValidation.status_code == requests.codes.ok:
                             # get object status
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
-                                                        
                             # record error messages
-                            errorMessages = ObjectValidation.json()['response']['result'][0]['validationErrorMessages']
-                            if type(errorMessages) == list:
-                                if len(errorMessages)  ==1:
-                                    errorMessages = errorMessages[0].replace("\"", "")
-                                elif len(errorMessages) > 1:
-                                    errorMessages = ':'.join(errorMessages)
-                                    errorMessages = errorMessages.replace("\"", "")
-                                elif len(errorMessages) == 0:
-                                    errorMessages = 'None'
-                            else:
-                                errorMessages = str(errorMessages).replace("\"", "")
-                                
-                            print(errorMessages, type(errorMessages))
-                            
-                            
+                            errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['validationErrorMessages'])
                             # store submission json and status in db table
                             conn = EstablishConnection(CredentialFile, DataBase)
                             cur = conn.cursor()
@@ -1039,57 +1044,30 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                             conn.commit()
                             conn.close()
                             
-                            
-                            print(J["alias"], ObjectStatus)
-                            
-                            
+                            # check if object is validated
                             if ObjectStatus == 'VALIDATED':
                                 # submit object
                                 ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
                                 # check if successfully submitted
                                 if ObjectSubmission.status_code == requests.codes.ok:
                                     # record error messages
-                                    
-                                    
-                                    
-                                    
-                                    errorMessages = ObjectValidation.json()['response']['result'][0]['submissionErrorMessages']
-                                    if type(errorMessages) == list:
-                                        if len(errorMessages) == 1:
-                                            errorMessages = errorMessages[0].replace("\"", "")
-                                        elif len(errorMessages) > 1:
-                                            errorMessages = ':'.join(errorMessages)
-                                            errorMessages = errorMessages.replace("\"", "")
-                                        elif len(errorMessages) == 0:
-                                            errorMessages = 'None'
-                                    else:
-                                        errorMessages = str(errorMessages).replace("\"", "")
-                                
-                                    print(errorMessages, type(errorMessages))
-                                    
-                                    
+                                    errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['submissionErrorMessages'])
                                     # store submission json and status in db table
                                     conn = EstablishConnection(CredentialFile, DataBase)
                                     cur = conn.cursor()
-                                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, str(errorMessages), J["alias"]))
+                                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, errorMessages, J["alias"]))
                                     conn.commit()
                                     conn.close()
                                     
-                                    
                                     # check status
                                     ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']
-                                    
-                                    
-                                    print(J["alias"], ObjectStatus)
-                                    
-                                    
                                     if ObjectStatus == 'SUBMITTED':
                                         # get the receipt, and the accession id
-                                        Receipt, egaAccessionId = ObjectSubmission.json().replace("\"", ""), ObjectSubmission['response']['result'][0]['egaAccessionId']
+                                        Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission['response']['result'][0]['egaAccessionId']
                                         # add Receipt and accession to table and change status
                                         conn = EstablishConnection(CredentialFile, DataBase)
                                         cur = conn.cursor()
-                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, str(Receipt), J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Receipt, J["alias"]))
                                         conn.commit()
                                         cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
                                         conn.commit()
@@ -1123,7 +1101,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
         else:
             print('could not obtain a token')
-      
+
 
 # use this function to add data to the sample table
 def AddSampleInfo(args):
