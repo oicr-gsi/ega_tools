@@ -1051,7 +1051,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                         # store submission json and status in db table
                         conn = EstablishConnection(CredentialFile, DataBase)
                         cur = conn.cursor()
-                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, submissionStatus, J["alias"]))
+                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, submissionStatus, J["alias"], Box))
                         conn.commit()
                         conn.close()
                         # validate object
@@ -1065,9 +1065,9 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                             # store submission json and status in db table
                             conn = EstablishConnection(CredentialFile, DataBase)
                             cur = conn.cursor()
-                            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, str(errorMessages), J["alias"]))
+                            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(errorMessages), J["alias"], Box))
                             conn.commit()
-                            cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, ObjectStatus, J["alias"]))
+                            cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ObjectStatus, J["alias"], Box))
                             conn.commit()
                             conn.close()
                             
@@ -1082,7 +1082,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                                     # store submission json and status in db table
                                     conn = EstablishConnection(CredentialFile, DataBase)
                                     cur = conn.cursor()
-                                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\"'.format(Table, errorMessages, J["alias"]))
+                                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, errorMessages, J["alias"], Box))
                                     conn.commit()
                                     conn.close()
                                     
@@ -1094,17 +1094,17 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                                         # add Receipt and accession to table and change status
                                         conn = EstablishConnection(CredentialFile, DataBase)
                                         cur = conn.cursor()
-                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Receipt, J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Receipt, J["alias"], Box))
                                         conn.commit()
-                                        cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, egaAccessionId, J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, egaAccessionId, J["alias"], Box))
                                         conn.commit()
-                                        cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ObjectStatus, J["alias"], Box))
                                         conn.commit()
-                                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\";'.format(Table, ObjectStatus, J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ObjectStatus, J["alias"], Box))
                                         conn.commit()
                                         # store the date it was submitted
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                                        cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Time, J["alias"]))
+                                        cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Time, J["alias"], Box))
                                         conn.commit()
                                         conn.close()
                                         
@@ -1116,7 +1116,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                                             else:
                                                 Remove = False
                                             if Remove == True:
-                                                RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box)
+                                                RemoveFilesAfterSubmission(CredentialFile, Database, Table, J["alias"], Box)
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
