@@ -961,14 +961,19 @@ def CleanUpError(errorMessages):
 
 
 # use this function to register objects
-def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
+def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **OptionalParameter):
     '''
-    (file, str, str, str, str, str) -> None
+    (file, str, str, str, str, str, dict) -> None
     Take the file with credentials to connect to the submission database, 
     extract the json for each Object in Table and register the objects
-    in EGA BOX using the submission Portal
+    in EGA BOX using the submission Portal. Delete encrypted and md5 files
+    if object analysis object is successfully submitted and if OptionalParameter is True
     '''
     
+    # check if encrypted and md5 files need to be removed after successfull submission
+    if 'Remove' in OptionalParameter:
+        Remove = OptionalParameter['Remove']
+        
     # pull json for objects with ready Status for given box
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
@@ -1080,6 +1085,26 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\";'.format(Table, Time, J["alias"]))
                                         conn.commit()
                                         conn.close()
+                                        
+                                        # print encrypted files
+                                        if Remove == True:
+                                            conn = EstablishConnection(CredentialFile, DataBase)
+                                            cur = conn.cursor()
+                                            # get the directory with encrypted and md5 files
+                                            cur.execute('SELECT {0}.FileDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, J["alias"], Box))
+                                            FileDirectory = [i[0] for i in cur][0]
+                                            # get the file names
+                                            cur.execute('SELECT {0}.files FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, J["alias"], Box))
+                                            files = json.loads(str([i[0] for i in cur][0]).replace("'", "\""))
+                                            files = [files[i]['encryptedName'] for i in files]
+                                            for i in files:
+                                                a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
+                                                print(os.path.join(FileDirectory, i), os.path.isfile(os.path.join(FileDirectory, i)))
+                                                print(os.path.join(FileDirectory, a), os.path.isfile(os.path.join(FileDirectory, a)))
+                                                print(os.path.join(FileDirectory, b), os.path.isfile(os.path.join(FileDirectory, b)))
+                                        
+                                        
+                                        
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
@@ -1388,7 +1413,7 @@ def SubmitAnalyses(args):
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
 
     
 if __name__ == '__main__':
@@ -1457,6 +1482,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
+    AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
     # get arguments from the command line
