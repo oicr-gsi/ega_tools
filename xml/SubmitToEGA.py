@@ -530,11 +530,11 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 # use this script to launch qsubs to encrypt the files and do a checksum
 def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
     '''
-    (file, str, str, str, str, str) -> int
+    (file, str, str, str, str, str) -> tuple
     Take the full path to file, the name of the output file, the path to the
     keys used during encryption, the directory where encrypted and cheksums are saved, 
     the queue and memory allocated to run the jobs and return the exit code 
-    specifying if the jobs were launched successfully or not
+    specifying if the jobs were launched successfully or not and the job name
     '''
 
     # command to do a checksum and encryption
@@ -572,7 +572,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
         JobName = 'Encrypt.{0}'.format(filePath.replace('/', '_'))
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
         job = subprocess.call(QsubCmd, shell=True)
-        return job
+        return job, JobName
 
 
 
