@@ -612,26 +612,31 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
             for D in L:
                 assert len(list(D.keys())) == 1
                 alias = list(D.keys())[0]
+                # store the job names for that alias
+                JobNames = []
                 # loop over files for that alias
                 for i in D[alias]['files']:
                     # get the filePath and fileName
                     filePath = D[alias]['files'][i]['filePath']
                     fileName = D[alias]['files'][i]['fileName']
                     # encrypt and run md5sums on original and encrypted files
-                    j = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
+                    j, k = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
                     # check if encription was launched successfully
                     if j == 0:
-                        # encryotion and md5sums jobs launched succcessfully, update status -> encrypting
+                        # store the job name
+                        JobNames.append(k)
+                        # encryption and md5sums jobs launched succcessfully, update status -> encrypting
                         cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                         conn.commit()
                     else:
                         print('encryption and md5sum jobs were not launched properly for {0}'.format(alias))
-                    
+                # store the job names in errorMessages
+                if len(JobNames) != 0:
+                    if len(JobNames) > 1:
+                        JobNames = ':'.join(JobNames)
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
+                    conn.commit() 
                 
-    else:
-        print('Table {0} does not exist in {1} database'.format(Table, DataBase))            
-      
-
 # use this function to check that encryption is done
 def CheckEncryption(CredentialFile, DataBase, Table, Box):
     '''
