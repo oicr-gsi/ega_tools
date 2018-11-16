@@ -591,11 +591,12 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-
         # pull alias and files for status = encrypt
         cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        # check that some files are in encrypt mode
         Data = cur.fetchall()
+        conn.close()
+        
+        # check that some files are in encrypt mode
         if len(Data) != 0:
             # encrypt only the Maxth files
             Data = Data[:int(Max)]
@@ -626,17 +627,25 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
                         # store the job name
                         JobNames.append(k)
                         # encryption and md5sums jobs launched succcessfully, update status -> encrypting
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
                         cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                         conn.commit()
+                        conn.close()
                     else:
                         print('encryption and md5sum jobs were not launched properly for {0}'.format(alias))
                 # store the job names in errorMessages
                 if len(JobNames) != 0:
                     if len(JobNames) > 1:
                         JobNames = ':'.join(JobNames)
+                    # connect to database
+                    conn = EstablishConnection(CredentialFile, DataBase)
+                    cur = conn.cursor()
                     cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
                     conn.commit() 
-                
+                    conn.close()
+                    
+                    
 # use this function to check that encryption is done
 def CheckEncryption(CredentialFile, DataBase, Table, Box):
     '''
