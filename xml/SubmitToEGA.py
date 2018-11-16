@@ -542,6 +542,7 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
     gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0} && \
     md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
 
+
     # check that FileName is valid
     if os.path.isfile(filePath) ==False:
         print('cannot encrypt {0}, not a valid file'.format(filePath))
@@ -550,15 +551,15 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
         if os.path.isdir(OutDir) == False:
             os.makedirs(OutDir)
         
-        # make a directory to save the qsubs
-        qsubdir = os.path.join(OutDir, 'qsub')
+        # make a directory to save the scripts
+        qsubdir = os.path.join(OutDir, 'qsubs')
         if os.path.isdir(qsubdir) == False:
             os.mkdir(qsubdir)
-        # create a log dir and a directory to keep qsubs already run
-        for i in ['log', 'done']:
-            if i not in os.listdir(qsubdir):
-                os.mkdir(os.path.join(qsubdir, i))
-            assert os.path.isdir(os.path.join(qsubdir, i))
+        # create a log dir
+        logDir = os.path.join(qsubdir, 'log')
+        if os.path.isdir(logDir) == False:
+            os.mkdir(logDir)
+        assert os.path.isdir(logDir)
         
         # get name of output file
         OutFile = os.path.join(OutDir, fileName)
@@ -567,17 +568,10 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
         newfile = open(BashScript, 'w')
         newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
         newfile.close()
-        # write qsub
-        QsubScript = os.path.join(qsubdir, fileName + '_encrypt.qsub')
-        newfile = open(QsubScript, 'w')
-        LogDir = os.path.join(qsubdir, 'log')
-        newfile.write("qsub -b y -q {0} -l h_vmem={1}g -N Encrypt.{2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, filePath.replace('/', '_'), LogDir, BashScript))
-        newfile.close()
-        # launch qsub and return exit code
-        job = subprocess.call("bash {0}".format(QsubScript), shell=True)
-        #move qsub and shell scripts to done directory
-        #subprocess.call('mv {0} {1}'.format(QsubScript, os.path.join(qsubdir, 'done')), shell=True)
-        #subprocess.call('mv {0} {1}'.format(BashScript, os.path.join(qsubdir, 'done')), shell=True)
+        # launch qsub directly and return exit code
+        JobName = 'Encrypt.{0}'.format(filePath.replace('/', '_'))
+        QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
+        job = subprocess.call(QsubCmd, shell=True)
         return job
 
 
