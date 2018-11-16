@@ -1062,12 +1062,10 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                             ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
                             # record error messages
                             errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['validationErrorMessages'])
-                            # store submission json and status in db table
+                            # store error message and status in db table
                             conn = EstablishConnection(CredentialFile, DataBase)
                             cur = conn.cursor()
-                            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(errorMessages), J["alias"], Box))
-                            conn.commit()
-                            cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ObjectStatus, J["alias"], Box))
+                            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.submissionStatus=\"{2}\" WHERE {0}.alias="\{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, str(errorMessages), ObjectStatus, J["alias"], Box))
                             conn.commit()
                             conn.close()
                             
@@ -1091,20 +1089,12 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                                     if ObjectStatus == 'SUBMITTED':
                                         # get the receipt, and the accession id
                                         Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission['response']['result'][0]['egaAccessionId']
-                                        # add Receipt and accession to table and change status
-                                        conn = EstablishConnection(CredentialFile, DataBase)
-                                        cur = conn.cursor()
-                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Receipt, J["alias"], Box))
-                                        conn.commit()
-                                        cur.execute('UPDATE {0} SET {0}.egaAccessionId=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, egaAccessionId, J["alias"], Box))
-                                        conn.commit()
-                                        cur.execute('UPDATE {0} SET {0}.Status=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ObjectStatus, J["alias"], Box))
-                                        conn.commit()
-                                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ObjectStatus, J["alias"], Box))
-                                        conn.commit()
                                         # store the date it was submitted
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                                        cur.execute('UPDATE {0} SET {0}.CreationTime=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Time, J["alias"], Box))
+                                        # add Receipt, accession and time to table and change status
+                                        conn = EstablishConnection(CredentialFile, DataBase)
+                                        cur = conn.cursor()
+                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\", {0}.egaAccessionId=\"{2}\", {0}.Status=\"{3}\", {0}.submissionStatus=\"{3}\", {0}.CreationTime=\"{4}\" WHERE {0}.alias=\"{5}\" AND {0}.egaBox=\"{6}\"'.format(Table, Receipt, egaAccessionId, ObjectStatus, Time, J["alias"], Box))
                                         conn.commit()
                                         conn.close()
                                         
