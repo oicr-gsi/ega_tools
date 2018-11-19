@@ -864,6 +864,80 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                     conn.close()
                       
 
+# use this function to check that files were successfully uploaded and update status uploading -> uploaded
+def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
+    '''
+    (str, str, str, str) -> None
+    Take the file with db credentials, the table name and box for the Database
+    and update status of all alias from uploading to uploaded if all the files
+    for that alias were successfuly uploaded
+    '''
+
+    # parse credential file to get EGA username and password
+    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+        
+    # check that Analysis table exists
+    Tables = ListTables(CredentialFile, DataBase)
+    if Table in Tables:
+        
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        # extract files for alias in upload mode for given box
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        # check that some alias are in upload mode
+        Data = cur.fetchall()
+        # close connection
+        conn.close()
+        
+        if len(Data) != 0:
+            # check that some files are in uploading mode
+            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
+            L = []
+            for i in Data:
+                D = {}
+                assert i[0] not in D
+                # convert single quotes to double quotes for str -> json conversion
+                files = i[1].replace("'", "\"")
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'jobName': i[3]}
+                L.append(D)
+            # check file directory
+            for D in L:
+                assert len(list(D.keys())) == 1
+                alias = list(D.keys())[0]
+                # set up boolean to be updated if uploading is not complete
+                Uploaded = True
+
+                # loop over files for that alias
+                for i in D[alias]['files']:
+                    # check if the jobs used for uploading any files for this alias are running
+                    for JobName in D[alias]['jobName'].split(':'):
+                        if CheckRunningJob(JobName) == True:
+                            Encrypted = False
+                # make a list of uploaded files          
+                uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \" set ftp:ssl-allow false; ls {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
+                for i in range(len(uploaded_files)):
+                    uploaded_files[i] = uploaded_files[i].split()[-1]
+                # check if files are uploaded on the server
+                for filePath in D[alias]['files']:
+                    # get filename
+                    fileName = os.path.basename(filePath)
+                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+                    encryptedFile = D[alias]['files'][filePath]['encryptedName']
+                    originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                    for j in [encryptedFile, encryptedMd5, originalMd5]:
+                        if j not in uploaded_files:
+                            UpdateStatus = False
+                # check if all files for that alias have been uploaded
+                if Uploaded == True:
+                    # update status
+                    # connect to database, updatestatus and close connection
+                    conn = EstablishConnection(CredentialFile, DataBase)
+                    cur = conn.cursor()
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                    conn.commit()                                
+                    conn.close()              
+    
 ##############################################
 #
 #
@@ -1476,10 +1550,7 @@ def SubmitAnalyses(args):
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.mem)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        
-        
-        
-        
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
