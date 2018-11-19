@@ -1109,7 +1109,7 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box):
     '''
     
     # connect to database
-    conn = EstablishConnection(CredentialFile, DataBase)
+    conn = EstablishConnection(CredentialFile, Database)
     cur = conn.cursor()
     # get the directory with encrypted and md5 files
     cur.execute('SELECT {0}.FileDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
@@ -1117,6 +1117,7 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box):
     # get the file names
     cur.execute('SELECT {0}.files FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
     files = json.loads(str([i[0] for i in cur][0]).replace("'", "\""))
+    conn.close()
     files = [files[i]['encryptedName'] for i in files]
     for i in files:
         a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
