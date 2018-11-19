@@ -629,8 +629,8 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
             for D in L:
                 assert len(list(D.keys())) == 1
                 alias = list(D.keys())[0]
-                # store the job names for that alias
-                JobNames = []
+                # store the job names and exit codes for that alias
+                JobCodes, JobNames = [], []
                 # loop over files for that alias
                 for i in D[alias]['files']:
                     # get the filePath and fileName
@@ -638,31 +638,19 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
                     fileName = D[alias]['files'][i]['fileName']
                     # encrypt and run md5sums on original and encrypted files
                     j, k = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
-                    # check if encription was launched successfully
-                    if j == 0:
-                        # store the job name
-                        JobNames.append(k)
-                        # encryption and md5sums jobs launched succcessfully, update status -> encrypting
-                        conn = EstablishConnection(CredentialFile, DataBase)
-                        cur = conn.cursor()
-                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
-                        conn.commit()
-                        conn.close()
-                    else:
-                        print('encryption and md5sum jobs were not launched properly for {0}'.format(alias))
-                # store the job names in errorMessages
-                if len(JobNames) != 0:
-                    if len(JobNames) > 1:
-                        JobNames = ':'.join(JobNames)
-                    else:
-                        JobNames = JobNames[0]
-                    # connect to database
+                    JobCodes.append(j)
+                    JobNames.append(k)
+                # check if encription was launched successfully
+                if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
+                    # store the job names in errorMessages
+                    JobNames = ':'.join(JobNames)
+                    # encryption and md5sums jobs launched succcessfully, update status -> encrypting
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
-                    conn.commit() 
+                    cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
+                    conn.commit()
                     conn.close()
-                    
+                                        
 
 # use this function to check if a job is still running
 def CheckRunningJob(JobName):
@@ -852,14 +840,14 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                 # check stage folder, file directory
                 assert len(list(D.keys())) == 1
                 alias = list(D.keys())[0]
-                # create stage directory if doesn't exist
+                # get the source and destination directories
                 StagePath = D[alias]['StagePath']
-                assert StagePath != '/'
-                # get the directory where files to upload are located
                 FileDir = D[alias]['FileDirectory']
+                assert StagePath != '/'
                 # store the job names in a list
                 JobCodes, JobNames = [], []
-                # get the files, check that the files are in the directory, and upload
+                # get the files, check that the files are in the directory,
+                # create stage directory if doesn't exist and upload
                 for filePath in D[alias]['files']:
                     j, k = UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
                     # store job names and exit code
