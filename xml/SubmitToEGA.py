@@ -544,7 +544,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
+def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
     '''
     (file, str, str, str, str, str) -> tuple
     Take the full path to file, the name of the output file, the path to the
@@ -580,12 +580,12 @@ def EncryptAndChecksum(filePath, fileName, KeyRing, OutDir, Queue, Mem):
         # get name of output file
         OutFile = os.path.join(OutDir, fileName)
         # put command in shell script
-        BashScript = os.path.join(qsubdir, fileName + '_encrypt.sh')
+        BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
         newfile = open(BashScript, 'w')
         newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
         newfile.close()
         # launch qsub directly and return exit code
-        JobName = 'Encrypt.{0}'.format(filePath.replace('/', '_'))
+        JobName = 'Encrypt.{0}'.format(alias + '_' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -637,7 +637,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
                     filePath = D[alias]['files'][i]['filePath']
                     fileName = D[alias]['files'][i]['fileName']
                     # encrypt and run md5sums on original and encrypted files
-                    j, k = EncryptAndChecksum(filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
+                    j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
                     JobCodes.append(j)
                     JobNames.append(k)
                 # check if encription was launched successfully
@@ -1557,7 +1557,7 @@ def SubmitAnalyses(args):
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
 
     
 if __name__ == '__main__':
