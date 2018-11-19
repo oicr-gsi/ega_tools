@@ -915,7 +915,8 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
                         if CheckRunningJob(JobName) == True:
                             Encrypted = False
                 # make a list of uploaded files          
-                uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \" set ftp:ssl-allow false; ls {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
+                uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
+                
                 for i in range(len(uploaded_files)):
                     uploaded_files[i] = uploaded_files[i].split()[-1]
                 # check if files are uploaded on the server
