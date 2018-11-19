@@ -760,7 +760,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(D, filepath, OutDir, StagePath, FileDir, CredentialFile, Box, Queue, Mem):
+def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem):
     '''
     (str, str, str, str, str, int) -> (list, list)
     Take a file with db credentials, the path to file that should be registered
@@ -774,11 +774,9 @@ def UploadAliasFiles(D, filepath, OutDir, StagePath, FileDir, CredentialFile, Bo
     UserName, MyPassword = ParseCredentials(CredentialFile, Box)
     
     # write shell scripts with command
-    # check if OutDir exist
-    if os.path.isdir(OutDir) == False:
-        os.makedirs(OutDir)
+    assert os.path.isdir (FileDir)
     # make a directory to save the scripts
-    qsubdir = os.path.join(OutDir, 'qsubs')
+    qsubdir = os.path.join(FileDir, 'qsubs')
     if os.path.isdir(qsubdir) == False:
         os.mkdir(qsubdir)
     # create a log dir
@@ -814,7 +812,7 @@ def UploadAliasFiles(D, filepath, OutDir, StagePath, FileDir, CredentialFile, Bo
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem):
     '''
     (file, str, str, str, int) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -863,7 +861,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
                 JobCodes, JobNames = [], []
                 # get the files, check that the files are in the directory, and upload
                 for filePath in D[alias]['files']:
-                    j, k = UploadAliasFiles(D, filepath, OutDir, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
+                    j, k = UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
                     # store job names and exit code
                     JobNames.append(k)
                     JobCodes.append(j)
@@ -1492,8 +1490,14 @@ def SubmitAnalyses(args):
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
-        ## upload files and change the status upload -> uploaded 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max)
+        ## upload files and change the status upload -> uploading 
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.mem)
+                
+        ## check that files have been successfully uploaded, update status uploading -> uploaded
+        
+        
+        
+        
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
