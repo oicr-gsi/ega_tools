@@ -867,20 +867,14 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                     JobCodes.append(j)
                 # check if upload launched properly for all files under that alias, update status -> uploading
                 if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
-                    conn.commit()
-                    conn.close()
                     # store the job names in errorMessages
                     JobNames = ':'.join(JobNames)
-                    # connect to database
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
-                    conn.commit() 
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"{1}\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
+                    conn.commit()
                     conn.close()
-  
+                      
 
 ##############################################
 #
