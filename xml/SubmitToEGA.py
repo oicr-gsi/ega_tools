@@ -1165,12 +1165,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
 
         # connect to EGA and get a token
         # parse credentials to get userName and Password
-        Credentials = ExtractCredentials(CredentialFile)
-        if Box == 'ega-box-12':
-            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-        elif Box == 'ega-box-137':
-            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
-            
+        UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+                    
         # get the token
         data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
         # get the adress of the submission portal
@@ -1559,16 +1555,16 @@ def SubmitAnalyses(args):
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.box)
+        #CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
+        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
+        #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
         #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
