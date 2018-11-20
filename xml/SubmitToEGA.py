@@ -748,14 +748,15 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem):
+def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, Interactive):
     '''
-    (str, str, str, str, str, int) -> (list, list)
-    Take a file with db credentials, the path to file that should be registered
-    (ie. the files used to generate encrypted and md5sums), the directory were
-    the command scripts are saved, the queue name and memory to launch the jobs
-    and return a tuple with exit code and job name used to run the upload of the
-    encrypted and md5 files corresponding to filepath
+    (dict, str, str, str, str, str, int, bool) -> (list, list)
+    Take a dictionary with file information for a given alias, the file with 
+    db credentials, the path to the original files (ie. the files used to generate
+    encrypted and md5sums), the directory were the command scripts are saved,
+    the queue name and memory to launch the jobs and return a tuple with exit 
+    code and job name used for uploading he encrypted and md5 files corresponding
+    to filepath. Use xfer4 if run in Interactive mode or use seqprodbio if run by cron
     '''
     
     # parse the crdential file, get username and password for given box
@@ -774,8 +775,11 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     assert os.path.isdir(logDir)
     
     # command to create destination directory and upload files    
-    UploadCmd = 'ssh xfer4.res.oicr.on.ca "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"'
-    
+    if Interactive == True:
+        UploadCmd = 'ssh xfer4.res.oicr.on.ca "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"'
+    elif Interactive == False:
+        UploadCmd = "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"
+       
     # get alias
     assert len(list(D.keys())) == 1
     alias = list(D.keys())[0]
@@ -804,11 +808,13 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem, Interactive):
     '''
-    (file, str, str, str, int) -> None
+    (file, str, str, str, int, str, int, bool) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Nth first aliases in upload status and update status to uploading
+    and upload files for the Maxth first aliases in upload status using specified
+    Queue and Memory and update status to uploading. Use xfer4 if run in Interactive mode
+    or use seqprodbio if run by cron
     '''
        
     # check that Analysis table exists
@@ -853,7 +859,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                 # get the files, check that the files are in the directory,
                 # create stage directory if doesn't exist and upload
                 for filePath in D[alias]['files']:
-                    j, k = UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
+                    j, k = UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, Interactive)
                     # store job names and exit code
                     JobNames.append(k)
                     JobCodes.append(j)
@@ -869,12 +875,13 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                       
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
+def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
     '''
-    (str, str, str, str) -> None
+    (str, str, str, str, bool) -> None
     Take the file with db credentials, the table name and box for the Database
     and update status of all alias from uploading to uploaded if all the files
-    for that alias were successfuly uploaded
+    for that alias were successfuly uploaded. Use xfer4 if run in Interactive mode
+    or use seqprodbio if run by cron
     '''
 
     # parse credential file to get EGA username and password
@@ -919,7 +926,10 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
                         if CheckRunningJob(JobName) == True:
                             Uploaded = False
                 # make a list of uploaded files          
-                uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
+                if Interactive == True:
+                    uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
+                elif Interactive == False:
+                    uploaded_files = subprocess.check_output('lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'.format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
                 for i in range(len(uploaded_files)):
                     uploaded_files[i] = uploaded_files[i].split()[-1]
                 # check if files are uploaded on the server
@@ -1552,10 +1562,10 @@ def SubmitAnalyses(args):
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory)
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
@@ -1631,6 +1641,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
+    AnalysisSubmission.add_argument('--I', dest='interactive', action='store_true', help='Submit analyses interactively, use xfer4 for uploading and checking uploaded files if run interactively and use seqprodbio by default if run by cron. Does not run interactively by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
     # get arguments from the command line
