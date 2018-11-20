@@ -748,7 +748,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem):
+def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem):
     '''
     (str, str, str, str, str, int) -> (list, list)
     Take a file with db credentials, the path to file that should be registered
@@ -776,6 +776,10 @@ def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue
     # command to create destination directory and upload files    
     UploadCmd = 'ssh xfer4.res.oicr.on.ca "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"'
     
+    # get alias
+    assert len(list(D.keys())) == 1
+    alias = list(D.keys())[0]
+        
     # get filename
     fileName = os.path.basename(filePath)
     assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
@@ -786,12 +790,12 @@ def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue
         # upload files
         MyCmd = UploadCmd.format(UserName, MyPassword, StagePath, encryptedFile, encryptedMd5, originalMd5)
         # put command in a shell script    
-        BashScript = os.path.join(qsubdir, alias + '_' + filename + '_upload.sh')
+        BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_upload.sh')
         newfile = open(BashScript, 'w')
         newfile.write(MyCmd + '\n')
         newfile.close()
         # launch job directly
-        JobName = 'Upload.{0}'.format(alias + '_' + filename)
+        JobName = 'Upload.{0}'.format(alias + '_' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)    
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -849,7 +853,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                 # get the files, check that the files are in the directory,
                 # create stage directory if doesn't exist and upload
                 for filePath in D[alias]['files']:
-                    j, k = UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
+                    j, k = UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
                     # store job names and exit code
                     JobNames.append(k)
                     JobCodes.append(j)
@@ -913,10 +917,9 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
                     # check if the jobs used for uploading any files for this alias are running
                     for JobName in D[alias]['jobName'].split(':'):
                         if CheckRunningJob(JobName) == True:
-                            Encrypted = False
+                            Uploaded = False
                 # make a list of uploaded files          
-                uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
-                
+                uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
                 for i in range(len(uploaded_files)):
                     uploaded_files[i] = uploaded_files[i].split()[-1]
                 # check if files are uploaded on the server
@@ -928,7 +931,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
                     originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
                     for j in [encryptedFile, encryptedMd5, originalMd5]:
                         if j not in uploaded_files:
-                            UpdateStatus = False
+                            Uploaded = False
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
                     # update status
