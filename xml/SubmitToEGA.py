@@ -776,9 +776,9 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
     # command to create destination directory and upload files    
     if Interactive == True:
-        UploadCmd = 'ssh xfer4.res.oicr.on.ca "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"'
+        UploadCmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk\""
     elif Interactive == False:
-        UploadCmd = "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"
+        UploadCmd = "lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk"
        
     # get alias
     assert len(list(D.keys())) == 1
@@ -1555,10 +1555,10 @@ def SubmitAnalyses(args):
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        #CheckEncryption(args.credential, args.subdb, args.table, args.box)
+        CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
