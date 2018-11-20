@@ -667,7 +667,7 @@ def CheckRunningJob(JobName):
     # check if jobs are running
     if len(JobIds) != 0:
         for i in JobIds:
-            JobDetails.append(subprocess.check_output('qstat - j {0}'.format(i), shell=True).decode('utf-8').rstrip())
+            JobDetails.append(subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip())
     # check f Job name is in JobDetails        
     JobDetails = ','.join(JobDetails)        
     return JobName in JobDetails
@@ -748,14 +748,15 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem):
+def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, Interactive):
     '''
-    (str, str, str, str, str, int) -> (list, list)
-    Take a file with db credentials, the path to file that should be registered
-    (ie. the files used to generate encrypted and md5sums), the directory were
-    the command scripts are saved, the queue name and memory to launch the jobs
-    and return a tuple with exit code and job name used to run the upload of the
-    encrypted and md5 files corresponding to filepath
+    (dict, str, str, str, str, str, int, bool) -> (list, list)
+    Take a dictionary with file information for a given alias, the file with 
+    db credentials, the path to the original files (ie. the files used to generate
+    encrypted and md5sums), the directory were the command scripts are saved,
+    the queue name and memory to launch the jobs and return a tuple with exit 
+    code and job name used for uploading he encrypted and md5 files corresponding
+    to filepath. Use xfer4 if run in Interactive mode or use seqprodbio if run by cron
     '''
     
     # parse the crdential file, get username and password for given box
@@ -774,8 +775,15 @@ def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue
     assert os.path.isdir(logDir)
     
     # command to create destination directory and upload files    
-    UploadCmd = 'ssh xfer4.res.oicr.on.ca "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"'
-    
+    if Interactive == True:
+        UploadCmd = 'ssh xfer4.res.oicr.on.ca "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"'
+    elif Interactive == False:
+        UploadCmd = "lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\" ftp://ftp-private.ebi.ac.uk"
+       
+    # get alias
+    assert len(list(D.keys())) == 1
+    alias = list(D.keys())[0]
+        
     # get filename
     fileName = os.path.basename(filePath)
     assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
@@ -786,12 +794,12 @@ def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue
         # upload files
         MyCmd = UploadCmd.format(UserName, MyPassword, StagePath, encryptedFile, encryptedMd5, originalMd5)
         # put command in a shell script    
-        BashScript = os.path.join(qsubdir, alias + '_' + filename + '_upload.sh')
+        BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_upload.sh')
         newfile = open(BashScript, 'w')
         newfile.write(MyCmd + '\n')
         newfile.close()
         # launch job directly
-        JobName = 'Upload.{0}'.format(alias + '_' + filename)
+        JobName = 'Upload.{0}'.format(alias + '_' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)    
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -800,11 +808,13 @@ def UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem, Interactive):
     '''
-    (file, str, str, str, int) -> None
+    (file, str, str, str, int, str, int, bool) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Nth first aliases in upload status and update status to uploading
+    and upload files for the Maxth first aliases in upload status using specified
+    Queue and Memory and update status to uploading. Use xfer4 if run in Interactive mode
+    or use seqprodbio if run by cron
     '''
        
     # check that Analysis table exists
@@ -849,7 +859,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                 # get the files, check that the files are in the directory,
                 # create stage directory if doesn't exist and upload
                 for filePath in D[alias]['files']:
-                    j, k = UploadAliasFiles(D, filepath, StagePath, FileDir, CredentialFile, Box, Queue, Mem)
+                    j, k = UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, Interactive)
                     # store job names and exit code
                     JobNames.append(k)
                     JobCodes.append(j)
@@ -865,12 +875,13 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem)
                       
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
+def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
     '''
-    (str, str, str, str) -> None
+    (str, str, str, str, bool) -> None
     Take the file with db credentials, the table name and box for the Database
     and update status of all alias from uploading to uploaded if all the files
-    for that alias were successfuly uploaded
+    for that alias were successfuly uploaded. Use xfer4 if run in Interactive mode
+    or use seqprodbio if run by cron
     '''
 
     # parse credential file to get EGA username and password
@@ -913,10 +924,12 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
                     # check if the jobs used for uploading any files for this alias are running
                     for JobName in D[alias]['jobName'].split(':'):
                         if CheckRunningJob(JobName) == True:
-                            Encrypted = False
+                            Uploaded = False
                 # make a list of uploaded files          
-                uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
-                
+                if Interactive == True:
+                    uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
+                elif Interactive == False:
+                    uploaded_files = subprocess.check_output('lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'.format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
                 for i in range(len(uploaded_files)):
                     uploaded_files[i] = uploaded_files[i].split()[-1]
                 # check if files are uploaded on the server
@@ -928,7 +941,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box):
                     originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
                     for j in [encryptedFile, encryptedMd5, originalMd5]:
                         if j not in uploaded_files:
-                            UpdateStatus = False
+                            Uploaded = False
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
                     # update status
@@ -1152,12 +1165,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
 
         # connect to EGA and get a token
         # parse credentials to get userName and Password
-        Credentials = ExtractCredentials(CredentialFile)
-        if Box == 'ega-box-12':
-            MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-        elif Box == 'ega-box-137':
-            MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
-            
+        UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+                    
         # get the token
         data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
         # get the adress of the submission portal
@@ -1546,16 +1555,16 @@ def SubmitAnalyses(args):
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.box)
+        #CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.mem)
+        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
+        #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
         #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
@@ -1628,6 +1637,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
+    AnalysisSubmission.add_argument('--I', dest='interactive', action='store_true', help='Submit analyses interactively, use xfer4 for uploading and checking uploaded files if run interactively and use seqprodbio by default if run by cron. Does not run interactively by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
     # get arguments from the command line
