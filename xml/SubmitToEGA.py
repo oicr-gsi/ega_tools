@@ -281,124 +281,133 @@ def FormatData(L):
 
 
 # use this function to format the sample json
-def FormatJson(D, ObjectType):
+def FormatSampleJson(D):
     '''
-    (dict, str) -> dict
-    Take a dictionary with information for an object and string describing the
-    object type and return a dictionary with the expected format for that object
-    or dictionary with the alias only if required fields are missing
+    (dict) -> dict
+    Take a dictionary with information for a sample object and return a dictionary
+    with the expected format or dictionary with the alias only if required fields are missing
     Precondition: strings in D have double-quotes
     '''
     
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
     
-    # check object type
-    if ObjectType == 'sample':
-        JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
-                    "organismPart", "cellLine", "region", "phenotype", "subjectId",
-                    "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
-        for field in D:
-            if field in JsonKeys:
-                if D[field] == 'NULL':
-                    # some fields are required, return empty dict if field is emoty
-                    if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
-                        # erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = ""
+    JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
+                "organismPart", "cellLine", "region", "phenotype", "subjectId",
+                "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+    for field in D:
+        if field in JsonKeys:
+            if D[field] == 'NULL':
+                # some fields are required, return empty dict if field is emoty
+                if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
+                    # erase dict and add alias
+                    J = {}
+                    J["alias"] = D["alias"]
+                    # return dict with alias only if required fields are missing
+                    return J
                 else:
-                    if field == 'attributes':
-                        J[field] = []
-                        attributes = D[field]
-                        # convert string to dict
-                        if ';' in attributes:
-                            attributes = attributes.split(';')
-                            for i in range(len(attributes)):
-                                J[field].append(json.loads(attributes[i]))
-                        else:
-                            J[field].append(json.loads(attributes))
-                    else:
-                        J[field] = D[field]
-    elif ObjectType == 'analysis':
-        JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
-                    "analysisCenter", "analysisDate", "analysisTypeId", "files",
-                    "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-        # loop over required json keys
-        for field in JsonKeys:
-            if field in D:
-                if D[field] == 'NULL':
-                    # some fields are required, return empty dict if field is empty
-                    if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                                 "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
-                        # erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        if field == "chromosomeReferences":
-                            J[field] = []
-                        else:
-                            J[field] = ""
-                else:
-                    if field == 'files':
-                        assert D[field] != 'NULL'
-                        J[field] = []
-                        # convert string to dict
-                        files = D[field].replace("'", "\"")
-                        files = json.loads(files)
-                        # loop over file name
-                        for filePath in files:
-                            # create a dict to store file info
-                            if files[filePath]["fileTypeId"].lower() == 'bam':
-                                fileTypeId = '1'
-                            elif files[filePath]["fileTypeId"].lower() == 'bai':
-                                fileTypeId = '2'
-                            # create dict with file info, add path to file names
-                            d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
-                                 "checksum": files[filePath]['checksum'],
-                                 "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
-                                 "fileTypeId": fileTypeId}
-                            J[field].append(d)
-                    elif field == 'attributes':
-                        assert D[field] != 'NULL'
-                        J[field] = []
-                        # ensure strings are double-quoted
-                        attributes = D[field].replace("'", "\"")
-                        # convert string to dict
-                        if ';' in attributes:
-                            # loop over all attributes
-                            attributes = attributes.split(';')
-                            for i in range(len(attributes)):
-                                attributes[i] = attributes[i].strip().replace("'", "\"")
-                                J[field].append(json.loads(attributes[i]))
-                        else:
-                            J[field].append(json.loads(attributes))
-                    else:
-                        J[field] = D[field]
-            
-            
-            # use tags for experimentId and analysisTypeId
-            if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
-                J[field] = ["0"] 
-            if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
-                J[field] = "0"
-            
+                    J[field] = ""
             else:
-                if field == 'sampleReferences':
-                    # populate with sample accessions
+                if field == 'attributes':
                     J[field] = []
-                    if ':' in D['sampleEgaAccessionsId']:
-                        for accession in D['sampleEgaAccessionsId'].split(':'):
-                            J[field].append({"value": accession.strip(), "label":""})
+                    attributes = D[field]
+                    # convert string to dict
+                    if ';' in attributes:
+                        attributes = attributes.split(';')
+                        for i in range(len(attributes)):
+                            J[field].append(json.loads(attributes[i]))
                     else:
-                        J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
+                        J[field].append(json.loads(attributes))
+                else:
+                    J[field] = D[field]
     return J                
 
+# use this function to format the analysis json
+def FormatAnalysisJson(D):
+    '''
+    (dict) -> dict
+    Take a dictionary with information for an analysis object and return a dictionary
+    with the expected format or dictionary with the alias only if required fields are missing
+    Precondition: strings in D have double-quotes
+    '''
+    
+    # create a dict to be strored as a json. note: strings should have double quotes
+    J = {}
+    
+    JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
+                "analysisCenter", "analysisDate", "analysisTypeId", "files",
+                "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+    # loop over required json keys
+    for field in JsonKeys:
+        if field in D:
+            if D[field] == 'NULL':
+                # some fields are required, return empty dict if field is empty
+                if field in ["alias", "title", "description", "studyId", "analysisCenter",
+                             "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
+                    # erase dict and add alias
+                    J = {}
+                    J["alias"] = D["alias"]
+                    # return dict with alias only if required fields are missing
+                    return J
+                else:
+                    if field == "chromosomeReferences":
+                        J[field] = []
+                    else:
+                        J[field] = ""
+            else:
+                if field == 'files':
+                    assert D[field] != 'NULL'
+                    J[field] = []
+                    # convert string to dict
+                    files = D[field].replace("'", "\"")
+                    files = json.loads(files)
+                    # loop over file name
+                    for filePath in files:
+                        # create a dict to store file info
+                        if files[filePath]["fileTypeId"].lower() == 'bam':
+                            fileTypeId = '1'
+                        elif files[filePath]["fileTypeId"].lower() == 'bai':
+                            fileTypeId = '2'
+                        # create dict with file info, add path to file names
+                        d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
+                             "checksum": files[filePath]['checksum'],
+                             "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
+                             "fileTypeId": fileTypeId}
+                        J[field].append(d)
+                elif field == 'attributes':
+                    assert D[field] != 'NULL'
+                    J[field] = []
+                    # ensure strings are double-quoted
+                    attributes = D[field].replace("'", "\"")
+                    # convert string to dict
+                    if ';' in attributes:
+                        # loop over all attributes
+                        attributes = attributes.split(';')
+                        for i in range(len(attributes)):
+                            attributes[i] = attributes[i].strip().replace("'", "\"")
+                            J[field].append(json.loads(attributes[i]))
+                    else:
+                        J[field].append(json.loads(attributes))
+                else:
+                    J[field] = D[field]
+        
+            
+        # use tags for experimentId and analysisTypeId
+        if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
+            J[field] = ["0"] 
+        if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
+            J[field] = "0"
+            
+        else:
+            if field == 'sampleReferences':
+                # populate with sample accessions
+                J[field] = []
+                if ':' in D['sampleEgaAccessionsId']:
+                    for accession in D['sampleEgaAccessionsId'].split(':'):
+                        J[field].append({"value": accession.strip(), "label":""})
+                else:
+                    J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
+    return J                
 
 # use this function to extract ega accessions from metadata database
 def ExtractAccessions(CredentialFile, DataBase, Box, Table):
@@ -475,7 +484,10 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                     D[Header[j]] = i[j]
                 L.append(D)
             # create object-formatted jsons from each dict 
-            Jsons = [FormatJson(D, Object) for D in L]
+            if Object == 'sample':
+                Jsons = [FormatSampleJson(D) for D in L]
+            elif Object == 'analysis':
+                Jsons = [FormatAnalysisJson(D) for D in L]
             # add json back to table and update status
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
