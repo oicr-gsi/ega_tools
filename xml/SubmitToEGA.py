@@ -990,9 +990,9 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
     '''
-    (str, str, str, str, str) -> None
+    (str, str, str, str) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
     files corresponding to the given Alias and Box in Table and delete them
     '''
@@ -1000,29 +1000,35 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box):
     # connect to database
     conn = EstablishConnection(CredentialFile, Database)
     cur = conn.cursor()
-    # get the directory with encrypted and md5 files
-    cur.execute('SELECT {0}.FileDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
-    FileDirectory = [i[0] for i in cur][0]
-    # get the file names
-    cur.execute('SELECT {0}.files FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
-    files = json.loads(str([i[0] for i in cur][0]).replace("'", "\""))
+    # get the directory, files for all alias with SUBMITTED status
+    cur.execute('SELECT {0}.alias, {0}.FileDirectory, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    # build a dict {alias: {filedir: val, files: val}
+    Data = cur.fetchall()
     conn.close()
-    files = [files[i]['encryptedName'] for i in files]
-    for i in files:
-        a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-        print(os.path.join(FileDirectory, i), os.path.isfile(os.path.join(FileDirectory, i)))
-        print(os.path.join(FileDirectory, a), os.path.isfile(os.path.join(FileDirectory, a)))
-        print(os.path.join(FileDirectory, b), os.path.isfile(os.path.join(FileDirectory, b)))
-
+    if len(Data) != 0:
+        Submitted = {}
+        for i in Data:
+            alias, FileDir, files = i[0], i[1], json.loads(str(i[2]).replace("'", "\""))
+            Submitted[alias] = {'FileDir': FileDir, 'files': files}
+        # loop over alias, make a list of all files under this alias
+        for alias in Submitted:
+            files = Submitted[alias]['files']
+            FileDirectory = Submitted[alias]['FileDir']
+            files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
+            for i in files:
+                a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
+                print(i, os.path.isfile(i))
+                print(os.path.join(a), os.path.isfile(a))
+                print(os.path.join(b), os.path.isfile(b))
+           
 
 # use this function to register objects
-def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **OptionalParameter):
+def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     '''
-    (file, str, str, str, str, str, dict) -> None
+    (file, str, str, str, str, str) -> None
     Take the file with credentials to connect to the submission database, 
     extract the json for each Object in Table and register the objects
-    in EGA BOX using the submission Portal. Delete encrypted and md5 files
-    if object analysis object is successfully submitted and if OptionalParameter is True
+    in EGA BOX using the submission Portal. 
     '''
     
     # pull json for objects with ready Status for given box
@@ -1123,15 +1129,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **Opti
                                         conn.commit()
                                         conn.close()
                                         
-                                        # check if object is analyses
-                                        if Object == 'analyses':
-                                            # check if encrypted and md5sums need to be deleted
-                                            if 'Remove' in OptionalParameter:
-                                                Remove = OptionalParameter['Remove']
-                                            else:
-                                                Remove = False
-                                            if Remove == True:
-                                                RemoveFilesAfterSubmission(CredentialFile, Database, Table, J["alias"], Box)
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
@@ -1443,7 +1440,13 @@ def SubmitAnalyses(args):
         #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+
+        ## remove files with submitted status
+#        if args.remove == True:
+#            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
+            
+
 
     
 if __name__ == '__main__':
