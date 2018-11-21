@@ -320,6 +320,26 @@ def FormatData(L):
     return tuple(Values)
 
 
+# use this function to get the enumerations from EGA
+def GrabEGAEnums(Enumeration):
+    '''
+    (str) -> dict
+    Returns a dict with tag: value pairs for a given enumeration
+    '''
+    
+    # create a dict to store the enumeration info {tag: value}
+    Enum = {}
+    # connect to the api, retrieve the information for the given enumeration
+    response = requests.get(Enumeration)
+    # check response code
+    if response.status_code == requests.codes.ok:
+        # loop over dict in list
+        for i in response.json()['response']['result']:
+            assert i['tag'] not in Enum
+            Enum[i['tag']] = i['value']
+    return Enum
+
+
 # use this function to format the sample json
 def FormatSampleJson(D):
     '''
@@ -361,6 +381,7 @@ def FormatSampleJson(D):
                 else:
                     J[field] = D[field]
     return J                
+
 
 # use this function to format the analysis json
 def FormatAnalysisJson(D):
