@@ -281,133 +281,124 @@ def FormatData(L):
 
 
 # use this function to format the sample json
-def FormatSampleJson(D):
+def FormatJson(D, ObjectType):
     '''
-    (dict) -> dict
-    Take a dictionary with information for a sample object and return a dictionary
-    with the expected format or dictionary with the alias only if required fields are missing
+    (dict, str) -> dict
+    Take a dictionary with information for an object and string describing the
+    object type and return a dictionary with the expected format for that object
+    or dictionary with the alias only if required fields are missing
     Precondition: strings in D have double-quotes
     '''
     
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
     
-    JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
-                "organismPart", "cellLine", "region", "phenotype", "subjectId",
-                "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
-    for field in D:
-        if field in JsonKeys:
-            if D[field] == 'NULL':
-                # some fields are required, return empty dict if field is emoty
-                if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
-                    # erase dict and add alias
-                    J = {}
-                    J["alias"] = D["alias"]
-                    # return dict with alias only if required fields are missing
-                    return J
-                else:
-                    J[field] = ""
-            else:
-                if field == 'attributes':
-                    J[field] = []
-                    attributes = D[field]
-                    # convert string to dict
-                    if ';' in attributes:
-                        attributes = attributes.split(';')
-                        for i in range(len(attributes)):
-                            J[field].append(json.loads(attributes[i]))
-                    else:
-                        J[field].append(json.loads(attributes))
-                else:
-                    J[field] = D[field]
-    return J                
-
-# use this function to format the analysis json
-def FormatAnalysisJson(D):
-    '''
-    (dict) -> dict
-    Take a dictionary with information for an analysis object and return a dictionary
-    with the expected format or dictionary with the alias only if required fields are missing
-    Precondition: strings in D have double-quotes
-    '''
-    
-    # create a dict to be strored as a json. note: strings should have double quotes
-    J = {}
-    
-    JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
-                "analysisCenter", "analysisDate", "analysisTypeId", "files",
-                "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-    # loop over required json keys
-    for field in JsonKeys:
-        if field in D:
-            if D[field] == 'NULL':
-                # some fields are required, return empty dict if field is empty
-                if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                             "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
-                    # erase dict and add alias
-                    J = {}
-                    J["alias"] = D["alias"]
-                    # return dict with alias only if required fields are missing
-                    return J
-                else:
-                    if field == "chromosomeReferences":
-                        J[field] = []
+    # check object type
+    if ObjectType == 'sample':
+        JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
+                    "organismPart", "cellLine", "region", "phenotype", "subjectId",
+                    "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+        for field in D:
+            if field in JsonKeys:
+                if D[field] == 'NULL':
+                    # some fields are required, return empty dict if field is emoty
+                    if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
+                        # erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
                     else:
                         J[field] = ""
-            else:
-                if field == 'files':
-                    assert D[field] != 'NULL'
-                    J[field] = []
-                    # convert string to dict
-                    files = D[field].replace("'", "\"")
-                    files = json.loads(files)
-                    # loop over file name
-                    for filePath in files:
-                        # create a dict to store file info
-                        if files[filePath]["fileTypeId"].lower() == 'bam':
-                            fileTypeId = '1'
-                        elif files[filePath]["fileTypeId"].lower() == 'bai':
-                            fileTypeId = '2'
-                        # create dict with file info, add path to file names
-                        d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
-                             "checksum": files[filePath]['checksum'],
-                             "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
-                             "fileTypeId": fileTypeId}
-                        J[field].append(d)
-                elif field == 'attributes':
-                    assert D[field] != 'NULL'
-                    J[field] = []
-                    # ensure strings are double-quoted
-                    attributes = D[field].replace("'", "\"")
-                    # convert string to dict
-                    if ';' in attributes:
-                        # loop over all attributes
-                        attributes = attributes.split(';')
-                        for i in range(len(attributes)):
-                            attributes[i] = attributes[i].strip().replace("'", "\"")
-                            J[field].append(json.loads(attributes[i]))
+                else:
+                    if field == 'attributes':
+                        J[field] = []
+                        attributes = D[field]
+                        # convert string to dict
+                        if ';' in attributes:
+                            attributes = attributes.split(';')
+                            for i in range(len(attributes)):
+                                J[field].append(json.loads(attributes[i]))
+                        else:
+                            J[field].append(json.loads(attributes))
                     else:
-                        J[field].append(json.loads(attributes))
+                        J[field] = D[field]
+    elif ObjectType == 'analysis':
+        JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
+                    "analysisCenter", "analysisDate", "analysisTypeId", "files",
+                    "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+        # loop over required json keys
+        for field in JsonKeys:
+            if field in D:
+                if D[field] == 'NULL':
+                    # some fields are required, return empty dict if field is empty
+                    if field in ["alias", "title", "description", "studyId", "analysisCenter",
+                                 "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
+                        # erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        if field == "chromosomeReferences":
+                            J[field] = []
+                        else:
+                            J[field] = ""
                 else:
-                    J[field] = D[field]
-        
+                    if field == 'files':
+                        assert D[field] != 'NULL'
+                        J[field] = []
+                        # convert string to dict
+                        files = D[field].replace("'", "\"")
+                        files = json.loads(files)
+                        # loop over file name
+                        for filePath in files:
+                            # create a dict to store file info
+                            if files[filePath]["fileTypeId"].lower() == 'bam':
+                                fileTypeId = '1'
+                            elif files[filePath]["fileTypeId"].lower() == 'bai':
+                                fileTypeId = '2'
+                            # create dict with file info, add path to file names
+                            d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
+                                 "checksum": files[filePath]['checksum'],
+                                 "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
+                                 "fileTypeId": fileTypeId}
+                            J[field].append(d)
+                    elif field == 'attributes':
+                        assert D[field] != 'NULL'
+                        J[field] = []
+                        # ensure strings are double-quoted
+                        attributes = D[field].replace("'", "\"")
+                        # convert string to dict
+                        if ';' in attributes:
+                            # loop over all attributes
+                            attributes = attributes.split(';')
+                            for i in range(len(attributes)):
+                                attributes[i] = attributes[i].strip().replace("'", "\"")
+                                J[field].append(json.loads(attributes[i]))
+                        else:
+                            J[field].append(json.loads(attributes))
+                    else:
+                        J[field] = D[field]
             
-        # use tags for experimentId and analysisTypeId
-        if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
-            J[field] = ["0"] 
-        if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
-            J[field] = "0"
             
-        else:
-            if field == 'sampleReferences':
-                # populate with sample accessions
-                J[field] = []
-                if ':' in D['sampleEgaAccessionsId']:
-                    for accession in D['sampleEgaAccessionsId'].split(':'):
-                        J[field].append({"value": accession.strip(), "label":""})
-                else:
-                    J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
+            # use tags for experimentId and analysisTypeId
+            if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
+                J[field] = ["0"] 
+            if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
+                J[field] = "0"
+            
+            else:
+                if field == 'sampleReferences':
+                    # populate with sample accessions
+                    J[field] = []
+                    if ':' in D['sampleEgaAccessionsId']:
+                        for accession in D['sampleEgaAccessionsId'].split(':'):
+                            J[field].append({"value": accession.strip(), "label":""})
+                    else:
+                        J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
     return J                
+
 
 # use this function to extract ega accessions from metadata database
 def ExtractAccessions(CredentialFile, DataBase, Box, Table):
@@ -484,10 +475,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                     D[Header[j]] = i[j]
                 L.append(D)
             # create object-formatted jsons from each dict 
-            if Object == 'sample':
-                Jsons = [FormatSampleJson(D) for D in L]
-            elif Object == 'analysis':
-                Jsons = [FormatAnalysisJson(D) for D in L]
+            Jsons = [FormatJson(D, Object) for D in L]
             # add json back to table and update status
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
@@ -964,6 +952,142 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
                     conn.commit()                                
                     conn.close()              
     
+##############################################
+#
+#
+#
+#
+## use this function to upload the files
+#def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max):
+#    '''
+#    (file, str, str, str, int) -> None
+#    Take the file with credentials to connect to the database and to EGA,
+#    and upload files for the Nth first aliases in upload status and update status to uploaded
+#    '''
+#       
+#    # check that Analysis table exists
+#    Tables = ListTables(CredentialFile, DataBase)
+#    if Table in Tables:
+#        
+#        # connect to database
+#        conn = EstablishConnection(CredentialFile, DataBase)
+#        cur = conn.cursor()
+#        # extract files for alias in upload mode for given box
+#        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+#        # check that some alias are in upload mode
+#        Data = cur.fetchall()
+#        # close connection
+#        conn.close()
+#        
+#        if len(Data) != 0:
+#            # upload only Max objects in group of 10 aliases/objects: (the first Nth numbers of objects)
+#            Data = Data[:int(Max)]
+#            # upload 10 objects at once using 10 threads
+#            T = 10
+#            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
+#            for i in range(0, len(Data), T):
+#                # splice Data to get a group of <=10 objects/aliases
+#                K = Data[i: i+T]
+#                # loop over tuples in sublist
+#                L = []
+#                for j in K:
+#                    D = {}
+#                    assert j[0] not in D
+#                    files = j[1].replace("'", "\"")
+#                    D[j[0]] = {'files': json.loads(files), 'StagePath': j[2], 'FileDirectory': j[3]}
+#                    L.append(D)         
+#                # create a list of argument lists
+#                Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
+#                # use multithreading for uploading 
+#                with ThreadPoolExecutor(T) as ex:
+#                    ex.map(UploadAliasAnalyses, Arguments)
+#                    
+##            L = []
+##            for i in Data:
+##                D = {}
+##                assert i[0] not in D
+##                files = i[1].replace("'", "\"")
+##                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
+##                L.append(D)
+##            # create a list of argument lists
+##            Arguments = [[CredentialFile, DataBase, Table, Box, D] for D in L]
+##            # use multithreading for uploading 
+##            with ThreadPoolExecutor(len(Data)) as ex:
+##                results = ex.map(UploadAliasAnalyses, Arguments)
+#        
+#            
+#
+## use this function to upload the files
+#def UploadAliasAnalyses(L):
+#    '''
+#    (list) -> None
+#    Take a list of parameters including the file with Credentials to connect to
+#    the Database and to EGA, and upload all files for agiven alias/object
+#    and update status to uploaded when upload is complete
+#    '''
+#    
+#    # extract variables from list
+#    CredentialFile, DataBase, Table, Box, D = L[0], L[1], L[2], L[3], L[4]
+#    
+#    # parse the crdential file, get username and password for given box
+#    Credentials = ExtractCredentials(CredentialFile)
+#    if Box == 'ega-box-12':
+#        MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
+#    elif Box == 'ega-box-137':
+#        MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+#    
+#    # get alias
+#    assert len(list(D.keys())) == 1
+#    alias = list(D.keys())[0]
+#    # create stage directory if doesn't exist
+#    StagePath = D[alias]['StagePath']
+#    assert StagePath != '/'
+#    subprocess.call("lftp -u {0},{1} -e \" set ftp:ssl-allow false; mkdir -p {2}; bye; \" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True)
+#    FileDir = D[alias]['FileDirectory']
+#                
+#    # set up a boolean to True, change to False if condition is not met,
+#    # and check that it's True before updating status for that alias
+#    UpdateStatus = True
+#                
+#    # get the files, check that the files are in the directory, and upload
+#    for filePath in D[alias]['files']:
+#        # get filename
+#        fileName = os.path.basename(filePath)
+#        assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
+#        encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
+#        originalMd5 = os.path.join(FileDir, fileName + '.md5')
+#        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+#        if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
+#            # upload files
+#            subprocess.call("lftp -u {0},{1} -e \"set ftp:ssl-allow false; mput {2} {3} {4} -O {5}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, encryptedFile, encryptedMd5, originalMd5, StagePath), shell=True)
+#            
+#            # check if file is uploaded
+#            uploaded_files = subprocess.check_output("lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk".format(UserName, MyPassword, StagePath), shell=True).decode('utf-8').rstrip().split('\n')
+#            # make a list of uploaded files          
+#            for i in range(len(uploaded_files)):
+#                uploaded_files[i] = uploaded_files[i].split()[-1]
+#            # set boolean to False if any file is not uploaded
+#            if os.path.basename(encryptedFile) not in uploaded_files:
+#                UpdateStatus = False
+#            if os.path.basename(encryptedMd5) not in uploaded_files:
+#                UpdateStatus = False
+#            if os.path.basename(originalMd5) not in uploaded_files:
+#                UpdateStatus = False
+#        else:
+#            print('Cannot upload {0}, {1} and {2}. At least one file does not exist'.format(fileName + '.gpg', fileName + '.md5', fileName + '.gpg.md5'))
+#            # set boolean to False if any file is not uploaded
+#            UpdateStatus = False
+#            # update status if all files for that alias have been uploaded
+#    if UpdateStatus == True:
+#        # connect to database, updatestatus and close connection
+#        conn = EstablishConnection(CredentialFile, DataBase)
+#        cur = conn.cursor()
+#        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box)) 
+#        conn.commit()                                
+#        conn.close()            
+#
+##################################################
+
 # use this function to format the error Messages prior saving into db table
 def CleanUpError(errorMessages):
     '''
@@ -990,9 +1114,9 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Alias, Box):
     '''
-    (str, str, str, str) -> None
+    (str, str, str, str, str) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
     files corresponding to the given Alias and Box in Table and delete them
     '''
@@ -1000,35 +1124,29 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
     # connect to database
     conn = EstablishConnection(CredentialFile, Database)
     cur = conn.cursor()
-    # get the directory, files for all alias with SUBMITTED status
-    cur.execute('SELECT {0}.alias, {0}.FileDirectory, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    # build a dict {alias: {filedir: val, files: val}
-    Data = cur.fetchall()
+    # get the directory with encrypted and md5 files
+    cur.execute('SELECT {0}.FileDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    FileDirectory = [i[0] for i in cur][0]
+    # get the file names
+    cur.execute('SELECT {0}.files FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    files = json.loads(str([i[0] for i in cur][0]).replace("'", "\""))
     conn.close()
-    if len(Data) != 0:
-        Submitted = {}
-        for i in Data:
-            alias, FileDir, files = i[0], i[1], json.loads(str(i[2]).replace("'", "\""))
-            Submitted[alias] = {'FileDir': FileDir, 'files': files}
-        # loop over alias, make a list of all files under this alias
-        for alias in Submitted:
-            files = Submitted[alias]['files']
-            FileDirectory = Submitted[alias]['FileDir']
-            files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
-            for i in files:
-                a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                print(i, os.path.isfile(i))
-                print(os.path.join(a), os.path.isfile(a))
-                print(os.path.join(b), os.path.isfile(b))
-           
+    files = [files[i]['encryptedName'] for i in files]
+    for i in files:
+        a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
+        print(os.path.join(FileDirectory, i), os.path.isfile(os.path.join(FileDirectory, i)))
+        print(os.path.join(FileDirectory, a), os.path.isfile(os.path.join(FileDirectory, a)))
+        print(os.path.join(FileDirectory, b), os.path.isfile(os.path.join(FileDirectory, b)))
+
 
 # use this function to register objects
-def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
+def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal, **OptionalParameter):
     '''
-    (file, str, str, str, str, str) -> None
+    (file, str, str, str, str, str, dict) -> None
     Take the file with credentials to connect to the submission database, 
     extract the json for each Object in Table and register the objects
-    in EGA BOX using the submission Portal. 
+    in EGA BOX using the submission Portal. Delete encrypted and md5 files
+    if object analysis object is successfully submitted and if OptionalParameter is True
     '''
     
     # pull json for objects with ready Status for given box
@@ -1129,6 +1247,15 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         conn.commit()
                                         conn.close()
                                         
+                                        # check if object is analyses
+                                        if Object == 'analyses':
+                                            # check if encrypted and md5sums need to be deleted
+                                            if 'Remove' in OptionalParameter:
+                                                Remove = OptionalParameter['Remove']
+                                            else:
+                                                Remove = False
+                                            if Remove == True:
+                                                RemoveFilesAfterSubmission(CredentialFile, Database, Table, J["alias"], Box)
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
@@ -1440,13 +1567,7 @@ def SubmitAnalyses(args):
         #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
-
-        ## remove files with submitted status
-#        if args.remove == True:
-#            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
-            
-
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal, 'Remove' = args.remove)
 
     
 if __name__ == '__main__':
