@@ -256,10 +256,10 @@ def ParseAnalysisInputTable(Table):
 
 
 # use this function to parse the AnalysisAttributes input file
-def ParseAnalysesAttributesInputTable(Table):
+def ParseAnalysesAccessoryTables(Table, TableType):
     '''
-    (file) -> dict
-    Read Table and returns of key: value pairs
+    (file, str) -> dict
+    Read Table and returns of key: value pairs for Projects or Attributes Tables
     '''
     
     infile = open(Table)
@@ -268,7 +268,11 @@ def ParseAnalysesAttributesInputTable(Table):
     # create a dict {key: value}
     D = {}
     # check that required fields are present
-    Expected = ['title', 'description', 'reference']
+    if TableType == 'Attributes':
+        Expected = ['title', 'description', 'reference']
+    elif TableType == 'Projects':
+        Expected = ['ProjectId', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+                    'experimentTypeId', 'StagePath'] 
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
     if len(Missing) != 0:
@@ -300,7 +304,7 @@ def ParseAnalysesAttributesInputTable(Table):
     infile.close()
     return D
 
- 
+
 # use this function convert data into data to be instered in a database table
 def FormatData(L):
     '''
