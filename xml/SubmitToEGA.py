@@ -321,7 +321,7 @@ def FormatData(L):
 
 
 # use this function to get the enumerations from EGA
-def GrabEGAEnums(Enumeration):
+def GrabEgaEnums(Enumeration):
     '''
     (str) -> dict
     Returns a dict with tag: value pairs for a given enumeration
