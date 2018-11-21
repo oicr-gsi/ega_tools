@@ -93,6 +93,46 @@ def ListTables(CredentialFile, DataBase):
     conn.close()
     return Tables
 
+# use this function to to generate a working directory to save the encrypted and md5sums 
+def GetWorkingDirectory(CredentialFile, DataBase, Table, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
+    '''
+    (str, str, str, str, str, str) -> str
+    Returns a working directory where to save the encrypted and md5sum files
+    for a given Alias and Box in Table using the credentials for DataBase
+    '''
+    
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    # get the title project and the attributes for that alias
+    cur.execute('SELECT {0}.ProjectId, {0}.attributes FROM {0} WHERE {0}.alias=\"{1}\" and {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    Data = cur.fetchall()
+    if len(Data) != 0:
+        Data = Data[0]     
+        # get project title
+        a, b = Data[0], Data[1]
+        if a != '' and a != 'NULL':
+            title = a.replace(' ', '_')
+            # add title to WorkingDir    
+            WorkingDir = os.path.join(WorkingDir, title)
+        if b != '' and b != 'NULL':
+            # get attributes
+            b = b.split(';')
+            # create a dict to store attributes
+            attributes = {}
+            for i in b:
+                i = json.loads(i)
+                attributes[i['tag'].lower()] = i['value']
+            if 'aligner' in attributes:
+                WorkingDir = os.path.join(WorkingDir, attributes['aligner'])
+                if 'aligner_ver' in attributes:
+                    WorkingDir = os.path.join(WorkingDir, attributes['aligner_ver'])
+            if 'indel_realigner' in attributes:
+                WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner'])
+                if 'aligner_ver' in attributes:
+                    WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner_ver'])
+    return WorkingDir                
+
 
 # use this function to parse the input sample table
 def ParseSampleInputTable(Table):
