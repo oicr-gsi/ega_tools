@@ -327,7 +327,7 @@ def GrabEgaEnums(Enumeration):
     Returns a dict with tag: value pairs for a given enumeration
     '''
     
-    # create a dict to store the enumeration info {tag: value}
+    # create a dict to store the enumeration info {value: tag}
     Enum = {}
     # connect to the api, retrieve the information for the given enumeration
     response = requests.get(Enumeration)
@@ -335,8 +335,8 @@ def GrabEgaEnums(Enumeration):
     if response.status_code == requests.codes.ok:
         # loop over dict in list
         for i in response.json()['response']['result']:
-            assert i['tag'] not in Enum
-            Enum[i['tag']] = i['value']
+            assert i['value'] not in Enum
+            Enum[i['value']] = i['tag']
     return Enum
 
 
@@ -392,6 +392,11 @@ def FormatAnalysisJson(D):
     Precondition: strings in D have double-quotes
     '''
     
+    # get the enumerations
+    ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
+    AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
+    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
+    
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
     
@@ -410,7 +415,9 @@ def FormatAnalysisJson(D):
                     J["alias"] = D["alias"]
                     # return dict with alias only if required fields are missing
                     return J
+                # other fields can be missing, either as empty list or string
                 else:
+                    # chromosomeReferences is hard-coded as empty list
                     if field == "chromosomeReferences":
                         J[field] = []
                     else:
@@ -425,10 +432,15 @@ def FormatAnalysisJson(D):
                     # loop over file name
                     for filePath in files:
                         # create a dict to store file info
-                        if files[filePath]["fileTypeId"].lower() == 'bam':
-                            fileTypeId = '1'
-                        elif files[filePath]["fileTypeId"].lower() == 'bai':
-                            fileTypeId = '2'
+                        # check that fileTypeId is valid
+                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
+                            # cannot obtain fileTypeId. erase dict and add alias
+                            J = {}
+                            J["alias"] = D["alias"]
+                            # return dict with alias only if required fields are missing
+                            return J
+                        else:
+                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -436,29 +448,34 @@ def FormatAnalysisJson(D):
                              "fileTypeId": fileTypeId}
                         J[field].append(d)
                 elif field == 'attributes':
-                    assert D[field] != 'NULL'
-                    J[field] = []
                     # ensure strings are double-quoted
                     attributes = D[field].replace("'", "\"")
                     # convert string to dict
-                    if ';' in attributes:
-                        # loop over all attributes
-                        attributes = attributes.split(';')
-                        for i in range(len(attributes)):
-                            attributes[i] = attributes[i].strip().replace("'", "\"")
-                            J[field].append(json.loads(attributes[i]))
+                    # loop over all attributes
+                    attributes = attributes.split(';')
+                    J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
+                elif field == "experimentTypeId":
+                    # check that experimentTypeId is valid
+                    if D[field] not in ExperimentTypes:
+                        # cannot obtain experimentTypeId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
                     else:
-                        J[field].append(json.loads(attributes))
+                        J[field] = [ExperimentTypes[D[field]]]
+                elif field == "analysisTypeId":
+                    # check that analysisTypeId is valid
+                    if D[field] not in AnalysisTypes:
+                        # cannot obtain analysisTypeId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = AnalysisTypes[D[field]]
                 else:
                     J[field] = D[field]
-        
-            
-        # use tags for experimentId and analysisTypeId
-        if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
-            J[field] = ["0"] 
-        if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
-            J[field] = "0"
-            
         else:
             if field == 'sampleReferences':
                 # populate with sample accessions
