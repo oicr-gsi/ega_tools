@@ -196,7 +196,7 @@ def ParseAnalysisInputTable(Table):
     '''
     (file) -> list
     Take a tab-delimited file and return a list of dictionaries, each dictionary
-    storing the information for a uniqe analysis object
+    storing the information for a unique analysis object
     Preconditions: Required fields must be present or returned list is empty,
     and missing entries are not permitted (e.g. can be '', NA)
     '''
@@ -219,22 +219,27 @@ def ParseAnalysisInputTable(Table):
             # missing values are not permitted
             assert len(Header) == len(S), 'missing values should be "" or NA'
             # extract variables from line
-            if len(Header) == 3:
-                # file name is not supplied, use filename in filepath
-                L = ['alias', 'sampleAlias', 'filePath']
-                alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+            if 'fileName' not in Header:
+                L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
+                alias, sampleAlias, filePath, analysisDate = [S[Header.find(L[i])] for i in range(len(L))]
+                # file name is not supplied, use filename in filepath             
                 assert filePath != '/' and filePath[-1] != '/'
                 fileName = os.path.basename(filePath)                
-            elif len(Header) == 4:
+            else:
                 # file name is supplied, use filename
-                L = ['alias', 'sampleAlias', 'filePath', 'fileName']
-                alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
+                L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
+                alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.find(L[i])] for i in range(len(L))]
+            # check if analysisDate is provided in the table
+            if analysisDate == -1:
+                # not provided, set to empty string
+                analysisDate = ''
             # check if alias already recorded ( > 1 files for this alias)
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
                 D[alias] = {}
                 # record alias
                 D[alias]['alias'] = alias
+                D[alias]['analysisDate'] = analysisDate
                 # record sampleAlias. multiple sample alias are allowed, eg for VCFs
                 D[alias]['sampleAlias'] = [sampleAlias]
                 D[alias]['files'] = {}
@@ -246,7 +251,7 @@ def ParseAnalysisInputTable(Table):
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
-                       
+                     
     infile.close()
 
     # create list of dicts to store the info under a same alias
