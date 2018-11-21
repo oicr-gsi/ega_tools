@@ -255,14 +255,14 @@ def ParseAnalysisInputTable(Table):
     return L        
 
 
-# use this function to parse the analysis config file
-def ParseAnalysisConfig(Config):
+# use this function to parse the AnalysisAttributes input file
+def ParseAnalysesAttributesInputTable(Table):
     '''
     (file) -> dict
-    Take a config file and return a dictionary of key: value pairs
+    Read Table and returns of key: value pairs
     '''
     
-    infile = open(Config)
+    infile = open(Table)
     Content = infile.read().rstrip().split('\n')
     infile.close()
     # create a dict {key: value}
@@ -275,29 +275,28 @@ def ParseAnalysisConfig(Config):
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
         for S in Content:
-            if ':' in S:
-                S = list(map(lambda x: x.strip(), S.split(':')))
-                if S[0] not in ['attribute', 'unit']:
-                    assert S[0] in Expected and len(S) == 2
-                    D[S[0]] = S[1]
-                else:
-                    assert len(S) == 3
-                    if 'attributes' not in D:
-                        D['attributes'] = {}
-                    if S[1] not in D['attributes']:
-                        D['attributes'][S[1]] = {}    
-                    if S[0] == 'attribute':
-                        if 'tag' not in D['attributes'][S[1]]:
-                            D['attributes'][S[1]]['tag'] = S[1]
-                        else:
-                            assert D['attributes'][S[1]]['tag'] == S[1]
-                        D['attributes'][S[1]]['value'] = S[2]
-                    elif S[0] == 'unit':
-                        if 'tag' not in D['attributes'][S[1]]:
-                            D['attributes'][S[1]]['tag'] = S[1]
-                        else:
-                            assert D['attributes'][S[1]]['tag'] == S[1]
-                        D['attributes'][S[1]]['unit'] = S[2]
+            S = list(map(lambda x: x.strip(), S.split(':')))
+            if S[0] not in ['attributes', 'units']:
+                assert len(S) == 2
+                D[S[0]] = S[1]
+            else:
+                assert len(S) == 3
+                if 'attributes' not in D:
+                    D['attributes'] = {}
+                if S[1] not in D['attributes']:
+                    D['attributes'][S[1]] = {}    
+                if S[0] == 'attribute':
+                    if 'tag' not in D['attributes'][S[1]]:
+                        D['attributes'][S[1]]['tag'] = S[1]
+                    else:
+                        assert D['attributes'][S[1]]['tag'] == S[1]
+                    D['attributes'][S[1]]['value'] = S[2]
+                elif S[0] == 'unit':
+                    if 'tag' not in D['attributes'][S[1]]:
+                        D['attributes'][S[1]]['tag'] = S[1]
+                    else:
+                        assert D['attributes'][S[1]]['tag'] == S[1]
+                    D['attributes'][S[1]]['unit'] = S[2]
     infile.close()
     return D
 
