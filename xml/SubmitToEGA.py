@@ -1645,7 +1645,7 @@ if __name__ == '__main__':
     AddSamples.set_defaults(func=AddSampleInfo)
 
     # add analyses to Analyses Table
-    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information')
+    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information to Analyses Table')
     AddAnalyses.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     AddAnalyses.add_argument('-t', '--Table', dest='table', default='Analyses', help='Analyses table. Default is Analyses')
     AddAnalyses.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
@@ -1665,6 +1665,15 @@ if __name__ == '__main__':
 #    AddAnalyses.add_argument('--AnalysisType', dest='analysistype', choices=['Reference Alignment (BAM)', 'Sequence variation (VCF)'], help='Analysis type', required=True)
     AddAnalyses.set_defaults(func=AddAnalysesInfo)
 
+
+    # add analyses to Analyses Table
+    AddAttributesProjects = subparsers.add_parser('AddAttributesProjects', help ='Add information to AnalysesAttributes or AnalysesProjects Tables')
+    AddAttributesProjects.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddAttributesProjects.add_argument('-t', '--Table', dest='table', choices = ['AnalysesAttributes', 'AnalysesProjects'], help='Database Tables AnalysesAttributes or AnalysesProjects', required=True)
+    AddAttributesProjects.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    AddAttributesProjects.add_argument('-d', '--DataType', dest='datatype', choices=['Projects', 'Attributes'], help='Add Projects or Attributes infor to db')
+    AddAnalyses.set_defaults(func=AddAnalysesAttributes)
+    
     # submit samples to EGA
     SampleSubmission = subparsers.add_parser('SampleSubmission', help ='Submit samples to EGA')
     SampleSubmission.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
