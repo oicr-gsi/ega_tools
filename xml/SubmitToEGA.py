@@ -1342,16 +1342,17 @@ def AddSampleInfo(args):
     
     conn.close()
 
-# use this function to add data to AnalysesAttributes table
+# use this function to add data to AnalysesAttributes or AnalysesProjects table
 def AddAnalysesAttributes(args):
     '''
     (list) -> None
     Take a list of command line arguments and add attributes information
-    to the AnalysesAttributes Table of the EGASUBsub database if alias not already present
+    to the AnalysesAttributes or AnalysesProjects Table of the EGASUBsub database
+    if alias not already present
     '''
 
     # parse attribues input table
-    D = ParseAnalysesAccessoryTables(args.table, 'Attributes')
+    D = ParseAnalysesAccessoryTables(args.table, args.datatype)
 
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
@@ -1361,12 +1362,18 @@ def AddAnalysesAttributes(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "title", "description", "genomeId", "attributes", "chromosomeReferences"]
+        if args.datatype == 'Attributes':
+            Fields = ["alias", "title", "description", "genomeId", "attributes", "chromosomeReferences"]
+        elif args.datatype == 'Projects':
+            Fields = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+                    'experimentTypeId', 'StagePath', 'ProjectId', 'StudyTitle', 'StudyDesign'] 
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
-            if Fields[i] == 'chromosomeReferences':
+            if Fields[i] == 'chromosomeReferences' or Fields[i] == 'StudyDesign':
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            elif Fields[i] == 'StagePath':
+                Columns.append(Fields[i] + ' MEDIUMTEXT,')
             elif Fields[i] == "alias":
                 Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
             else:
@@ -1390,7 +1397,11 @@ def AddAnalysesAttributes(args):
     Recorded = [i[0] for i in cur]
     
     # record objects only if input table has been provided with required fields
-    if {"alias", "title", "description", "genomeId"}.intersection(set(D.keys())) == {"alias", "title", "description", "genomeId"}:
+    if args.datatype == 'Attributes':
+        RequiredFields = {"alias", "title", "description", "genomeId"}
+    elif args.datatype == 'Projects':
+        RequiredFields = {'alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId', 'experimentTypeId', 'StagePath'}
+    if RequiredFields.intersection(set(D.keys())) == RequiredFields:
         # get alias
         if D['alias'] in Recorded:
             # skip analysis, already recorded in submission database
@@ -1408,6 +1419,7 @@ def AddAnalysesAttributes(args):
             cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
             conn.commit()
     conn.close()            
+
 
 # use this function to add data to the analysis table
 def AddAnalysesInfo(args):
