@@ -220,19 +220,25 @@ def ParseAnalysisInputTable(Table):
             assert len(Header) == len(S), 'missing values should be "" or NA'
             # extract variables from line
             if 'fileName' not in Header:
-                L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
-                alias, sampleAlias, filePath, analysisDate = [S[Header.find(L[i])] for i in range(len(L))]
+                if 'analysisDate' in Header:
+                    L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
+                    alias, sampleAlias, filePath, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
+                else:
+                    L = ['alias', 'sampleAlias', 'filePath']
+                    alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+                    analysisDate = ''
                 # file name is not supplied, use filename in filepath             
                 assert filePath != '/' and filePath[-1] != '/'
                 fileName = os.path.basename(filePath)                
             else:
                 # file name is supplied, use filename
-                L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
-                alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.find(L[i])] for i in range(len(L))]
-            # check if analysisDate is provided in the table
-            if analysisDate == -1:
-                # not provided, set to empty string
-                analysisDate = ''
+                if 'analysisDate' in Header:
+                    L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
+                    alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
+                else:
+                    L = ['alias', 'sampleAlias', 'filePath', 'fileName']
+                    alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
+                    analysisDate = ''
             # check if alias already recorded ( > 1 files for this alias)
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
