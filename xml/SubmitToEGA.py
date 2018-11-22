@@ -1211,7 +1211,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                     ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']
                                     if ObjectStatus == 'SUBMITTED':
                                         # get the receipt, and the accession id
-                                        Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission['response']['result'][0]['egaAccessionId']
+                                        Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission.json()['response']['result'][0]['egaAccessionId']
                                         # store the date it was submitted
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
                                         # add Receipt, accession and time to table and change status
