@@ -280,9 +280,9 @@ def ParseAnalysesAccessoryTables(Table, TableType):
     D = {}
     # check that required fields are present
     if TableType == 'Attributes':
-        Expected = ['title', 'description', 'reference']
+        Expected = ['alias', 'title', 'description', 'genomeId']
     elif TableType == 'Projects':
-        Expected = ['ProjectId', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+        Expected = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
                     'experimentTypeId', 'StagePath'] 
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
@@ -1342,8 +1342,73 @@ def AddSampleInfo(args):
     
     conn.close()
 
+# use this function to add data to AnalysesAttributes table
+def AddAnalysesAttributes(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add attributes information
+    to the AnalysesAttributes Table of the EGASUBsub database if alias not already present
+    '''
+
+    # parse attribues input table
+    D = ParseAnalysesAccessoryTables(args.table, 'Attributes')
+
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
     
- 
+    if args.table not in Tables:
+        Fields = ["alias", "title", "description", "genomeId", "attributes", "chromosomeReferences"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'chromosomeReferences':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            elif Fields[i] == "alias":
+                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down alias from submission db. alias must be unique
+    cur.execute('SELECT {0}.alias from {0}'.format(args.table))
+    Recorded = [i[0] for i in cur]
+    
+    # record objects only if input table has been provided with required fields
+    if {"alias", "title", "description", "genomeId"}.intersection(set(D.keys())) == {"alias", "title", "description", "genomeId"}:
+        # get alias
+        if D['alias'] in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for in {1}'.format(D['alias'], args.table))
+        else:
+            # format attributes if present
+            if 'attributes' in D:
+                # format attributes
+                attributes = [D['attributes'][j] for j in D['attributes']]
+                attributes = ';'.join(attributes)
+            # list values according to the table column order, use empty string if not present
+            L = [D[field] if field in D else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    conn.close()            
+
 # use this function to add data to the analysis table
 def AddAnalysesInfo(args):
     '''
@@ -1526,17 +1591,17 @@ def SubmitAnalyses(args):
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
+        AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-#        if args.remove == True:
-#            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
+        if args.remove == True:
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
             
 
 
