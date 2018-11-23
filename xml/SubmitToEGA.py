@@ -772,12 +772,15 @@ def CheckRunningJob(JobName):
 # use this function to check that encryption is done
 def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
     '''
-    (file, str, str, str) -> None
+    (file, str, str, str, str, str) -> None
+    Take the file with DataBase credentials, the tables in this db used to pull
+    information to extract the working directory and files in encrypting status
+    and update status to upload and files with md5sums when encrypting is done
     '''        
         
     # check that table exists
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
+    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
