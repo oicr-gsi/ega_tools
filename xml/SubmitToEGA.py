@@ -780,7 +780,7 @@ def CheckRunningJob(JobName):
 
                 
 # use this function to check that encryption is done
-def CheckEncryption(CredentialFile, DataBase, Table, Box):
+def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
     '''
     (file, str, str, str) -> None
     '''        
@@ -792,20 +792,24 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files and encryption job names for status = encrypting
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
         # check that some files are in encrypting mode
         if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
+            # create a list of dict for each alias {alias: {'files':files, 'jonName': jobs, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
                 D = {}
-                assert i[0] not in D
+                alias = i[0]
+                assert alias not in D
+                # get the working directory for that alias
+                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
+                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2], 'jobName': i[3]}
+                D[alias] = {'files': json.loads(files), 'FileDirectory': WorkingDir, 'jobName': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -1579,8 +1583,8 @@ def SubmitAnalyses(args):
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.box)
-
+        CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        
         ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
@@ -1637,16 +1641,7 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
     AddAnalyses.add_argument('-p', '--Project', dest='project', help='Primary key in the AnalysesProjects table', required=True)
     AddAnalyses.add_argument('-a', '--Attributes', dest='attributes', help='Primary key in the AnalysesAttributes table', required=True)
-    
-    
-#    AddAnalyses.add_argument('--StagePath', dest='stagepath', type=RejectRoot, help='Path on the staging server. Root is not allowed', required=True)
-#    AddAnalyses.add_argument('--Center', dest='center', default='OICR_ICGC', help='Name of the Analysis Center')
-#    AddAnalyses.add_argument('--Study', dest='study', default='EGAS00001000900', help='Study accession Id. Default is EGAS00001000900')
-#    AddAnalyses.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
-#    AddAnalyses.add_argument('--Experiment', dest='experiment', default='Whole genome sequencing', choices=['Genotyping by array', 'Exome sequencing', 'Whole genome sequencing', 'transcriptomics'], help='Experiment type. Default is Whole genome sequencing')
-#    AddAnalyses.add_argument('--AnalysisType', dest='analysistype', choices=['Reference Alignment (BAM)', 'Sequence variation (VCF)'], help='Analysis type', required=True)
     AddAnalyses.set_defaults(func=AddAnalysesInfo)
-
 
     # add analyses to Analyses Table
     AddAttributesProjects = subparsers.add_parser('AddAttributesProjects', help ='Add information to AnalysesAttributes or AnalysesProjects Tables')
@@ -1668,13 +1663,15 @@ if __name__ == '__main__':
     # submit analyses to EGA       
     AnalysisSubmission = subparsers.add_parser('AnalysisSubmission', help ='Submit analyses to EGA')
     AnalysisSubmission.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AnalysisSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Samples table. Default is Analyses')
+    AnalysisSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     AnalysisSubmission.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AnalysisSubmission.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
-    AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
+    AnalysisSubmission.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
+    AnalysisSubmission.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+    AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
