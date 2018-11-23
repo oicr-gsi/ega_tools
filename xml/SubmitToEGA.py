@@ -1433,11 +1433,8 @@ def AddAnalysesInfo(args):
     # create a dict {alias: accessions}
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
             
-    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {attributes: key}}}}]
+    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {'filePath': filePath, 'fileName': fileName}}}}]
     Data = ParseAnalysisInputTable(args.input)
-
-    # parse config table 
-    Config = ParseAnalysisConfig(args.config)
 
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
@@ -1447,20 +1444,19 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
-                  "description", "studyId", "analysisCenter",
-                  "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
-                  "genomeId", "chromosomeReferences", "experimentTypeId",
-                  "platform", "ProjectId", "StudyTitle",
-                  "StudyDesign", "Broker", "StagePath", "Json", "submissionStatus",
-                  "errorMessages", "Receipt", "CreationTime", "egaAccessionId", "egaBox", "Status"]
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "files",
+                  "Json", "submissionStatus", "errorMessages", "Receipt",
+                  "CreationTime", "egaAccessionId", "egaBox", "Projects",
+                  "Attributes", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
             if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
-            elif Fields[i] in ['Json', 'Receipt', 'files', 'attributes']:
+            elif Fields[i] in ['Json', 'Receipt', 'files']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
@@ -1482,8 +1478,8 @@ def AddAnalysesInfo(args):
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
     
-    # record objects only if config and input table have been provided with required fields
-    if len(Config) != 0 and len(Data) != 0:
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
         # check that analyses are not already in the database for that box
         for D in Data:
             # get analysis alias
@@ -1496,36 +1492,16 @@ def AddAnalysesInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
-                          ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                          ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
-                    if i[0] not in D[alias]:
-                        if i[0] == 'FileDirectory':
-                            if i[2] == True:
-                                # get the date year_month_day
-                                Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                                i[1] = i[1] + '_' + Time
-                            D[alias][i[0]] = i[1]
-                        else:
-                            D[alias][i[0]] = i[1]
-                # add fields from the config
-                for i in Config:
-                    if i not in D[alias]:
-                        if i == 'reference':
-                            D[alias]['genomeId'] = Config['reference']
-                        elif i == 'experiment':
-                            D[alias]['experimentTypeId'] = Config['experiment']
-                        elif i == 'attributes':
-                            attributes = [Config['attributes'][j] for j in Config['attributes']]
-                            attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
-                            D[alias]['attributes'] = attributes
-                        else:
-                            D[alias][i] = Config[i]
+                for i in [['Projects', args.projects], ['Attributes', args.attributes]]:
+                    D[alias][i[0]] = i[1]
+                # check if analysisDate is provided in input table
+                if 'analysisDate' not in D[alias]:
+                    D[alias]['analysisDate'] = ''
                 # add fileTypeId to each file
                 for filePath in D[alias]['files']:
                     fileTypeId = ''
                     fileTypeId = filePath[-3:]
-                    assert fileTypeId in ['bam', 'bai', 'vcf']
+                    assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf and bai'
                     # check that file type Id is also in the filename
                     assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                     # add fileTypeId to dict
@@ -1548,7 +1524,6 @@ def AddAnalysesInfo(args):
                 Values = FormatData(L)        
                 cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
                 conn.commit()
-            
     conn.close()            
 
 
