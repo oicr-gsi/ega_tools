@@ -766,7 +766,13 @@ def CheckRunningJob(JobName):
     # check if jobs are running
     if len(JobIds) != 0:
         for i in JobIds:
-            JobDetails.append(subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip())
+            # check if the listed job is still running
+            try:
+                content = subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip()
+            # job may have eneded between job_Ids collection and view on running jobs, collect empty string
+            except:
+                content = ''
+            JobDetails.append(content)
     # check f Job name is in JobDetails        
     JobDetails = ','.join(JobDetails)        
     return JobName in JobDetails
