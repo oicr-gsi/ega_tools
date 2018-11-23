@@ -10,14 +10,10 @@ Created on Tue Sep 11 13:37:40 2018
 import json
 import subprocess
 import time
-import xml.etree.ElementTree as ET
 import pymysql
-import sys
 import os
-import time
 import argparse
 import requests
-from concurrent.futures import ThreadPoolExecutor
 
 
 # resource for jaon formatting and api submission
