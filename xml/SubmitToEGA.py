@@ -10,14 +10,10 @@ Created on Tue Sep 11 13:37:40 2018
 import json
 import subprocess
 import time
-import xml.etree.ElementTree as ET
 import pymysql
-import sys
 import os
-import time
 import argparse
 import requests
-from concurrent.futures import ThreadPoolExecutor
 
 
 # resource for jaon formatting and api submission
@@ -94,18 +90,20 @@ def ListTables(CredentialFile, DataBase):
     return Tables
 
 # use this function to to generate a working directory to save the encrypted and md5sums 
-def GetWorkingDirectory(CredentialFile, DataBase, Table, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
+def GetWorkingDirectory(CredentialFile, DataBase, AnalysisTable, ProjectsTable, AttributesTable, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
     '''
     (str, str, str, str, str, str) -> str
     Returns a working directory where to save the encrypted and md5sum files
-    for a given Alias and Box in Table using the credentials for DataBase
+    for a given Alias and Box in Table using the credentials for DataBase:
+    /scratch2/groups/gsi/bis/EGA_Submissions/ProjectAlias/{aligner}/{aligner_ver}/{indel_realigner}/{indel_realigner_ver}
     '''
     
     # connect to db
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     # get the title project and the attributes for that alias
-    cur.execute('SELECT {0}.ProjectId, {0}.attributes FROM {0} WHERE {0}.alias=\"{1}\" and {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    cur.execute('SELECT {0}.alias, {1}.attributes FROM {0} join {1} join {2} WHERE {2}.alias=\"{3}\" and {2}.egaBox=\"{3}\" \
+                and {2}.projects = {0}.alias and {2}.attributes = {1}.attributes'.format(ProjectsTable, AttributesTable, AnalysisTable, Alias, Box))
     Data = cur.fetchall()
     if len(Data) != 0:
         Data = Data[0]     
@@ -129,7 +127,7 @@ def GetWorkingDirectory(CredentialFile, DataBase, Table, Alias, Box, WorkingDir 
                     WorkingDir = os.path.join(WorkingDir, attributes['aligner_ver'])
             if 'indel_realigner' in attributes:
                 WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner'])
-                if 'aligner_ver' in attributes:
+                if 'indel_realigner_ver' in attributes:
                     WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner_ver'])
     return WorkingDir                
 
@@ -196,7 +194,7 @@ def ParseAnalysisInputTable(Table):
     '''
     (file) -> list
     Take a tab-delimited file and return a list of dictionaries, each dictionary
-    storing the information for a uniqe analysis object
+    storing the information for a unique analysis object
     Preconditions: Required fields must be present or returned list is empty,
     and missing entries are not permitted (e.g. can be '', NA)
     '''
@@ -219,22 +217,33 @@ def ParseAnalysisInputTable(Table):
             # missing values are not permitted
             assert len(Header) == len(S), 'missing values should be "" or NA'
             # extract variables from line
-            if len(Header) == 3:
-                # file name is not supplied, use filename in filepath
-                L = ['alias', 'sampleAlias', 'filePath']
-                alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+            if 'fileName' not in Header:
+                if 'analysisDate' in Header:
+                    L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
+                    alias, sampleAlias, filePath, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
+                else:
+                    L = ['alias', 'sampleAlias', 'filePath']
+                    alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+                    analysisDate = ''
+                # file name is not supplied, use filename in filepath             
                 assert filePath != '/' and filePath[-1] != '/'
                 fileName = os.path.basename(filePath)                
-            elif len(Header) == 4:
+            else:
                 # file name is supplied, use filename
-                L = ['alias', 'sampleAlias', 'filePath', 'fileName']
-                alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
+                if 'analysisDate' in Header:
+                    L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
+                    alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
+                else:
+                    L = ['alias', 'sampleAlias', 'filePath', 'fileName']
+                    alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
+                    analysisDate = ''
             # check if alias already recorded ( > 1 files for this alias)
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
                 D[alias] = {}
                 # record alias
                 D[alias]['alias'] = alias
+                D[alias]['analysisDate'] = analysisDate
                 # record sampleAlias. multiple sample alias are allowed, eg for VCFs
                 D[alias]['sampleAlias'] = [sampleAlias]
                 D[alias]['files'] = {}
@@ -246,7 +255,7 @@ def ParseAnalysisInputTable(Table):
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
-                       
+                     
     infile.close()
 
     # create list of dicts to store the info under a same alias
@@ -255,53 +264,56 @@ def ParseAnalysisInputTable(Table):
     return L        
 
 
-# use this function to parse the analysis config file
-def ParseAnalysisConfig(Config):
+# use this function to parse the AnalysisAttributes input file
+def ParseAnalysesAccessoryTables(Table, TableType):
     '''
-    (file) -> dict
-    Take a config file and return a dictionary of key: value pairs
+    (file, str) -> dict
+    Read Table and returns of key: value pairs for Projects or Attributes Tables
     '''
     
-    infile = open(Config)
+    infile = open(Table)
     Content = infile.read().rstrip().split('\n')
     infile.close()
     # create a dict {key: value}
     D = {}
     # check that required fields are present
-    Expected = ['title', 'description', 'reference']
+    if TableType == 'Attributes':
+        Expected = ['alias', 'title', 'description', 'genomeId']
+    elif TableType == 'Projects':
+        Expected = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+                    'experimentTypeId', 'StagePath'] 
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
         for S in Content:
-            if ':' in S:
-                S = list(map(lambda x: x.strip(), S.split(':')))
-                if S[0] not in ['attribute', 'unit']:
-                    assert S[0] in Expected and len(S) == 2
-                    D[S[0]] = S[1]
-                else:
-                    assert len(S) == 3
-                    if 'attributes' not in D:
-                        D['attributes'] = {}
-                    if S[1] not in D['attributes']:
-                        D['attributes'][S[1]] = {}    
-                    if S[0] == 'attribute':
-                        if 'tag' not in D['attributes'][S[1]]:
-                            D['attributes'][S[1]]['tag'] = S[1]
-                        else:
-                            assert D['attributes'][S[1]]['tag'] == S[1]
-                        D['attributes'][S[1]]['value'] = S[2]
-                    elif S[0] == 'unit':
-                        if 'tag' not in D['attributes'][S[1]]:
-                            D['attributes'][S[1]]['tag'] = S[1]
-                        else:
-                            assert D['attributes'][S[1]]['tag'] == S[1]
-                        D['attributes'][S[1]]['unit'] = S[2]
+            S = list(map(lambda x: x.strip(), S.split(':')))
+            if S[0] not in ['attributes', 'units']:
+                assert len(S) == 2
+                D[S[0]] = S[1]
+            else:
+                assert len(S) == 3
+                if 'attributes' not in D:
+                    D['attributes'] = {}
+                if S[1] not in D['attributes']:
+                    D['attributes'][S[1]] = {}    
+                if S[0] == 'attribute':
+                    if 'tag' not in D['attributes'][S[1]]:
+                        D['attributes'][S[1]]['tag'] = S[1]
+                    else:
+                        assert D['attributes'][S[1]]['tag'] == S[1]
+                    D['attributes'][S[1]]['value'] = S[2]
+                elif S[0] == 'unit':
+                    if 'tag' not in D['attributes'][S[1]]:
+                        D['attributes'][S[1]]['tag'] = S[1]
+                    else:
+                        assert D['attributes'][S[1]]['tag'] == S[1]
+                    D['attributes'][S[1]]['unit'] = S[2]
     infile.close()
     return D
 
- 
+
 # use this function convert data into data to be instered in a database table
 def FormatData(L):
     '''
@@ -318,6 +330,26 @@ def FormatData(L):
         else:
             Values.append(str(L[i]))
     return tuple(Values)
+
+
+# use this function to get the enumerations from EGA
+def GrabEgaEnums(Enumeration):
+    '''
+    (str) -> dict
+    Returns a dict with tag: value pairs for a given enumeration
+    '''
+    
+    # create a dict to store the enumeration info {value: tag}
+    Enum = {}
+    # connect to the api, retrieve the information for the given enumeration
+    response = requests.get(Enumeration)
+    # check response code
+    if response.status_code == requests.codes.ok:
+        # loop over dict in list
+        for i in response.json()['response']['result']:
+            assert i['value'] not in Enum
+            Enum[i['value']] = i['tag']
+    return Enum
 
 
 # use this function to format the sample json
@@ -362,6 +394,7 @@ def FormatSampleJson(D):
                     J[field] = D[field]
     return J                
 
+
 # use this function to format the analysis json
 def FormatAnalysisJson(D):
     '''
@@ -370,6 +403,11 @@ def FormatAnalysisJson(D):
     with the expected format or dictionary with the alias only if required fields are missing
     Precondition: strings in D have double-quotes
     '''
+    
+    # get the enumerations
+    ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
+    AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
+    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
     
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
@@ -389,7 +427,9 @@ def FormatAnalysisJson(D):
                     J["alias"] = D["alias"]
                     # return dict with alias only if required fields are missing
                     return J
+                # other fields can be missing, either as empty list or string
                 else:
+                    # chromosomeReferences is hard-coded as empty list
                     if field == "chromosomeReferences":
                         J[field] = []
                     else:
@@ -404,10 +444,15 @@ def FormatAnalysisJson(D):
                     # loop over file name
                     for filePath in files:
                         # create a dict to store file info
-                        if files[filePath]["fileTypeId"].lower() == 'bam':
-                            fileTypeId = '1'
-                        elif files[filePath]["fileTypeId"].lower() == 'bai':
-                            fileTypeId = '2'
+                        # check that fileTypeId is valid
+                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
+                            # cannot obtain fileTypeId. erase dict and add alias
+                            J = {}
+                            J["alias"] = D["alias"]
+                            # return dict with alias only if required fields are missing
+                            return J
+                        else:
+                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -415,29 +460,34 @@ def FormatAnalysisJson(D):
                              "fileTypeId": fileTypeId}
                         J[field].append(d)
                 elif field == 'attributes':
-                    assert D[field] != 'NULL'
-                    J[field] = []
                     # ensure strings are double-quoted
                     attributes = D[field].replace("'", "\"")
                     # convert string to dict
-                    if ';' in attributes:
-                        # loop over all attributes
-                        attributes = attributes.split(';')
-                        for i in range(len(attributes)):
-                            attributes[i] = attributes[i].strip().replace("'", "\"")
-                            J[field].append(json.loads(attributes[i]))
+                    # loop over all attributes
+                    attributes = attributes.split(';')
+                    J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
+                elif field == "experimentTypeId":
+                    # check that experimentTypeId is valid
+                    if D[field] not in ExperimentTypes:
+                        # cannot obtain experimentTypeId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
                     else:
-                        J[field].append(json.loads(attributes))
+                        J[field] = [ExperimentTypes[D[field]]]
+                elif field == "analysisTypeId":
+                    # check that analysisTypeId is valid
+                    if D[field] not in AnalysisTypes:
+                        # cannot obtain analysisTypeId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = AnalysisTypes[D[field]]
                 else:
                     J[field] = D[field]
-        
-            
-        # use tags for experimentId and analysisTypeId
-        if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
-            J[field] = ["0"] 
-        if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
-            J[field] = "0"
-            
         else:
             if field == 'sampleReferences':
                 # populate with sample accessions
@@ -726,7 +776,7 @@ def CheckRunningJob(JobName):
 
                 
 # use this function to check that encryption is done
-def CheckEncryption(CredentialFile, DataBase, Table, Box):
+def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
     '''
     (file, str, str, str) -> None
     '''        
@@ -738,20 +788,24 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files and encryption job names for status = encrypting
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
         # check that some files are in encrypting mode
         if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
+            # create a list of dict for each alias {alias: {'files':files, 'jonName': jobs, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
                 D = {}
-                assert i[0] not in D
+                alias = i[0]
+                assert alias not in D
+                # get the working directory for that alias
+                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
+                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2], 'jobName': i[3]}
+                D[alias] = {'files': json.loads(files), 'FileDirectory': WorkingDir, 'jobName': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -1056,11 +1110,17 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
             FileDirectory = Submitted[alias]['FileDir']
             files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
             for i in files:
+                assert i[-4:] == '.gpg'
                 a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                print(i, os.path.isfile(i))
-                print(os.path.join(a), os.path.isfile(a))
-                print(os.path.join(b), os.path.isfile(b))
-           
+                if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i:
+                    # remove encrypted file
+                    os.system('rm {0}'.format(i))
+                if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a:
+                    # remove md5sum
+                    os.system('rm {0}'.format(a))
+                if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b:
+                    # remove md5sum
+                    os.system('rm {0}'.format(b))
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -1159,7 +1219,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                     ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']
                                     if ObjectStatus == 'SUBMITTED':
                                         # get the receipt, and the accession id
-                                        Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission['response']['result'][0]['egaAccessionId']
+                                        Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission.json()['response']['result'][0]['egaAccessionId']
                                         # store the date it was submitted
                                         Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
                                         # add Receipt, accession and time to table and change status
@@ -1290,8 +1350,85 @@ def AddSampleInfo(args):
     
     conn.close()
 
+# use this function to add data to AnalysesAttributes or AnalysesProjects table
+def AddAnalysesAttributes(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add attributes information
+    to the AnalysesAttributes or AnalysesProjects Table of the EGASUBsub database
+    if alias not already present
+    '''
+
+    # parse attribues input table
+    D = ParseAnalysesAccessoryTables(args.table, args.datatype)
+
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
     
- 
+    if args.table not in Tables:
+        if args.datatype == 'Attributes':
+            Fields = ["alias", "title", "description", "genomeId", "attributes", "chromosomeReferences"]
+        elif args.datatype == 'Projects':
+            Fields = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+                    'experimentTypeId', 'StagePath', 'ProjectId', 'StudyTitle', 'StudyDesign'] 
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'chromosomeReferences' or Fields[i] == 'StudyDesign':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
+            elif Fields[i] == 'StagePath':
+                Columns.append(Fields[i] + ' MEDIUMTEXT,')
+            elif Fields[i] == "alias":
+                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down alias from submission db. alias must be unique
+    cur.execute('SELECT {0}.alias from {0}'.format(args.table))
+    Recorded = [i[0] for i in cur]
+    
+    # record objects only if input table has been provided with required fields
+    if args.datatype == 'Attributes':
+        RequiredFields = {"alias", "title", "description", "genomeId"}
+    elif args.datatype == 'Projects':
+        RequiredFields = {'alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId', 'experimentTypeId', 'StagePath'}
+    if RequiredFields.intersection(set(D.keys())) == RequiredFields:
+        # get alias
+        if D['alias'] in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for in {1}'.format(D['alias'], args.table))
+        else:
+            # format attributes if present
+            if 'attributes' in D:
+                # format attributes
+                attributes = [D['attributes'][j] for j in D['attributes']]
+                attributes = ';'.join(attributes)
+            # list values according to the table column order, use empty string if not present
+            L = [D[field] if field in D else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    conn.close()            
+
+
 # use this function to add data to the analysis table
 def AddAnalysesInfo(args):
     '''
@@ -1304,11 +1441,8 @@ def AddAnalysesInfo(args):
     # create a dict {alias: accessions}
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
             
-    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {attributes: key}}}}]
+    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {'filePath': filePath, 'fileName': fileName}}}}]
     Data = ParseAnalysisInputTable(args.input)
-
-    # parse config table 
-    Config = ParseAnalysisConfig(args.config)
 
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
@@ -1318,20 +1452,19 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
-                  "description", "studyId", "analysisCenter",
-                  "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
-                  "genomeId", "chromosomeReferences", "experimentTypeId",
-                  "platform", "ProjectId", "StudyTitle",
-                  "StudyDesign", "Broker", "StagePath", "Json", "submissionStatus",
-                  "errorMessages", "Receipt", "CreationTime", "egaAccessionId", "egaBox", "Status"]
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "files",
+                  "Json", "submissionStatus", "errorMessages", "Receipt",
+                  "CreationTime", "egaAccessionId", "egaBox", "projects",
+                  "attributes", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
             if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
-            elif Fields[i] in ['Json', 'Receipt', 'files', 'attributes']:
+            elif Fields[i] in ['Json', 'Receipt', 'files']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
@@ -1353,8 +1486,8 @@ def AddAnalysesInfo(args):
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
     
-    # record objects only if config and input table have been provided with required fields
-    if len(Config) != 0 and len(Data) != 0:
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
         # check that analyses are not already in the database for that box
         for D in Data:
             # get analysis alias
@@ -1367,36 +1500,15 @@ def AddAnalysesInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
-                          ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
-                          ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
-                    if i[0] not in D[alias]:
-                        if i[0] == 'FileDirectory':
-                            if i[2] == True:
-                                # get the date year_month_day
-                                Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-                                i[1] = i[1] + '_' + Time
-                            D[alias][i[0]] = i[1]
-                        else:
-                            D[alias][i[0]] = i[1]
-                # add fields from the config
-                for i in Config:
-                    if i not in D[alias]:
-                        if i == 'reference':
-                            D[alias]['genomeId'] = Config['reference']
-                        elif i == 'experiment':
-                            D[alias]['experimentTypeId'] = Config['experiment']
-                        elif i == 'attributes':
-                            attributes = [Config['attributes'][j] for j in Config['attributes']]
-                            attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
-                            D[alias]['attributes'] = attributes
-                        else:
-                            D[alias][i] = Config[i]
+                D[alias]['projects'], D[alias]['attributes'] = args.projects, args.attributes 
+                # check if analysisDate is provided in input table
+                if 'analysisDate' not in D[alias]:
+                    D[alias]['analysisDate'] = ''
                 # add fileTypeId to each file
                 for filePath in D[alias]['files']:
                     fileTypeId = ''
                     fileTypeId = filePath[-3:]
-                    assert fileTypeId in ['bam', 'bai', 'vcf']
+                    assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf and bai'
                     # check that file type Id is also in the filename
                     assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                     # add fileTypeId to dict
@@ -1419,7 +1531,6 @@ def AddAnalysesInfo(args):
                 Values = FormatData(L)        
                 cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
                 conn.commit()
-            
     conn.close()            
 
 
@@ -1468,23 +1579,23 @@ def SubmitAnalyses(args):
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.box)
-
+        CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        
         ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
+        AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-#        if args.remove == True:
-#            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
+        if args.remove == True:
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
             
 
 
@@ -1516,7 +1627,7 @@ if __name__ == '__main__':
     AddSamples.set_defaults(func=AddSampleInfo)
 
     # add analyses to Analyses Table
-    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information')
+    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information to Analyses Table')
     AddAnalyses.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     AddAnalyses.add_argument('-t', '--Table', dest='table', default='Analyses', help='Analyses table. Default is Analyses')
     AddAnalyses.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
@@ -1524,16 +1635,18 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AddAnalyses.add_argument('-f', '--FileDir', dest='filedir', help='Directory with md5sums and encrypted files', required=True)
     AddAnalyses.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
-    AddAnalyses.add_argument('--Time', dest='time', action='store_true', help='Add date to FileDir. Do not add date by default')
-    AddAnalyses.add_argument('--Config', dest='config', help='Path to config file', required=True)
-    AddAnalyses.add_argument('--StagePath', dest='stagepath', type=RejectRoot, help='Path on the staging server. Root is not allowed', required=True)
-    AddAnalyses.add_argument('--Center', dest='center', default='OICR_ICGC', help='Name of the Analysis Center')
-    AddAnalyses.add_argument('--Study', dest='study', default='EGAS00001000900', help='Study accession Id. Default is EGAS00001000900')
-    AddAnalyses.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
-    AddAnalyses.add_argument('--Experiment', dest='experiment', default='Whole genome sequencing', choices=['Genotyping by array', 'Exome sequencing', 'Whole genome sequencing', 'transcriptomics'], help='Experiment type. Default is Whole genome sequencing')
-    AddAnalyses.add_argument('--AnalysisType', dest='analysistype', choices=['Reference Alignment (BAM)', 'Sequence variation (VCF)'], help='Analysis type', required=True)
+    AddAnalyses.add_argument('-p', '--Project', dest='project', help='Primary key in the AnalysesProjects table', required=True)
+    AddAnalyses.add_argument('-a', '--Attributes', dest='attributes', help='Primary key in the AnalysesAttributes table', required=True)
     AddAnalyses.set_defaults(func=AddAnalysesInfo)
 
+    # add analyses to Analyses Table
+    AddAttributesProjects = subparsers.add_parser('AddAttributesProjects', help ='Add information to AnalysesAttributes or AnalysesProjects Tables')
+    AddAttributesProjects.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddAttributesProjects.add_argument('-t', '--Table', dest='table', choices = ['AnalysesAttributes', 'AnalysesProjects'], help='Database Tables AnalysesAttributes or AnalysesProjects', required=True)
+    AddAttributesProjects.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    AddAttributesProjects.add_argument('-d', '--DataType', dest='datatype', choices=['Projects', 'Attributes'], help='Add Projects or Attributes infor to db')
+    AddAnalyses.set_defaults(func=AddAnalysesAttributes)
+    
     # submit samples to EGA
     SampleSubmission = subparsers.add_parser('SampleSubmission', help ='Submit samples to EGA')
     SampleSubmission.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
@@ -1546,13 +1659,15 @@ if __name__ == '__main__':
     # submit analyses to EGA       
     AnalysisSubmission = subparsers.add_parser('AnalysisSubmission', help ='Submit analyses to EGA')
     AnalysisSubmission.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AnalysisSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Samples table. Default is Analyses')
+    AnalysisSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     AnalysisSubmission.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AnalysisSubmission.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
-    AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
+    AnalysisSubmission.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
+    AnalysisSubmission.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+    AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
