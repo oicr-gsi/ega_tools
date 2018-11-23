@@ -613,34 +613,28 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    Data = cur.fetchall()
+    
+    # create a dict {samplealias: [sampleaccessions, analysisalias]}
     Samples = {}
-    for i in cur:
-        # check if multiple samples are recorded
-        if ':' in i[0]:
+    # check if alias are in ready status
+    if len(Data) != 0:
+        for i in cur:
             # make a list of sampleAlias
             sampleAlias = i[0].split(':')
             # make a list of sample accessions
             sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
             # add sample accessions only if all sample aliases have accessions
             if len(sampleAlias) == len(sampleAccessions):
-                Samples[i[0]] = ':'.join(sampleAccessions)
+                Samples[i[0]] = [':'.join(sampleAccessions), i[2]]
             else:
-                Samples[i[0]] = i[1]
-        else:
-            # check if sample has accession
-            if i[0] in Registered:
-                Samples[i[0]] = Registered[i[0]]
-            else:
-                Samples[i[0]] = i[1]
-    if len(Samples) != 0:
+                Samples[i[0]] = [i[1], i[2]]
+        # loop over samples, update if  sample accessions are available  
         for alias in Samples:
-            if Samples[alias] != 'NULL':
+            if Samples[alias][0] != 'NULL':
                 # update sample accessions
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
-                conn.commit()
-                # update status to upload
-                cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
                 conn.commit()
     conn.close()    
 
