@@ -766,7 +766,13 @@ def CheckRunningJob(JobName):
     # check if jobs are running
     if len(JobIds) != 0:
         for i in JobIds:
-            JobDetails.append(subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip())
+            # check if the listed job is still running
+            try:
+                content = subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip()
+            # job may have eneded between job_Ids collection and view on running jobs, collect empty string
+            except:
+                content = ''
+            JobDetails.append(content)
     # check f Job name is in JobDetails        
     JobDetails = ','.join(JobDetails)        
     return JobName in JobDetails
@@ -1084,7 +1090,7 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, AttributesTable, Box):
     '''
     (str, str, str, str) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
@@ -1095,15 +1101,18 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
     conn = EstablishConnection(CredentialFile, Database)
     cur = conn.cursor()
     # get the directory, files for all alias with SUBMITTED status
-    cur.execute('SELECT {0}.alias, {0}.FileDirectory, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     # build a dict {alias: {filedir: val, files: val}
     Data = cur.fetchall()
     conn.close()
     if len(Data) != 0:
         Submitted = {}
         for i in Data:
-            alias, FileDir, files = i[0], i[1], json.loads(str(i[2]).replace("'", "\""))
-            Submitted[alias] = {'FileDir': FileDir, 'files': files}
+            alias, files = i[0], json.loads(str(i[1]).replace("'", "\""))
+            # get the working directory for that alias
+            WorkingDir = GetWorkingDirectory(CredentialFile, Database, Table, ProjectsTable, AttributesTable, alias, Box)
+            assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+            Submitted[alias] = {'FileDir': WorkingDir, 'files': files}
         # loop over alias, make a list of all files under this alias
         for alias in Submitted:
             files = Submitted[alias]['files']
@@ -1381,7 +1390,7 @@ def AddAnalysesAttributes(args):
             if Fields[i] == 'chromosomeReferences' or Fields[i] == 'StudyDesign':
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
             elif Fields[i] == 'StagePath':
-                Columns.append(Fields[i] + ' MEDIUMTEXT,')
+                Columns.append(Fields[i] + ' MEDIUMTEXT NOT NULL,')
             elif Fields[i] == "alias":
                 Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
             else:
@@ -1595,8 +1604,7 @@ def SubmitAnalyses(args):
 
         ## remove files with submitted status
         if args.remove == True:
-            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
-            
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
 
 
     
