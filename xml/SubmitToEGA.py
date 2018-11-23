@@ -613,34 +613,28 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    Data = cur.fetchall()
+    
+    # create a dict {samplealias: [sampleaccessions, analysisalias]}
     Samples = {}
-    for i in cur:
-        # check if multiple samples are recorded
-        if ':' in i[0]:
+    # check if alias are in ready status
+    if len(Data) != 0:
+        for i in cur:
             # make a list of sampleAlias
             sampleAlias = i[0].split(':')
             # make a list of sample accessions
             sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
             # add sample accessions only if all sample aliases have accessions
             if len(sampleAlias) == len(sampleAccessions):
-                Samples[i[0]] = ':'.join(sampleAccessions)
+                Samples[i[0]] = [':'.join(sampleAccessions), i[2]]
             else:
-                Samples[i[0]] = i[1]
-        else:
-            # check if sample has accession
-            if i[0] in Registered:
-                Samples[i[0]] = Registered[i[0]]
-            else:
-                Samples[i[0]] = i[1]
-    if len(Samples) != 0:
+                Samples[i[0]] = [i[1], i[2]]
+        # loop over samples, update if  sample accessions are available  
         for alias in Samples:
-            if Samples[alias] != 'NULL':
+            if Samples[alias][0] != 'NULL':
                 # update sample accessions
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
-                conn.commit()
-                # update status to upload
-                cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
                 conn.commit()
     conn.close()    
 
@@ -695,7 +689,7 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max):
+def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, KeyRing, Queue, Mem, Max):
     '''
     (file, str, str, str, str, str, int, int) -> None
     Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
@@ -705,12 +699,12 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
     
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
+    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files for status = encrypt
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
@@ -723,9 +717,12 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max)
             for i in Data:
                 D = {}
                 assert i[0] not in D
+                # get the working directory for that alias
+                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, i[0], Box)
+                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2]}
+                D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
                 L.append(D)
             # check file directory
             for D in L:
@@ -778,12 +775,15 @@ def CheckRunningJob(JobName):
 # use this function to check that encryption is done
 def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
     '''
-    (file, str, str, str) -> None
+    (file, str, str, str, str, str) -> None
+    Take the file with DataBase credentials, the tables in this db used to pull
+    information to extract the working directory and files in encrypting status
+    and update status to upload and files with md5sums when encrypting is done
     '''        
         
     # check that table exists
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
+    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
@@ -1576,8 +1576,8 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
-        
+        EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+                
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
