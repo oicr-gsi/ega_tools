@@ -94,18 +94,20 @@ def ListTables(CredentialFile, DataBase):
     return Tables
 
 # use this function to to generate a working directory to save the encrypted and md5sums 
-def GetWorkingDirectory(CredentialFile, DataBase, Table, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
+def GetWorkingDirectory(CredentialFile, DataBase, AnalysisTable, ProjectsTable, AttributesTable, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
     '''
     (str, str, str, str, str, str) -> str
     Returns a working directory where to save the encrypted and md5sum files
-    for a given Alias and Box in Table using the credentials for DataBase
+    for a given Alias and Box in Table using the credentials for DataBase:
+    /scratch2/groups/gsi/bis/EGA_Submissions/ProjectAlias/{aligner}/{aligner_ver}/{indel_realigner}/{indel_realigner_ver}
     '''
     
     # connect to db
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     # get the title project and the attributes for that alias
-    cur.execute('SELECT {0}.ProjectId, {0}.attributes FROM {0} WHERE {0}.alias=\"{1}\" and {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+    cur.execute('SELECT {0}.alias, {1}.attributes FROM {0} join {1} join {2} WHERE {2}.alias=\"{3}\" and {2}.egaBox=\"{3}\" \
+                and {2}.projects = {0}.alias and {2}.attributes = {1}.attributes'.format(ProjectsTable, AttributesTable, AnalysisTable, Alias, Box))
     Data = cur.fetchall()
     if len(Data) != 0:
         Data = Data[0]     
@@ -129,7 +131,7 @@ def GetWorkingDirectory(CredentialFile, DataBase, Table, Alias, Box, WorkingDir 
                     WorkingDir = os.path.join(WorkingDir, attributes['aligner_ver'])
             if 'indel_realigner' in attributes:
                 WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner'])
-                if 'aligner_ver' in attributes:
+                if 'indel_realigner_ver' in attributes:
                     WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner_ver'])
     return WorkingDir                
 
@@ -1120,25 +1122,6 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
                     # remove md5sum
                     os.system('rm {0}'.format(b))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     '''
@@ -1471,8 +1454,8 @@ def AddAnalysesInfo(args):
     if args.table not in Tables:
         Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "files",
                   "Json", "submissionStatus", "errorMessages", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "Projects",
-                  "Attributes", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "projects",
+                  "attributes", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -1517,8 +1500,7 @@ def AddAnalysesInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                for i in [['Projects', args.projects], ['Attributes', args.attributes]]:
-                    D[alias][i[0]] = i[1]
+                D[alias]['projects'], D[alias]['attributes'] = args.projects, args.attributes 
                 # check if analysisDate is provided in input table
                 if 'analysisDate' not in D[alias]:
                     D[alias]['analysisDate'] = ''
