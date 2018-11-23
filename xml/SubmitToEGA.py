@@ -1108,11 +1108,36 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
             FileDirectory = Submitted[alias]['FileDir']
             files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
             for i in files:
+                assert i[-4:] == '.gpg'
                 a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                print(i, os.path.isfile(i))
-                print(os.path.join(a), os.path.isfile(a))
-                print(os.path.join(b), os.path.isfile(b))
-           
+                if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i:
+                    # remove encrypted file
+                    os.system('rm {0}'.format(i))
+                if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a:
+                    # remove md5sum
+                    os.system('rm {0}'.format(a))
+                if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b:
+                    # remove md5sum
+                    os.system('rm {0}'.format(b))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
