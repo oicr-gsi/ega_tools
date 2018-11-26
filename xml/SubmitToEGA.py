@@ -534,7 +534,7 @@ def RejectRoot(S):
 
 
 # use this function to form jsons and store to submission db
-def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
+def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Object, Box):
     '''
     (file, str, str, str) -> None
     Take the file with credentials to connect to DataBase and update the Table
@@ -555,10 +555,14 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
               
         # pull data for objects with ready Status for sample and uploaded Status for analyses
         if Object == 'sample':
-            Status = 'ready'
+            cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         elif Object == 'analysis':
-            Status = 'uploaded'
-        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
+            cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
+                        {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, \
+                        {2}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, {2}.platform \
+                        FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
+                        AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
+
         # get column headers
         Header = [i[0] for i in cur.description]
         # extract all information 
@@ -769,7 +773,7 @@ def CheckRunningJob(JobName):
             # check if the listed job is still running
             try:
                 content = subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip()
-            # job may have eneded between job_Ids collection and view on running jobs, collect empty string
+            # job may have ended between job_Ids collection and view on running jobs, collect empty string
             except:
                 content = ''
             JobDetails.append(content)
@@ -1461,8 +1465,8 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "files",
-                  "Json", "submissionStatus", "errorMessages", "Receipt",
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "analysisDate",
+                  "files", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "projects",
                   "attributes", "Status"]
         # format colums with datatype
@@ -1597,7 +1601,7 @@ def SubmitAnalyses(args):
         CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, 'analysis', args.box)
 
         ## submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
