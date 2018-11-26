@@ -421,7 +421,7 @@ def FormatAnalysisJson(D):
             if D[field] == 'NULL':
                 # some fields are required, return empty dict if field is empty
                 if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                             "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
+                             "analysisTypeId", "files", "genomeId", "experimentTypeId"]:
                     # erase dict and add alias
                     J = {}
                     J["alias"] = D["alias"]
@@ -430,7 +430,7 @@ def FormatAnalysisJson(D):
                 # other fields can be missing, either as empty list or string
                 else:
                     # chromosomeReferences is hard-coded as empty list
-                    if field == "chromosomeReferences":
+                    if field == "chromosomeReferences" or field == "attributes":
                         J[field] = []
                     else:
                         J[field] = ""
