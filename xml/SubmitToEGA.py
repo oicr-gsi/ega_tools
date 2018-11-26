@@ -532,9 +532,8 @@ def RejectRoot(S):
         raise ValueError('The root is not allowed for the staging server')
     return S
 
-
 # use this function to form jsons and store to submission db
-def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
+def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
     '''
     (file, str, str, str) -> None
     Take the file with credentials to connect to DataBase and update the Table
@@ -549,16 +548,11 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     
-    if args.table in Tables:
-       
+    if Table in Tables:
         ## form json, add to table and update status -> submit
-              
         # pull data for objects with ready Status for sample and uploaded Status for analyses
-        if Object == 'sample':
-            Status = 'ready'
-        elif Object == 'analysis':
-            Status = 'uploaded'
-        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
+        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+
         # get column headers
         Header = [i[0] for i in cur.description]
         # extract all information 
@@ -574,15 +568,12 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
                     D[Header[j]] = i[j]
                 L.append(D)
             # create object-formatted jsons from each dict 
-            if Object == 'sample':
-                Jsons = [FormatSampleJson(D) for D in L]
-            elif Object == 'analysis':
-                Jsons = [FormatAnalysisJson(D) for D in L]
+            Jsons = [FormatSampleJson(D) for D in L]
             # add json back to table and update status
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
                 if len(D) == 1:
-                    print('cannot form json for {0} {1}, required field(s) missing'.format(Object, D['alias']))
+                    print('cannot form json for {0}, required field(s) missing'.format(D['alias']))
                 else:
                     # add json back in table and update status
                     alias = D['alias']
@@ -596,6 +587,64 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
         print('Table {0} does not exist')
     conn.close()
 
+    
+# use this function to form jsons and store to submission db
+def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box):
+    '''
+    (str, str, str, str, str, str) -> None
+    Form a json for Analyses Objects in the given Box and add it to Table by
+    quering required information from the Analysis, Projects and Attributes Tables 
+    using the file with credentials to connect to Database update the analysis
+    status if json is formed correctly
+    '''
+    
+    # check if Sample table exists
+    Tables = ListTables(CredentialFile, DataBase)
+
+    # connect to the database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    
+    if Table in Tables and AttributesTable in Tables and ProjectsTable in Tables:
+        ## form json, add to table and update status -> submit
+        cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
+                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, \
+                    {2}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, {2}.platform \
+                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
+                    AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
+
+        # get column headers
+        Header = [i[0] for i in cur.description]
+        # extract all information 
+        Data = cur.fetchall()
+        # check that samples are in ready mode
+        if len(Data) != 0:
+            # create a list of dicts storing the object info
+            L = []
+            for i in Data:
+                D = {}
+                assert len(i) == len(Header)
+                for j in range(len(i)):
+                    D[Header[j]] = i[j]
+                L.append(D)
+            # create object-formatted jsons from each dict 
+            Jsons = [FormatAnalysisJson(D) for D in L]
+            # add json back to table and update status
+            for D in Jsons:
+                # check if json is correctly formed (ie. required fields are present)
+                if len(D) == 1:
+                    print('cannot form analysis json for {0}, required field(s) missing'.format(D['alias']))
+                else:
+                    # add json back in table and update status
+                    alias = D['alias']
+                    # string need to be in double quote
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
+                    conn.commit()
+                    # update status to submit
+                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+                    conn.commit()
+    conn.close()
+    
 
 # use this function to add sample accessions to Analysis Table in the submission database
 def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Table):
@@ -769,7 +818,7 @@ def CheckRunningJob(JobName):
             # check if the listed job is still running
             try:
                 content = subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip()
-            # job may have eneded between job_Ids collection and view on running jobs, collect empty string
+            # job may have ended between job_Ids collection and view on running jobs, collect empty string
             except:
                 content = ''
             JobDetails.append(content)
@@ -920,7 +969,7 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem, Interactive):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, Max, Queue, Mem, Interactive):
     '''
     (file, str, str, str, int, str, int, bool) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -940,7 +989,8 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem,
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{2}\" AND {0}.projects = {1}.alias'.format(Table, ProjectsTable, Box))
+        
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -953,9 +1003,13 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem,
             L = []
             for i in Data:
                 D = {}
-                assert i[0] not in D
+                alias = i[0]
+                assert alias not in D
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
+                # get the working directory for that alias
+                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
+                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': WorkingDir}
                 L.append(D)
             # check stage folder, file directory
             for D in L:
@@ -987,7 +1041,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem,
                       
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
+def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive):
     '''
     (str, str, str, str, bool) -> None
     Take the file with db credentials, the table name and box for the Database
@@ -1002,12 +1056,11 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
-        
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, ProjectsTable, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1022,7 +1075,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
                 assert i[0] not in D
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'jobName': i[3]}
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -1461,8 +1514,8 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "files",
-                  "Json", "submissionStatus", "errorMessages", "Receipt",
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "analysisDate",
+                  "files", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "projects",
                   "attributes", "Status"]
         # format colums with datatype
@@ -1563,8 +1616,7 @@ def SubmitSamples(args):
     if args.table in Tables:
         
         ## form json for samples in ready mode, add to table and update status -> submit
-        AddJsonToTable(args.credential, args.database, args.table, 'sample', args.box)
-
+        AddSampleJsonToTable(args.credential, args.database, args.table, args.box)
         ## submit samples with submit status                
         RegisterObjects(args.credential, args.database, args.table, args.box, 'samples', args.portal)
 
@@ -1591,14 +1643,14 @@ def SubmitAnalyses(args):
         CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
-                
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.interactive)
+        
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
-
+        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
+        
         ## submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
