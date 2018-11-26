@@ -1035,11 +1035,17 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
             FileDirectory = Submitted[alias]['FileDir']
             files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
             for i in files:
+                assert i[-4:] == '.gpg'
                 a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                print(i, os.path.isfile(i))
-                print(os.path.join(a), os.path.isfile(a))
-                print(os.path.join(b), os.path.isfile(b))
-           
+                if os.path.isfile(i) and 'scratch2' in i:
+                    # remove encrypted file
+                    os.system('rm {0}'.format(i))
+                if os.path.isfile(a) and 'scratch2' in a:
+                    # remove md5sum
+                    os.system('rm {0}'.format(a))
+                if os.path.isfile(b) and 'scratch2' in b:
+                    # remove md5sum
+                    os.system('rm {0}'.format(b))
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -1447,10 +1453,10 @@ def SubmitAnalyses(args):
         #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        #CheckEncryption(args.credential, args.subdb, args.table, args.box)
+        CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
@@ -1459,11 +1465,11 @@ def SubmitAnalyses(args):
         #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-#        if args.remove == True:
-#            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
+        #if args.remove == True:
+        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
             
 
 
