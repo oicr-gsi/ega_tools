@@ -996,7 +996,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                       
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
+def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive):
     '''
     (str, str, str, str, bool) -> None
     Take the file with db credentials, the table name and box for the Database
@@ -1011,12 +1011,11 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
-        
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, ProjectsTable, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1031,7 +1030,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
                 assert i[0] not in D
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'jobName': i[3]}
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
