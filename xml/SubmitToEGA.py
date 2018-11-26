@@ -1600,8 +1600,8 @@ def SubmitAnalyses(args):
         CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
-                
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.interactive)
+        
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
