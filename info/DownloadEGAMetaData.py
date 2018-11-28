@@ -166,8 +166,6 @@ def ExtractSampleIDsFromAnalysisXml(AnalysisInfo):
         sample_ref = tree.findall('.//SAMPLE_REF')
         # capture all sample IDs in a list, there mayy be more than 1 for vcf files
         accessions = [sample_ref[j].attrib['accession'] for j in range(len(sample_ref))]
-        for accession in accessions:
-            assert 'ERS' in accession, 'not a valid sample Id'
         assert AnalysisInfo[i]['ebiId'] not in AnalysisIDs
         AnalysisIDs[AnalysisInfo[i]['ebiId']] = accessions
     return AnalysisIDs
@@ -288,15 +286,6 @@ for name in Objects:
     # keep track of dicts
     MetaDataBox137.append(MyJsonData)
 
-# Do some QC, some id fields are not valid EGA object ID, use ebiId instead,
-# check that ebiId is a valid EGA object ID
-IdCode = ['ERP', 'ERR', 'ERS', 'ERX', 'EGAD', 'ERZ']
-for i in range(len(MetaDataBox12)):
-    for item in MetaDataBox12[i]['response']['result']:
-        assert str(item['ebiId']).startswith(IdCode[i])
-for i in range(len(MetaDataBox137)):
-    for item in MetaDataBox137[i]['response']['result']:
-        assert str(item['ebiId']).startswith(IdCode[i])
 print('fetched metadata from the API')
 
 ### 4) capture the fields of interest for each EGA object
@@ -390,6 +379,7 @@ SqlCommand = ['DROP TABLE IF EXISTS Experiments', 'DROP TABLE IF EXISTS Runs', '
               'CREATE TABLE Datasets ({0})'.format(Columns[4]), 'CREATE TABLE Analyses ({0})'.format(Columns[5]),
               'CREATE TABLE Datasets_RunsAnalysis (datasetId VARCHAR(100), ebiId VARCHAR(100), PRIMARY KEY (datasetId, ebiId))',
               'CREATE TABLE Analyses_Samples (analysisId VARCHAR(100), sampleId  VARCHAR(100), PRIMARY KEY (analysisId, sampleId))']
+
 
 # execute each sql command in turn with a new cursor
 for i in range(len(SqlCommand)):
