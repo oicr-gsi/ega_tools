@@ -1314,6 +1314,67 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             print('could not obtain a token')
 
 
+# use this function to check information in Tables    
+def CheckAnalysesInformation(CredentialFile, DataBase, Table):
+    '''
+    (str, str, str) -> None
+    Extract information from DataBase Table using credentials in file and
+    update status of objects to "dead" if required information is missing or
+    non-valid 
+    '''
+
+    # list tables 
+    Tables = ListTables(CredentialFile, DataBase)
+
+    # get file type the enumerations
+    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
+    
+    # check that required exist
+    if Table in Tables:
+        # connect to db
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()      
+        
+        # get required information
+        cur.execute('SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, {0}.attributes, {0}.projects WHERE {0}.Status=\"ready\"'.format(Table))
+        Data = cur.fetchall()
+        if len(Data) != 0:
+            Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+            for i in range(len(Data)):
+                # set up boolean. update if missing values
+                Missing = False
+                # create a dict with all information
+                D = {Keys[j]: Data[i][j] for j in range(len(Keys))}
+                # create an error message
+                Error = []
+                # check if information is valid
+                for key in D:
+                    if D[key] in ['', 'NULL']:
+                        Missing = True
+                        Error.append(key)
+                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
+                if D['egaBox'] not in ['ega-box-12', 'ega-box-137']:
+                    Missing = True
+                    Error.append('egaBox')
+                # check files 
+                files = json.loads(D['files'].replace("'", "\""))
+                for filePath in files:
+                    # check if file is valid
+                    if os.path.isfile(filePath) == False:
+                        Missing = True
+                        Error.append('files')
+                    # check validity of file type
+                    if files[filePath]['fileTypeId'].lower() not in FileTypes:
+                        Missing = True
+                        Error.append('fileTypeId')
+                # check if object has missing/non-valid information
+                if Missing == True:
+                    Error = 'invalid:' + ';'.join(list(set(Error)))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"dead\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], D['egaBox']))
+                    conn.commit()
+    conn.close()                    
+
+
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
@@ -1596,6 +1657,7 @@ def AddAnalysesInfo(args):
     conn.close()            
 
 
+
 # use this function to submit Sample objects
 def SubmitSamples(args):
     
@@ -1633,7 +1695,14 @@ def SubmitAnalyses(args):
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
         
-        ## update Analysis table in submission database with sample accessions and change status ready -> encrypt
+        ## check if required information is present in Analyses Table. change status ready -> dead or keep status ready -> ready
+        ## pre-condition. status must be set to "ready" upon adding table information
+        CheckAnalysesInformation(args.credential, args.subdb, args.table)
+        
+        ## check attributes and projects. change status ready -> set or keep status ready -> ready
+        
+        
+        ## update Analysis table in submission database with sample accessions and change status set -> encrypt
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
