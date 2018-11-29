@@ -237,6 +237,9 @@ def ParseAnalysisInputTable(Table):
                     L = ['alias', 'sampleAlias', 'filePath', 'fileName']
                     alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
                     analysisDate = ''
+                # check if fileName is provided for that alias
+                if fileName in ['', 'NULL', 'NA']:
+                    fileName = os.path.basename(filePath)
             # check if alias already recorded ( > 1 files for this alias)
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
