@@ -281,7 +281,7 @@ def ParseAnalysesAccessoryTables(Table, TableType):
     D = {}
     # check that required fields are present
     if TableType == 'Attributes':
-        Expected = ['alias', 'title', 'description', 'genomeId', 'StagePath', 'platform']
+        Expected = ['alias', 'title', 'description', 'genomeId', 'StagePath']
     elif TableType == 'Projects':
         Expected = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
                     'experimentTypeId'] 
