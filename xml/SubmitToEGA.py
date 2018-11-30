@@ -1605,7 +1605,7 @@ def AddAnalysesAttributesProjects(args):
     '''
 
     # parse attribues input table
-    D = ParseAnalysesAccessoryTables(args.table, args.datatype)
+    D = ParseAnalysesAccessoryTables(args.input, args.datatype)
 
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
