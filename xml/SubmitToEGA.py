@@ -1887,7 +1887,7 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AddAnalyses.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
-    AddAnalyses.add_argument('-p', '--Project', dest='project', help='Primary key in the AnalysesProjects table', required=True)
+    AddAnalyses.add_argument('-p', '--Project', dest='projects', help='Primary key in the AnalysesProjects table', required=True)
     AddAnalyses.add_argument('-a', '--Attributes', dest='attributes', help='Primary key in the AnalysesAttributes table', required=True)
     AddAnalyses.set_defaults(func=AddAnalysesInfo)
 
