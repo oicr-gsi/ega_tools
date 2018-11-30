@@ -281,10 +281,10 @@ def ParseAnalysesAccessoryTables(Table, TableType):
     D = {}
     # check that required fields are present
     if TableType == 'Attributes':
-        Expected = ['alias', 'title', 'description', 'genomeId']
+        Expected = ['alias', 'title', 'description', 'genomeId', 'StagePath']
     elif TableType == 'Projects':
         Expected = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
-                    'experimentTypeId', 'StagePath'] 
+                    'experimentTypeId'] 
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
     if len(Missing) != 0:
@@ -424,7 +424,7 @@ def FormatAnalysisJson(D):
             if D[field] == 'NULL':
                 # some fields are required, return empty dict if field is empty
                 if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                             "analysisTypeId", "files", "genomeId", "experimentTypeId"]:
+                             "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]:
                     # erase dict and add alias
                     J = {}
                     J["alias"] = D["alias"]
@@ -611,8 +611,8 @@ def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Pro
     if Table in Tables and AttributesTable in Tables and ProjectsTable in Tables:
         ## form json, add to table and update status -> submit
         cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
-                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, \
-                    {2}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, {2}.platform \
+                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, \
+                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, {2}.platform \
                     FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
                     AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
 
@@ -992,7 +992,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{2}\" AND {0}.projects = {1}.alias'.format(Table, ProjectsTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{2}\" AND {0}.projects = {1}.alias'.format(Table, AttributesTable, Box))
         
         # check that some alias are in upload mode
         Data = cur.fetchall()
@@ -1043,7 +1043,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                     conn.close()
                       
 # use this function to print a dictionary of directory
-def ListFilesStagingServer(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive):
+def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box, Interactive):
     '''
     (str, str, str, str, str, bool) -> dict
     Return a dictionary of directory: files on the EGA staging server under the 
@@ -1060,7 +1060,7 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, ProjectsTable, Box, 
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, ProjectsTable, Box))
+        cur.execute('SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1440,8 +1440,8 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
         cur = conn.cursor()      
         
         # get required information
-        cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, \
-                    {2}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, \
+        cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath, \
+                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, \
                     FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
                     AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
 
@@ -1616,10 +1616,10 @@ def AddAnalysesAttributes(args):
     
     if args.table not in Tables:
         if args.datatype == 'Attributes':
-            Fields = ["alias", "title", "description", "genomeId", "attributes", "chromosomeReferences"]
+            Fields = ["alias", "title", "description", "genomeId", "attributes", "StagePath", "chromosomeReferences"]
         elif args.datatype == 'Projects':
             Fields = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
-                    'experimentTypeId', 'StagePath', 'ProjectId', 'StudyTitle', 'StudyDesign'] 
+                    'experimentTypeId', 'ProjectId', 'StudyTitle', 'StudyDesign'] 
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -1651,9 +1651,9 @@ def AddAnalysesAttributes(args):
     
     # record objects only if input table has been provided with required fields
     if args.datatype == 'Attributes':
-        RequiredFields = {"alias", "title", "description", "genomeId"}
+        RequiredFields = {"alias", "title", "description", "genomeId", "StagePath"}
     elif args.datatype == 'Projects':
-        RequiredFields = {'alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId', 'experimentTypeId', 'StagePath'}
+        RequiredFields = {'alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId', 'experimentTypeId'}
     if RequiredFields.intersection(set(D.keys())) == RequiredFields:
         # get alias
         if D['alias'] in Recorded:
