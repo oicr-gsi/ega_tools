@@ -102,8 +102,8 @@ def GetWorkingDirectory(CredentialFile, DataBase, AnalysisTable, ProjectsTable, 
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     # get the title project and the attributes for that alias
-    cur.execute('SELECT {0}.alias, {1}.attributes FROM {0} join {1} join {2} WHERE {2}.alias=\"{3}\" and {2}.egaBox=\"{3}\" \
-                and {2}.projects = {0}.alias and {2}.attributes = {1}.attributes'.format(ProjectsTable, AttributesTable, AnalysisTable, Alias, Box))
+    cur.execute('SELECT {0}.alias, {1}.attributes FROM {0} join {1} join {2} WHERE {2}.alias=\"{3}\" and {2}.egaBox=\"{4}\" \
+                and {2}.projects = {0}.alias and {2}.attributes = {1}.alias'.format(ProjectsTable, AttributesTable, AnalysisTable, Alias, Box))
     Data = cur.fetchall()
     if len(Data) != 0:
         Data = Data[0]     
