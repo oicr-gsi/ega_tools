@@ -283,7 +283,7 @@ def ParseAnalysesAccessoryTables(Table, TableType):
     if TableType == 'Attributes':
         Expected = ['alias', 'title', 'description', 'genomeId', 'StagePath']
     elif TableType == 'Projects':
-        Expected = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+        Expected = ['alias', 'analysisCenter', 'studyId', 'Broker', 'analysisTypeId',
                     'experimentTypeId'] 
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
@@ -1618,7 +1618,7 @@ def AddAnalysesAttributesProjects(args):
         if args.datatype == 'Attributes':
             Fields = ["alias", "title", "description", "genomeId", "attributes", "StagePath", "platform", "chromosomeReferences"]
         elif args.datatype == 'Projects':
-            Fields = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
+            Fields = ['alias', 'analysisCenter', 'studyId', 'Broker', 'analysisTypeId',
                     'experimentTypeId', 'ProjectId', 'StudyTitle', 'StudyDesign'] 
         # format colums with datatype
         Columns = []
@@ -1632,7 +1632,7 @@ def AddAnalysesAttributesProjects(args):
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
-        Columns = ' '.join(Columns)        
+        Columns = ' '.join(Columns)       
         # create table with column headers
         cur = conn.cursor()
         cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
@@ -1653,7 +1653,7 @@ def AddAnalysesAttributesProjects(args):
     if args.datatype == 'Attributes':
         RequiredFields = {"alias", "title", "description", "genomeId", "StagePath"}
     elif args.datatype == 'Projects':
-        RequiredFields = {'alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId', 'experimentTypeId'}
+        RequiredFields = {'alias', 'analysisCenter', 'studyId', 'Broker', 'analysisTypeId', 'experimentTypeId'}
     if RequiredFields.intersection(set(D.keys())) == RequiredFields:
         # get alias
         if D['alias'] in Recorded:
