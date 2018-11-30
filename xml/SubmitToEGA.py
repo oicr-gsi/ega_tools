@@ -1042,6 +1042,47 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                     conn.commit()
                     conn.close()
                       
+# use this function to print a dictionary of directory
+def ListFilesStagingServer(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive):
+    '''
+    (str, str, str, str, str, bool) -> dict
+    Return a dictionary of directory: files on the EGA staging server under the 
+    given Box for alias in DataBase Table with uploading status
+    '''
+        
+    # parse credential file to get EGA username and password
+    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+        
+    # check that Analysis table exists
+    Tables = ListTables(CredentialFile, DataBase)
+    if Table in Tables:
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        # extract files for alias in upload mode for given box
+        cur.execute('SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, ProjectsTable, Box))
+        # check that some alias are in upload mode
+        Data = cur.fetchall()
+        # close connection
+        conn.close()
+        
+        if len(Data) != 0:
+            # make a dict {directory: [files]}
+            FilesBox = {}
+            # make a list of stagepath
+            StagePaths = list(set([i[1] for i in Data]))
+            for i in StagePaths:
+                if Interactive == True:
+                    uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, i), shell=True).decode('utf-8').rstrip().split('\n')
+                elif Interactive == False:
+                    uploaded_files = subprocess.check_output('lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'.format(UserName, MyPassword, i), shell=True).decode('utf-8').rstrip().split('\n')
+                # get the file paths
+                for i in range(len(uploaded_files)):
+                    uploaded_files[i] = uploaded_files[i].split()[-1]
+                # populate dict
+                FilesBox[i] = uploaded_files
+    return FilesBox
+    
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive):
@@ -1058,7 +1099,11 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
         
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
+    if Table in Tables and ProjectsTable in Tables:
+        
+        # make a dict {directory: [files]} for alias with uploading status 
+        FilesBox = ListFilesStagingServer(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive)
+        
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
@@ -1093,13 +1138,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
                     for JobName in D[alias]['jobName'].split(':'):
                         if CheckRunningJob(JobName) == True:
                             Uploaded = False
-                # make a list of uploaded files          
-                if Interactive == True:
-                    uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
-                elif Interactive == False:
-                    uploaded_files = subprocess.check_output('lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'.format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
-                for i in range(len(uploaded_files)):
-                    uploaded_files[i] = uploaded_files[i].split()[-1]
+                
                 # check if files are uploaded on the server
                 for filePath in D[alias]['files']:
                     # get filename
@@ -1108,7 +1147,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
                     encryptedFile = D[alias]['files'][filePath]['encryptedName']
                     originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
                     for j in [encryptedFile, encryptedMd5, originalMd5]:
-                        if j not in uploaded_files:
+                        if j not in FilesBox[D['StagePath']]:
                             Uploaded = False
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
@@ -1589,7 +1628,7 @@ def AddAnalysesAttributes(args):
             elif Fields[i] == 'StagePath':
                 Columns.append(Fields[i] + ' MEDIUMTEXT NOT NULL,')
             elif Fields[i] == "alias":
-                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
@@ -1670,7 +1709,7 @@ def AddAnalysesInfo(args):
             elif Fields[i] in ['Json', 'Receipt', 'files']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
             elif Fields[i] == 'alias':
-                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
