@@ -301,13 +301,13 @@ def ParseAnalysesAccessoryTables(Table, TableType):
                     D['attributes'] = {}
                 if S[1] not in D['attributes']:
                     D['attributes'][S[1]] = {}    
-                if S[0] == 'attribute':
+                if S[0] == 'attributes':
                     if 'tag' not in D['attributes'][S[1]]:
                         D['attributes'][S[1]]['tag'] = S[1]
                     else:
                         assert D['attributes'][S[1]]['tag'] == S[1]
                     D['attributes'][S[1]]['value'] = S[2]
-                elif S[0] == 'unit':
+                elif S[0] == 'units':
                     if 'tag' not in D['attributes'][S[1]]:
                         D['attributes'][S[1]]['tag'] = S[1]
                     else:
@@ -1606,7 +1606,7 @@ def AddAnalysesAttributesProjects(args):
 
     # parse attribues input table
     D = ParseAnalysesAccessoryTables(args.input, args.datatype)
-
+    
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
 
@@ -1664,7 +1664,8 @@ def AddAnalysesAttributesProjects(args):
             if 'attributes' in D:
                 # format attributes
                 attributes = [D['attributes'][j] for j in D['attributes']]
-                attributes = ';'.join(attributes)
+                attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                D['attributes'] = attributes
             # list values according to the table column order, use empty string if not present
             L = [D[field] if field in D else '' for field in Fields]
             # convert data to strings, converting missing values to NULL                    L
