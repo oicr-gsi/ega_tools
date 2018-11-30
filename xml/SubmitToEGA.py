@@ -1898,7 +1898,7 @@ if __name__ == '__main__':
     AddAttributesProjects.add_argument('-i', '--Input', dest='input', help='Input table with attributes or projects information to load to submission database', required=True)
     AddAttributesProjects.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AddAttributesProjects.add_argument('-d', '--DataType', dest='datatype', choices=['Projects', 'Attributes'], help='Add Projects or Attributes infor to db')
-    AddAnalyses.set_defaults(func=AddAnalysesAttributesProjects)
+    AddAttributesProjects.set_defaults(func=AddAnalysesAttributesProjects)
     
     # submit samples to EGA
     SampleSubmission = subparsers.add_parser('SampleSubmission', help ='Submit samples to EGA')
