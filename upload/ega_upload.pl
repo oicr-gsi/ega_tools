@@ -97,8 +97,8 @@ if($opts{xfer_method} eq "lftp"){
 	print $UP "ssh $opts{xfer} \"lftp -u $opts{box},$opts{pw} -e \\\"set ftp:ssl-allow false; mput $workdir/$fn.gpg $workdir/$fn*.md5 -O $opts{boxpath}; bye;\\\" ftp://ftp-private.ebi.ac.uk\"";
 }elsif($opts{xfer_method} eq "aspera"){
 	print $UP "ssh $opts{xfer} \"export ASPERA_SCP_PASS=$opts{aspera_pw};".
-	          "~/.aspera/connect/bin/ascp -QT -l300M -L- -k2 $workdir/$fn*.md5 $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};".
-	          "~/.aspera/connect/bin/ascp -QT -l300M -L- -k2 $workdir/$fn.gpg $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};\"";
+	          "ascp -QT -l300M -L- -k2 $workdir/$fn*.md5 $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};".
+	          "ascp -QT -l300M -L- -k2 $workdir/$fn.gpg $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};\"";
 }
 
 
