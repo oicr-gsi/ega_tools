@@ -1334,28 +1334,14 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                         cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\", {0}.egaAccessionId=\"{2}\", {0}.Status=\"{3}\", {0}.submissionStatus=\"{3}\", {0}.CreationTime=\"{4}\" WHERE {0}.alias=\"{5}\" AND {0}.egaBox=\"{6}\"'.format(Table, Receipt, egaAccessionId, ObjectStatus, Time, J["alias"], Box))
                                         conn.commit()
                                         conn.close()
-                                        
                                     else:
                                         # delete sample
                                         ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
-                                        print('deleting object {0} because status is {1}'.format(J["alias"], ObjectStatus))
-                                else:
-                                    print('cannot submit object {0}'.format(J["alias"]))
                             else:
                                 #delete sample
-                                print('deleting sample {0} because status is {1}'.format(J["alias"], ObjectStatus))
                                 ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
-                        else:
-                            print('cannot validate object {0}'.format(J["alias"]))
-                    else:
-                        print('cannot create object for {0}'.format(J["alias"]))
-                else:
-                    print('cannot open a submission for object {0}'.format(J["alias"]))
-            
             # disconnect by removing token
             response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
-        else:
-            print('could not obtain a token')
 
 
 # use this function to check information in Tables    
