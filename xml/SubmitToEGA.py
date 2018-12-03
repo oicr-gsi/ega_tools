@@ -911,7 +911,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, Interactive):
+def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, Interactive, UploadMode):
     '''
     (dict, str, str, str, str, str, int, bool) -> (list, list)
     Take a dictionary with file information for a given alias, the file with 
@@ -937,11 +937,18 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
         os.mkdir(logDir)
     assert os.path.isdir(logDir)
     
+    # create destination directory
+    if Interactive == True:
+        Cmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; bye;\\\" ftp://ftp-private.ebi.ac.uk\""
+    elif Interactive == False:
+        Cmd = "lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; bye;\\\" ftp://ftp-private.ebi.ac.uk"
+    subprocess.call(Cmd, shell=True)    
+        
     # command to create destination directory and upload files    
     if Interactive == True:
-        UploadCmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk\""
+        UploadCmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk\""
     elif Interactive == False:
-        UploadCmd = "lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk"
+        UploadCmd = "lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk"
        
     # get alias
     assert len(list(D.keys())) == 1
