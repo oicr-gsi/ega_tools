@@ -672,7 +672,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     Samples = {}
     # check if alias are in ready status
     if len(Data) != 0:
-        for i in cur:
+        for i in Data:
             # make a list of sampleAlias
             sampleAlias = i[0].split(':')
             # make a list of sample accessions
@@ -680,14 +680,13 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
             # add sample accessions only if all sample aliases have accessions
             if len(sampleAlias) == len(sampleAccessions):
                 Samples[i[0]] = [':'.join(sampleAccessions), i[2]]
-            else:
-                Samples[i[0]] = [i[1], i[2]]
         # loop over samples, update if  sample accessions are available  
-        for alias in Samples:
-            if Samples[alias][0] != 'NULL':
-                # update sample accessions
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
-                conn.commit()
+        if len(Samples) != 0:
+            for alias in Samples:
+                if Samples[alias][0] != 'NULL':
+                    # update sample accessions
+                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
+                    conn.commit()
     conn.close()    
 
 
@@ -1490,12 +1489,14 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
                     Error = 'invalid:' + ';'.join(list(set(Error)))
                     cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
                     conn.commit()
-                    conn.close()
                 elif Missing == False:
                     # erase eventual error messages and change status read -> set
                     cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, D['alias'], Box))
                     conn.commit()
-                    conn.close()
+    conn.close()
+
+
+
                 
 # use this function to add data to the sample table
 def AddSampleInfo(args):
