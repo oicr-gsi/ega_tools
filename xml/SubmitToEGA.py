@@ -1441,7 +1441,7 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
         
         # get required information
         cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath, \
-                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, \
+                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
                     FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{3}\" AND {0}.attributes={1}.alias \
                     AND {0}.projects={2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
 
