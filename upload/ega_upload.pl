@@ -36,9 +36,9 @@ GetOptions(
 	"delete=s"		=> \$opts{delete},
 	"next=s"		=> \$opts{next},
 	"help" 			=> \$opts{help},
-	"keys=s"			=> \$opts{keys},          ### comma separated list of public encryption keys
-	"xfer=s"			=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca
-	"xfer_method"   => \$opts{xfer_method},   ### lftp or aspera
+	"keys=s"		=> \$opts{keys},          ### comma separated list of public encryption keys
+	"xfer=s"		=> \$opts{xfer},		  ## the transfer box to use, defaults to xfer.sftp.oicr.on.ca
+	"xfer_method"           => \$opts{xfer_method},   ### lftp or aspera
 	"aspera_pw"		=> \$opts{aspera_pw},
 );
 %opts=validate_options(%opts);
@@ -200,7 +200,8 @@ sub usage{
 	print "\t--delete. True/False.  Should encrypted data be deleted after upload?  Default = True\n";
 	print "\t--next. True/False.  Should the next file in the qdir be processed once this one has completed.  Default = True.\n";
 	print "\t--keys. String. A comma separated list of public gpg encryption keys..\n";
-	print "\t--xfer. String.  The oicr xfer system to use for data upload.  Default : xfer.sftp.oicr.on.ca";
+	print "\t--xfer. String.  The oicr xfer system to use for data upload.  Default : xfer.sftp.oicr.on.ca \n";
+	print "\t--xfer_method. String. The transfer method, lftp or aspera.  Default is lftp\n";
 	print "\t--help displays this usage message.\n";
 
 	die "\n@_\n\n";
