@@ -1378,7 +1378,7 @@ def CheckAnalysesInformation(CredentialFile, DataBase, Table):
         cur = conn.cursor()      
         
         # get required information
-        cur.execute('SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, {0}.attributes, {0}.projects WHERE {0}.Status=\"ready\"'.format(Table))
+        cur.execute('SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\"'.format(Table))
         Data = cur.fetchall()
         if len(Data) != 0:
             Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
@@ -1830,26 +1830,26 @@ def SubmitAnalyses(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+        #EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
                 
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.interactive)
+        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.interactive)
         
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
+        #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
         
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        if args.remove == True:
-            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #if args.remove == True:
+        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
 
 
     
