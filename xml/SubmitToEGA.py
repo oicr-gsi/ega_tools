@@ -755,7 +755,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files for status = encrypt
-        cur.execute('SELECT {0}.alias, {0}.files, FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
@@ -1821,17 +1821,17 @@ def SubmitAnalyses(args):
         
         ## check if required information is present in Analyses Table. change status ready -> dead or keep status ready -> ready
         ## pre-condition. status must be set to "ready" upon adding table information
-        CheckAnalysesInformation(args.credential, args.subdb, args.table)
+        #CheckAnalysesInformation(args.credential, args.subdb, args.table)
         
         ## check attributes and projects. change status ready -> set or keep status ready -> ready
         ## delete eventual pas-error messages when setting status to set
-        CheckAttributesProjectsInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #CheckAttributesProjectsInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status set -> encrypt
-        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
+        #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        #EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+        EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
                 
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
