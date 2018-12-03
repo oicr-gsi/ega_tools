@@ -672,7 +672,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     Samples = {}
     # check if alias are in ready status
     if len(Data) != 0:
-        for i in cur:
+        for i in Data:
             # make a list of sampleAlias
             sampleAlias = i[0].split(':')
             # make a list of sample accessions
@@ -680,14 +680,13 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
             # add sample accessions only if all sample aliases have accessions
             if len(sampleAlias) == len(sampleAccessions):
                 Samples[i[0]] = [':'.join(sampleAccessions), i[2]]
-            else:
-                Samples[i[0]] = [i[1], i[2]]
         # loop over samples, update if  sample accessions are available  
-        for alias in Samples:
-            if Samples[alias][0] != 'NULL':
-                # update sample accessions
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
-                conn.commit()
+        if len(Samples) != 0:
+            for alias in Samples:
+                if Samples[alias][0] != 'NULL':
+                    # update sample accessions
+                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
+                    conn.commit()
     conn.close()    
 
 
@@ -756,7 +755,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files for status = encrypt
-        cur.execute('SELECT {0}.alias, {0}.files, FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
@@ -1441,9 +1440,9 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
         
         # get required information
         cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath, \
-                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, \
-                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
-                    AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
+                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
+                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{3}\" AND {0}.attributes={1}.alias \
+                    AND {0}.projects={2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
 
         Data = cur.fetchall()
         
@@ -1478,7 +1477,7 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
                     Error.append('analysisTypeId')
                 if D['attributes'] not in ['', 'NULL']:
                     # check format of attributes
-                    attributes = json.loads(D['attributes'].replace("'", "\"")).split(';')
+                    attributes = [json.loads(j.replace("'", "\"")) for j in D['attributes'].split(';')]
                     for k in attributes:
                         # do not allow keys other than tag, unit and value
                         if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
@@ -1490,12 +1489,14 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
                     Error = 'invalid:' + ';'.join(list(set(Error)))
                     cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
                     conn.commit()
-                    conn.close()
                 elif Missing == False:
                     # erase eventual error messages and change status read -> set
-                    cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"""\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, D['alias'], Box))
                     conn.commit()
-                    conn.close()
+    conn.close()
+
+
+
                 
 # use this function to add data to the sample table
 def AddSampleInfo(args):
@@ -1746,7 +1747,7 @@ def AddAnalysesInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                D[alias]['projects'], D[alias]['attributes'] = args.projects, args.attributes 
+                D[alias]['projects'], D[alias]['attributes'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
                 # check if analysisDate is provided in input table
                 if 'analysisDate' not in D[alias]:
                     D[alias]['analysisDate'] = ''
@@ -1820,17 +1821,17 @@ def SubmitAnalyses(args):
         
         ## check if required information is present in Analyses Table. change status ready -> dead or keep status ready -> ready
         ## pre-condition. status must be set to "ready" upon adding table information
-        CheckAnalysesInformation(args.credential, args.subdb, args.table)
+        #CheckAnalysesInformation(args.credential, args.subdb, args.table)
         
         ## check attributes and projects. change status ready -> set or keep status ready -> ready
         ## delete eventual pas-error messages when setting status to set
-        CheckAttributesProjectsInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #CheckAttributesProjectsInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status set -> encrypt
-        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
+        #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        #EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+        EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
                 
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
