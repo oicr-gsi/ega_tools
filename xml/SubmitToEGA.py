@@ -1478,7 +1478,7 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
                     Error.append('analysisTypeId')
                 if D['attributes'] not in ['', 'NULL']:
                     # check format of attributes
-                    attributes = json.loads(D['attributes'].replace("'", "\"")).split(';')
+                    attributes = [json.loads(j.replace("'", "\"")) for j in D['attributes'].split(';')]
                     for k in attributes:
                         # do not allow keys other than tag, unit and value
                         if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
@@ -1493,7 +1493,7 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
                     conn.close()
                 elif Missing == False:
                     # erase eventual error messages and change status read -> set
-                    cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"""\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, D['alias'], Box))
                     conn.commit()
                     conn.close()
                 
