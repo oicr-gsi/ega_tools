@@ -10,10 +10,14 @@ Created on Tue Sep 11 13:37:40 2018
 import json
 import subprocess
 import time
+import xml.etree.ElementTree as ET
 import pymysql
+import sys
 import os
+import time
 import argparse
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 
 # resource for jaon formatting and api submission
@@ -89,48 +93,6 @@ def ListTables(CredentialFile, DataBase):
     conn.close()
     return Tables
 
-# use this function to to generate a working directory to save the encrypted and md5sums 
-def GetWorkingDirectory(CredentialFile, DataBase, AnalysisTable, ProjectsTable, AttributesTable, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
-    '''
-    (str, str, str, str, str, str) -> str
-    Returns a working directory where to save the encrypted and md5sum files
-    for a given Alias and Box in Table using the credentials for DataBase:
-    /scratch2/groups/gsi/bis/EGA_Submissions/ProjectAlias/{aligner}/{aligner_ver}/{indel_realigner}/{indel_realigner_ver}
-    '''
-    
-    # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    # get the title project and the attributes for that alias
-    cur.execute('SELECT {0}.alias, {1}.attributes FROM {0} join {1} join {2} WHERE {2}.alias=\"{3}\" and {2}.egaBox=\"{3}\" \
-                and {2}.projects = {0}.alias and {2}.attributes = {1}.attributes'.format(ProjectsTable, AttributesTable, AnalysisTable, Alias, Box))
-    Data = cur.fetchall()
-    if len(Data) != 0:
-        Data = Data[0]     
-        # get project title
-        a, b = Data[0], Data[1]
-        if a != '' and a != 'NULL':
-            title = a.replace(' ', '_')
-            # add title to WorkingDir    
-            WorkingDir = os.path.join(WorkingDir, title)
-        if b != '' and b != 'NULL':
-            # get attributes
-            b = b.split(';')
-            # create a dict to store attributes
-            attributes = {}
-            for i in b:
-                i = json.loads(i)
-                attributes[i['tag'].lower()] = i['value']
-            if 'aligner' in attributes:
-                WorkingDir = os.path.join(WorkingDir, attributes['aligner'])
-                if 'aligner_ver' in attributes:
-                    WorkingDir = os.path.join(WorkingDir, attributes['aligner_ver'])
-            if 'indel_realigner' in attributes:
-                WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner'])
-                if 'indel_realigner_ver' in attributes:
-                    WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner_ver'])
-    return WorkingDir                
-
 
 # use this function to parse the input sample table
 def ParseSampleInputTable(Table):
@@ -194,7 +156,7 @@ def ParseAnalysisInputTable(Table):
     '''
     (file) -> list
     Take a tab-delimited file and return a list of dictionaries, each dictionary
-    storing the information for a unique analysis object
+    storing the information for a uniqe analysis object
     Preconditions: Required fields must be present or returned list is empty,
     and missing entries are not permitted (e.g. can be '', NA)
     '''
@@ -217,33 +179,22 @@ def ParseAnalysisInputTable(Table):
             # missing values are not permitted
             assert len(Header) == len(S), 'missing values should be "" or NA'
             # extract variables from line
-            if 'fileName' not in Header:
-                if 'analysisDate' in Header:
-                    L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
-                    alias, sampleAlias, filePath, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
-                else:
-                    L = ['alias', 'sampleAlias', 'filePath']
-                    alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
-                    analysisDate = ''
-                # file name is not supplied, use filename in filepath             
+            if len(Header) == 3:
+                # file name is not supplied, use filename in filepath
+                L = ['alias', 'sampleAlias', 'filePath']
+                alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
                 assert filePath != '/' and filePath[-1] != '/'
                 fileName = os.path.basename(filePath)                
-            else:
+            elif len(Header) == 4:
                 # file name is supplied, use filename
-                if 'analysisDate' in Header:
-                    L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
-                    alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
-                else:
-                    L = ['alias', 'sampleAlias', 'filePath', 'fileName']
-                    alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
-                    analysisDate = ''
+                L = ['alias', 'sampleAlias', 'filePath', 'fileName']
+                alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
             # check if alias already recorded ( > 1 files for this alias)
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
                 D[alias] = {}
                 # record alias
                 D[alias]['alias'] = alias
-                D[alias]['analysisDate'] = analysisDate
                 # record sampleAlias. multiple sample alias are allowed, eg for VCFs
                 D[alias]['sampleAlias'] = [sampleAlias]
                 D[alias]['files'] = {}
@@ -255,7 +206,7 @@ def ParseAnalysisInputTable(Table):
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
-                     
+                       
     infile.close()
 
     # create list of dicts to store the info under a same alias
@@ -264,56 +215,53 @@ def ParseAnalysisInputTable(Table):
     return L        
 
 
-# use this function to parse the AnalysisAttributes input file
-def ParseAnalysesAccessoryTables(Table, TableType):
+# use this function to parse the analysis config file
+def ParseAnalysisConfig(Config):
     '''
-    (file, str) -> dict
-    Read Table and returns of key: value pairs for Projects or Attributes Tables
+    (file) -> dict
+    Take a config file and return a dictionary of key: value pairs
     '''
     
-    infile = open(Table)
+    infile = open(Config)
     Content = infile.read().rstrip().split('\n')
     infile.close()
     # create a dict {key: value}
     D = {}
     # check that required fields are present
-    if TableType == 'Attributes':
-        Expected = ['alias', 'title', 'description', 'genomeId']
-    elif TableType == 'Projects':
-        Expected = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
-                    'experimentTypeId', 'StagePath'] 
+    Expected = ['title', 'description', 'reference']
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
         for S in Content:
-            S = list(map(lambda x: x.strip(), S.split(':')))
-            if S[0] not in ['attributes', 'units']:
-                assert len(S) == 2
-                D[S[0]] = S[1]
-            else:
-                assert len(S) == 3
-                if 'attributes' not in D:
-                    D['attributes'] = {}
-                if S[1] not in D['attributes']:
-                    D['attributes'][S[1]] = {}    
-                if S[0] == 'attribute':
-                    if 'tag' not in D['attributes'][S[1]]:
-                        D['attributes'][S[1]]['tag'] = S[1]
-                    else:
-                        assert D['attributes'][S[1]]['tag'] == S[1]
-                    D['attributes'][S[1]]['value'] = S[2]
-                elif S[0] == 'unit':
-                    if 'tag' not in D['attributes'][S[1]]:
-                        D['attributes'][S[1]]['tag'] = S[1]
-                    else:
-                        assert D['attributes'][S[1]]['tag'] == S[1]
-                    D['attributes'][S[1]]['unit'] = S[2]
+            if ':' in S:
+                S = list(map(lambda x: x.strip(), S.split(':')))
+                if S[0] not in ['attribute', 'unit']:
+                    assert S[0] in Expected and len(S) == 2
+                    D[S[0]] = S[1]
+                else:
+                    assert len(S) == 3
+                    if 'attributes' not in D:
+                        D['attributes'] = {}
+                    if S[1] not in D['attributes']:
+                        D['attributes'][S[1]] = {}    
+                    if S[0] == 'attribute':
+                        if 'tag' not in D['attributes'][S[1]]:
+                            D['attributes'][S[1]]['tag'] = S[1]
+                        else:
+                            assert D['attributes'][S[1]]['tag'] == S[1]
+                        D['attributes'][S[1]]['value'] = S[2]
+                    elif S[0] == 'unit':
+                        if 'tag' not in D['attributes'][S[1]]:
+                            D['attributes'][S[1]]['tag'] = S[1]
+                        else:
+                            assert D['attributes'][S[1]]['tag'] == S[1]
+                        D['attributes'][S[1]]['unit'] = S[2]
     infile.close()
     return D
 
-
+ 
 # use this function convert data into data to be instered in a database table
 def FormatData(L):
     '''
@@ -330,26 +278,6 @@ def FormatData(L):
         else:
             Values.append(str(L[i]))
     return tuple(Values)
-
-
-# use this function to get the enumerations from EGA
-def GrabEgaEnums(Enumeration):
-    '''
-    (str) -> dict
-    Returns a dict with tag: value pairs for a given enumeration
-    '''
-    
-    # create a dict to store the enumeration info {value: tag}
-    Enum = {}
-    # connect to the api, retrieve the information for the given enumeration
-    response = requests.get(Enumeration)
-    # check response code
-    if response.status_code == requests.codes.ok:
-        # loop over dict in list
-        for i in response.json()['response']['result']:
-            assert i['value'] not in Enum
-            Enum[i['value']] = i['tag']
-    return Enum
 
 
 # use this function to format the sample json
@@ -394,7 +322,6 @@ def FormatSampleJson(D):
                     J[field] = D[field]
     return J                
 
-
 # use this function to format the analysis json
 def FormatAnalysisJson(D):
     '''
@@ -403,11 +330,6 @@ def FormatAnalysisJson(D):
     with the expected format or dictionary with the alias only if required fields are missing
     Precondition: strings in D have double-quotes
     '''
-    
-    # get the enumerations
-    ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
-    AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
-    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
     
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
@@ -421,16 +343,14 @@ def FormatAnalysisJson(D):
             if D[field] == 'NULL':
                 # some fields are required, return empty dict if field is empty
                 if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                             "analysisTypeId", "files", "genomeId", "experimentTypeId"]:
+                             "analysisTypeId", "files", "attributes", "genomeId", "experimentTypeId"]:
                     # erase dict and add alias
                     J = {}
                     J["alias"] = D["alias"]
                     # return dict with alias only if required fields are missing
                     return J
-                # other fields can be missing, either as empty list or string
                 else:
-                    # chromosomeReferences is hard-coded as empty list
-                    if field == "chromosomeReferences" or field == "attributes":
+                    if field == "chromosomeReferences":
                         J[field] = []
                     else:
                         J[field] = ""
@@ -444,15 +364,10 @@ def FormatAnalysisJson(D):
                     # loop over file name
                     for filePath in files:
                         # create a dict to store file info
-                        # check that fileTypeId is valid
-                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
-                            # cannot obtain fileTypeId. erase dict and add alias
-                            J = {}
-                            J["alias"] = D["alias"]
-                            # return dict with alias only if required fields are missing
-                            return J
-                        else:
-                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
+                        if files[filePath]["fileTypeId"].lower() == 'bam':
+                            fileTypeId = '1'
+                        elif files[filePath]["fileTypeId"].lower() == 'bai':
+                            fileTypeId = '2'
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -460,34 +375,29 @@ def FormatAnalysisJson(D):
                              "fileTypeId": fileTypeId}
                         J[field].append(d)
                 elif field == 'attributes':
+                    assert D[field] != 'NULL'
+                    J[field] = []
                     # ensure strings are double-quoted
                     attributes = D[field].replace("'", "\"")
                     # convert string to dict
-                    # loop over all attributes
-                    attributes = attributes.split(';')
-                    J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
-                elif field == "experimentTypeId":
-                    # check that experimentTypeId is valid
-                    if D[field] not in ExperimentTypes:
-                        # cannot obtain experimentTypeId. erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
+                    if ';' in attributes:
+                        # loop over all attributes
+                        attributes = attributes.split(';')
+                        for i in range(len(attributes)):
+                            attributes[i] = attributes[i].strip().replace("'", "\"")
+                            J[field].append(json.loads(attributes[i]))
                     else:
-                        J[field] = [ExperimentTypes[D[field]]]
-                elif field == "analysisTypeId":
-                    # check that analysisTypeId is valid
-                    if D[field] not in AnalysisTypes:
-                        # cannot obtain analysisTypeId. erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = AnalysisTypes[D[field]]
+                        J[field].append(json.loads(attributes))
                 else:
                     J[field] = D[field]
+        
+            
+        # use tags for experimentId and analysisTypeId
+        if field == "experimentTypeId" and D[field] == "Whole genome sequencing":
+            J[field] = ["0"] 
+        if field == "analysisTypeId" and D[field] == "Reference Alignment (BAM)":
+            J[field] = "0"
+            
         else:
             if field == 'sampleReferences':
                 # populate with sample accessions
@@ -532,8 +442,9 @@ def RejectRoot(S):
         raise ValueError('The root is not allowed for the staging server')
     return S
 
+
 # use this function to form jsons and store to submission db
-def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
+def AddJsonToTable(CredentialFile, DataBase, Table, Object, Box):
     '''
     (file, str, str, str) -> None
     Take the file with credentials to connect to DataBase and update the Table
@@ -548,11 +459,16 @@ def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     
-    if Table in Tables:
+    if args.table in Tables:
+       
         ## form json, add to table and update status -> submit
+              
         # pull data for objects with ready Status for sample and uploaded Status for analyses
-        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-
+        if Object == 'sample':
+            Status = 'ready'
+        elif Object == 'analysis':
+            Status = 'uploaded'
+        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
         # get column headers
         Header = [i[0] for i in cur.description]
         # extract all information 
@@ -568,12 +484,15 @@ def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
                     D[Header[j]] = i[j]
                 L.append(D)
             # create object-formatted jsons from each dict 
-            Jsons = [FormatSampleJson(D) for D in L]
+            if Object == 'sample':
+                Jsons = [FormatSampleJson(D) for D in L]
+            elif Object == 'analysis':
+                Jsons = [FormatAnalysisJson(D) for D in L]
             # add json back to table and update status
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
                 if len(D) == 1:
-                    print('cannot form json for {0}, required field(s) missing'.format(D['alias']))
+                    print('cannot form json for {0} {1}, required field(s) missing'.format(Object, D['alias']))
                 else:
                     # add json back in table and update status
                     alias = D['alias']
@@ -587,64 +506,6 @@ def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
         print('Table {0} does not exist')
     conn.close()
 
-    
-# use this function to form jsons and store to submission db
-def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box):
-    '''
-    (str, str, str, str, str, str) -> None
-    Form a json for Analyses Objects in the given Box and add it to Table by
-    quering required information from the Analysis, Projects and Attributes Tables 
-    using the file with credentials to connect to Database update the analysis
-    status if json is formed correctly
-    '''
-    
-    # check if Sample table exists
-    Tables = ListTables(CredentialFile, DataBase)
-
-    # connect to the database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    
-    if Table in Tables and AttributesTable in Tables and ProjectsTable in Tables:
-        ## form json, add to table and update status -> submit
-        cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
-                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, \
-                    {2}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, {2}.platform \
-                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
-                    AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
-
-        # get column headers
-        Header = [i[0] for i in cur.description]
-        # extract all information 
-        Data = cur.fetchall()
-        # check that samples are in ready mode
-        if len(Data) != 0:
-            # create a list of dicts storing the object info
-            L = []
-            for i in Data:
-                D = {}
-                assert len(i) == len(Header)
-                for j in range(len(i)):
-                    D[Header[j]] = i[j]
-                L.append(D)
-            # create object-formatted jsons from each dict 
-            Jsons = [FormatAnalysisJson(D) for D in L]
-            # add json back to table and update status
-            for D in Jsons:
-                # check if json is correctly formed (ie. required fields are present)
-                if len(D) == 1:
-                    print('cannot form analysis json for {0}, required field(s) missing'.format(D['alias']))
-                else:
-                    # add json back in table and update status
-                    alias = D['alias']
-                    # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
-                    conn.commit()
-                    # update status to submit
-                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
-                    conn.commit()
-    conn.close()
-    
 
 # use this function to add sample accessions to Analysis Table in the submission database
 def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Table):
@@ -662,28 +523,34 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"set\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    Data = cur.fetchall()
-    
-    # create a dict {samplealias: [sampleaccessions, analysisalias]}
+    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     Samples = {}
-    # check if alias are in ready status
-    if len(Data) != 0:
-        for i in cur:
+    for i in cur:
+        # check if multiple samples are recorded
+        if ':' in i[0]:
             # make a list of sampleAlias
             sampleAlias = i[0].split(':')
             # make a list of sample accessions
             sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
             # add sample accessions only if all sample aliases have accessions
             if len(sampleAlias) == len(sampleAccessions):
-                Samples[i[0]] = [':'.join(sampleAccessions), i[2]]
+                Samples[i[0]] = ':'.join(sampleAccessions)
             else:
-                Samples[i[0]] = [i[1], i[2]]
-        # loop over samples, update if  sample accessions are available  
+                Samples[i[0]] = i[1]
+        else:
+            # check if sample has accession
+            if i[0] in Registered:
+                Samples[i[0]] = Registered[i[0]]
+            else:
+                Samples[i[0]] = i[1]
+    if len(Samples) != 0:
         for alias in Samples:
-            if Samples[alias][0] != 'NULL':
+            if Samples[alias] != 'NULL':
                 # update sample accessions
-                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
+                cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, Registered[alias], alias, Box))
+                conn.commit()
+                # update status to upload
+                cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
                 conn.commit()
     conn.close()    
 
@@ -738,7 +605,7 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, KeyRing, Queue, Mem, Max):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Max):
     '''
     (file, str, str, str, str, str, int, int) -> None
     Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
@@ -748,12 +615,12 @@ def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable
     
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
+    if Table in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files for status = encrypt
-        cur.execute('SELECT {0}.alias, {0}.files, FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
@@ -766,12 +633,9 @@ def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable
             for i in Data:
                 D = {}
                 assert i[0] not in D
-                # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, i[0], Box)
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
+                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -815,52 +679,39 @@ def CheckRunningJob(JobName):
     # check if jobs are running
     if len(JobIds) != 0:
         for i in JobIds:
-            # check if the listed job is still running
-            try:
-                content = subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip()
-            # job may have ended between job_Ids collection and view on running jobs, collect empty string
-            except:
-                content = ''
-            JobDetails.append(content)
+            JobDetails.append(subprocess.check_output('qstat -j {0}'.format(i), shell=True).decode('utf-8').rstrip())
     # check f Job name is in JobDetails        
     JobDetails = ','.join(JobDetails)        
     return JobName in JobDetails
 
                 
 # use this function to check that encryption is done
-def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
+def CheckEncryption(CredentialFile, DataBase, Table, Box):
     '''
-    (file, str, str, str, str, str) -> None
-    Take the file with DataBase credentials, the tables in this db used to pull
-    information to extract the working directory and files in encrypting status
-    and update status to upload and files with md5sums when encrypting is done
+    (file, str, str, str) -> None
     '''        
         
     # check that table exists
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
+    if Table in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files and encryption job names for status = encrypting
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.FileDirectory, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
         # check that some files are in encrypting mode
         if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'jonName': jobs, 'FileDirectory':filedirectory}}
+            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
             L = []
             for i in Data:
                 D = {}
-                alias = i[0]
-                assert alias not in D
-                # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+                assert i[0] not in D
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[alias] = {'files': json.loads(files), 'FileDirectory': WorkingDir, 'jobName': i[2]}
+                D[i[0]] = {'files': json.loads(files), 'FileDirectory': i[2], 'jobName': i[3]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -969,7 +820,7 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, Max, Queue, Mem, Interactive):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, Box, Max, Queue, Mem, Interactive):
     '''
     (file, str, str, str, int, str, int, bool) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -989,8 +840,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{2}\" AND {0}.projects = {1}.alias'.format(Table, ProjectsTable, Box))
-        
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.FileDirectory FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1003,13 +853,9 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
             L = []
             for i in Data:
                 D = {}
-                alias = i[0]
-                assert alias not in D
+                assert i[0] not in D
                 files = i[1].replace("'", "\"")
-                # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': WorkingDir}
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': i[3]}
                 L.append(D)
             # check stage folder, file directory
             for D in L:
@@ -1041,7 +887,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                       
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Interactive):
+def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
     '''
     (str, str, str, str, bool) -> None
     Take the file with db credentials, the table name and box for the Database
@@ -1056,11 +902,12 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
+        
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, ProjectsTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.StagePath, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1075,7 +922,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
                 assert i[0] not in D
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
+                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'jobName': i[3]}
                 L.append(D)
             # check file directory
             for D in L:
@@ -1084,12 +931,21 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
                 # set up boolean to be updated if uploading is not complete
                 Uploaded = True
 
+
+                print(alias, Uploaded)
+
+
                 # loop over files for that alias
                 for i in D[alias]['files']:
                     # check if the jobs used for uploading any files for this alias are running
                     for JobName in D[alias]['jobName'].split(':'):
                         if CheckRunningJob(JobName) == True:
                             Uploaded = False
+                
+                print('checked running jobs', alias, Uploaded)
+                
+                
+                
                 # make a list of uploaded files          
                 if Interactive == True:
                     uploaded_files = subprocess.check_output("ssh xfer4.res.oicr.on.ca 'lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'".format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
@@ -1097,6 +953,11 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
                     uploaded_files = subprocess.check_output('lftp -u {0},{1} -e \"set ftp:ssl-allow false; ls {2}; bye;\" ftp://ftp-private.ebi.ac.uk'.format(UserName, MyPassword, D[alias]['StagePath']), shell=True).decode('utf-8').rstrip().split('\n')
                 for i in range(len(uploaded_files)):
                     uploaded_files[i] = uploaded_files[i].split()[-1]
+               
+                
+                print(len(uploaded_files))
+                
+                
                 # check if files are uploaded on the server
                 for filePath in D[alias]['files']:
                     # get filename
@@ -1107,6 +968,11 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, ProjectsTable, Box, Intera
                     for j in [encryptedFile, encryptedMd5, originalMd5]:
                         if j not in uploaded_files:
                             Uploaded = False
+               
+                print('checked files', alias, Uploaded)
+                
+                
+                
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
                     # update status
@@ -1143,7 +1009,7 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, AttributesTable, Box):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box):
     '''
     (str, str, str, str) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
@@ -1154,18 +1020,15 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, A
     conn = EstablishConnection(CredentialFile, Database)
     cur = conn.cursor()
     # get the directory, files for all alias with SUBMITTED status
-    cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.alias, {0}.FileDirectory, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     # build a dict {alias: {filedir: val, files: val}
     Data = cur.fetchall()
     conn.close()
     if len(Data) != 0:
         Submitted = {}
         for i in Data:
-            alias, files = i[0], json.loads(str(i[1]).replace("'", "\""))
-            # get the working directory for that alias
-            WorkingDir = GetWorkingDirectory(CredentialFile, Database, Table, ProjectsTable, AttributesTable, alias, Box)
-            assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-            Submitted[alias] = {'FileDir': WorkingDir, 'files': files}
+            alias, FileDir, files = i[0], i[1], json.loads(str(i[2]).replace("'", "\""))
+            Submitted[alias] = {'FileDir': FileDir, 'files': files}
         # loop over alias, make a list of all files under this alias
         for alias in Submitted:
             files = Submitted[alias]['files']
@@ -1174,13 +1037,13 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, A
             for i in files:
                 assert i[-4:] == '.gpg'
                 a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i:
+                if os.path.isfile(i) and 'scratch2' in i:
                     # remove encrypted file
                     os.system('rm {0}'.format(i))
-                if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a:
+                if os.path.isfile(a) and 'scratch2' in a:
                     # remove md5sum
                     os.system('rm {0}'.format(a))
-                if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b:
+                if os.path.isfile(b) and 'scratch2' in b:
                     # remove md5sum
                     os.system('rm {0}'.format(b))
 
@@ -1314,147 +1177,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             print('could not obtain a token')
 
 
-# use this function to check information in Tables    
-def CheckAnalysesInformation(CredentialFile, DataBase, Table):
-    '''
-    (str, str, str) -> None
-    Extract information from DataBase Table using credentials in file and
-    update status of objects to "dead" if required information is missing or
-    non-valid or keep status as "ready"
-    '''
-
-    # list tables 
-    Tables = ListTables(CredentialFile, DataBase)
-
-    # get file type the enumerations
-    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
-    
-    # check that required exist
-    if Table in Tables:
-        # connect to db
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()      
-        
-        # get required information
-        cur.execute('SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, {0}.attributes, {0}.projects WHERE {0}.Status=\"ready\"'.format(Table))
-        Data = cur.fetchall()
-        if len(Data) != 0:
-            Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-            for i in range(len(Data)):
-                # set up boolean. update if missing values
-                Missing = False
-                # create a dict with all information
-                D = {Keys[j]: Data[i][j] for j in range(len(Keys))}
-                # create an error message
-                Error = []
-                # check if information is valid
-                for key in D:
-                    if D[key] in ['', 'NULL']:
-                        Missing = True
-                        Error.append(key)
-                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
-                if D['egaBox'] not in ['ega-box-12', 'ega-box-137']:
-                    Missing = True
-                    Error.append('egaBox')
-                # check files 
-                files = json.loads(D['files'].replace("'", "\""))
-                for filePath in files:
-                    # check if file is valid
-                    if os.path.isfile(filePath) == False:
-                        Missing = True
-                        Error.append('files')
-                    # check validity of file type
-                    if files[filePath]['fileTypeId'].lower() not in FileTypes:
-                        Missing = True
-                        Error.append('fileTypeId')
-                # check if object has missing/non-valid information
-                if Missing == True:
-                    Error = 'invalid:' + ';'.join(list(set(Error)))
-                    cur.execute('UPDATE {0} SET {0}.Status=\"dead\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], D['egaBox']))
-                    conn.commit()
-    conn.close()                    
-
-
-# use this function to check that all information for Analyses objects is available before encrypting files     
-def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
-    '''
-    (str, str, str, str, str, str) -> None
-    Extract information from DataBase Table, ProjectsTable and AttributesTable
-    using credentials in file and update status to "set" if all information is correct
-    or keep status to "ready" if incorrect or missing
-    '''
-
-    # get the enumerations
-    ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
-    AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
-    
-    # list tables 
-    Tables = ListTables(CredentialFile, DataBase)
-    
-    # check that required exist
-    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
-        # connect to db
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()      
-        
-        # get required information
-        cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, \
-                    {2}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, \
-                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
-                    AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
-
-        Data = cur.fetchall()
-        
-        # check if data exists
-        if len(Data) != 0:
-            # create dicts for each annlysis object
-            Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath',
-                    'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-            for i in range(len(Data)):
-                assert len(Data[i]) == len(Keys)
-                D = {Keys[j]: Data[i][j] for j in range(len(Keys))}
-                # set up boolean, update if information is missing
-                Missing = False
-                # create an error message
-                Error = []
-                # check if required information exists
-                for j in ['title', 'description', 'genomeId', 'StagePath', 'studyId',
-                          'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']:
-                    if D[j] in ['', 'NULL']:
-                        Missing = True
-                        Error.append(j)
-                # check if information is valid
-                if 'EGAS' not in D['studyId']:
-                    Missing = True
-                    Error.append('studyId')
-                # check enumerations
-                if D['experimentTypeId'] not in ExperimentTypes:
-                    Missing = True
-                    Error.append('experimentTypeId')
-                if D['analysisTypeId'] not in AnalysisTypes:
-                    Missing = True
-                    Error.append('analysisTypeId')
-                if D['attributes'] not in ['', 'NULL']:
-                    # check format of attributes
-                    attributes = json.loads(D['attributes'].replace("'", "\"")).split(';')
-                    for k in attributes:
-                        # do not allow keys other than tag, unit and value
-                        if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
-                            Missing = True
-                            Error.append('attributes')
-                # check if information is missing
-                if Missing == True:
-                    # record error message
-                    Error = 'invalid:' + ';'.join(list(set(Error)))
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
-                    conn.commit()
-                    conn.close()
-                elif Missing == False:
-                    # erase eventual error messages and change status read -> set
-                    cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"""\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
-                    conn.commit()
-                    conn.close()
-                
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
@@ -1553,85 +1275,8 @@ def AddSampleInfo(args):
     
     conn.close()
 
-# use this function to add data to AnalysesAttributes or AnalysesProjects table
-def AddAnalysesAttributes(args):
-    '''
-    (list) -> None
-    Take a list of command line arguments and add attributes information
-    to the AnalysesAttributes or AnalysesProjects Table of the EGASUBsub database
-    if alias not already present
-    '''
-
-    # parse attribues input table
-    D = ParseAnalysesAccessoryTables(args.table, args.datatype)
-
-    # create table if table doesn't exist
-    Tables = ListTables(args.credential, args.subdb)
-
-    # connect to submission database
-    conn = EstablishConnection(args.credential, args.subdb)
-    cur = conn.cursor()
     
-    if args.table not in Tables:
-        if args.datatype == 'Attributes':
-            Fields = ["alias", "title", "description", "genomeId", "attributes", "chromosomeReferences"]
-        elif args.datatype == 'Projects':
-            Fields = ['alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId',
-                    'experimentTypeId', 'StagePath', 'ProjectId', 'StudyTitle', 'StudyDesign'] 
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == 'chromosomeReferences' or Fields[i] == 'StudyDesign':
-                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
-            elif Fields[i] == 'StagePath':
-                Columns.append(Fields[i] + ' MEDIUMTEXT NOT NULL,')
-            elif Fields[i] == "alias":
-                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL,')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
-        # create table with column headers
-        cur = conn.cursor()
-        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
-        conn.commit()
-    else:
-        # get the column headers from the table
-        cur.execute("SELECT * FROM {0}".format(args.table))
-        Fields = [i[0] for i in cur.description]
-    
-    # create a string with column headers
-    ColumnNames = ', '.join(Fields)
-    
-    # pull down alias from submission db. alias must be unique
-    cur.execute('SELECT {0}.alias from {0}'.format(args.table))
-    Recorded = [i[0] for i in cur]
-    
-    # record objects only if input table has been provided with required fields
-    if args.datatype == 'Attributes':
-        RequiredFields = {"alias", "title", "description", "genomeId"}
-    elif args.datatype == 'Projects':
-        RequiredFields = {'alias', 'analysisCenter, studyId', 'Broker', 'analysisTypeId', 'experimentTypeId', 'StagePath'}
-    if RequiredFields.intersection(set(D.keys())) == RequiredFields:
-        # get alias
-        if D['alias'] in Recorded:
-            # skip analysis, already recorded in submission database
-            print('{0} is already recorded for in {1}'.format(D['alias'], args.table))
-        else:
-            # format attributes if present
-            if 'attributes' in D:
-                # format attributes
-                attributes = [D['attributes'][j] for j in D['attributes']]
-                attributes = ';'.join(attributes)
-            # list values according to the table column order, use empty string if not present
-            L = [D[field] if field in D else '' for field in Fields]
-            # convert data to strings, converting missing values to NULL                    L
-            Values = FormatData(L)        
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
-    conn.close()            
-
-
+ 
 # use this function to add data to the analysis table
 def AddAnalysesInfo(args):
     '''
@@ -1644,8 +1289,11 @@ def AddAnalysesInfo(args):
     # create a dict {alias: accessions}
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
             
-    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {'filePath': filePath, 'fileName': fileName}}}}]
+    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {attributes: key}}}}]
     Data = ParseAnalysisInputTable(args.input)
+
+    # parse config table 
+    Config = ParseAnalysisConfig(args.config)
 
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
@@ -1655,19 +1303,20 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "analysisDate",
-                  "files", "Json", "submissionStatus", "errorMessages", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "projects",
-                  "attributes", "Status"]
+        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "title",
+                  "description", "studyId", "analysisCenter",
+                  "analysisDate", "analysisTypeId", "files", "FileDirectory", "attributes",
+                  "genomeId", "chromosomeReferences", "experimentTypeId",
+                  "platform", "ProjectId", "StudyTitle",
+                  "StudyDesign", "Broker", "StagePath", "Json", "submissionStatus",
+                  "errorMessages", "Receipt", "CreationTime", "egaAccessionId", "egaBox", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
             if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
-            elif Fields[i] in ['Json', 'Receipt', 'files']:
+            elif Fields[i] in ['Json', 'Receipt', 'files', 'attributes']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
-            elif Fields[i] == 'alias':
-                Columns.append(Fields[i] + ' TEXT PRIMARY KEY UNIQUE,')
             else:
                 Columns.append(Fields[i] + ' TEXT NULL,')
         # convert list to string    
@@ -1689,8 +1338,8 @@ def AddAnalysesInfo(args):
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
     
-    # record objects only if input table has been provided with required fields
-    if len(Data) != 0:
+    # record objects only if config and input table have been provided with required fields
+    if len(Config) != 0 and len(Data) != 0:
         # check that analyses are not already in the database for that box
         for D in Data:
             # get analysis alias
@@ -1703,15 +1352,36 @@ def AddAnalysesInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                D[alias]['projects'], D[alias]['attributes'] = args.projects, args.attributes 
-                # check if analysisDate is provided in input table
-                if 'analysisDate' not in D[alias]:
-                    D[alias]['analysisDate'] = ''
+                for i in [['egaBox', args.box], ['StagePath', args.stagepath], ['analysisCenter', args.center],
+                          ['studyId', args.study], ['Broker', args.broker], ['experimentTypeId', args.experiment],
+                          ['analysisTypeId', args.analysistype], ['FileDirectory', args.filedir, args.time]]:
+                    if i[0] not in D[alias]:
+                        if i[0] == 'FileDirectory':
+                            if i[2] == True:
+                                # get the date year_month_day
+                                Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+                                i[1] = i[1] + '_' + Time
+                            D[alias][i[0]] = i[1]
+                        else:
+                            D[alias][i[0]] = i[1]
+                # add fields from the config
+                for i in Config:
+                    if i not in D[alias]:
+                        if i == 'reference':
+                            D[alias]['genomeId'] = Config['reference']
+                        elif i == 'experiment':
+                            D[alias]['experimentTypeId'] = Config['experiment']
+                        elif i == 'attributes':
+                            attributes = [Config['attributes'][j] for j in Config['attributes']]
+                            attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                            D[alias]['attributes'] = attributes
+                        else:
+                            D[alias][i] = Config[i]
                 # add fileTypeId to each file
                 for filePath in D[alias]['files']:
                     fileTypeId = ''
                     fileTypeId = filePath[-3:]
-                    assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf and bai'
+                    assert fileTypeId in ['bam', 'bai', 'vcf']
                     # check that file type Id is also in the filename
                     assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                     # add fileTypeId to dict
@@ -1734,8 +1404,8 @@ def AddAnalysesInfo(args):
                 Values = FormatData(L)        
                 cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
                 conn.commit()
+            
     conn.close()            
-
 
 
 # use this function to submit Sample objects
@@ -1758,7 +1428,8 @@ def SubmitSamples(args):
     if args.table in Tables:
         
         ## form json for samples in ready mode, add to table and update status -> submit
-        AddSampleJsonToTable(args.credential, args.database, args.table, args.box)
+        AddJsonToTable(args.credential, args.database, args.table, 'sample', args.box)
+
         ## submit samples with submit status                
         RegisterObjects(args.credential, args.database, args.table, args.box, 'samples', args.portal)
 
@@ -1775,38 +1446,31 @@ def SubmitAnalyses(args):
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
         
-        ## check if required information is present in Analyses Table. change status ready -> dead or keep status ready -> ready
-        ## pre-condition. status must be set to "ready" upon adding table information
-        CheckAnalysesInformation(args.credential, args.subdb, args.table)
-        
-        ## check attributes and projects. change status ready -> set or keep status ready -> ready
-        ## delete eventual pas-error messages when setting status to set
-        CheckAttributesProjectsInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
-        
-        ## update Analysis table in submission database with sample accessions and change status set -> encrypt
-        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
+        ## update Analysis table in submission database with sample accessions and change status ready -> encrypt
+        #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
-                
+        #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
+        
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
-        
+        CheckEncryption(args.credential, args.subdb, args.table, args.box)
+
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.interactive)
-        
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
+                
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
-        
+        #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
+
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        if args.remove == True:
-            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #if args.remove == True:
+        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
+            
 
 
     
@@ -1837,7 +1501,7 @@ if __name__ == '__main__':
     AddSamples.set_defaults(func=AddSampleInfo)
 
     # add analyses to Analyses Table
-    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information to Analyses Table')
+    AddAnalyses = subparsers.add_parser('AddAnalyses', help ='Add analysis information')
     AddAnalyses.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     AddAnalyses.add_argument('-t', '--Table', dest='table', default='Analyses', help='Analyses table. Default is Analyses')
     AddAnalyses.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
@@ -1845,18 +1509,16 @@ if __name__ == '__main__':
     AddAnalyses.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AddAnalyses.add_argument('-f', '--FileDir', dest='filedir', help='Directory with md5sums and encrypted files', required=True)
     AddAnalyses.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
-    AddAnalyses.add_argument('-p', '--Project', dest='project', help='Primary key in the AnalysesProjects table', required=True)
-    AddAnalyses.add_argument('-a', '--Attributes', dest='attributes', help='Primary key in the AnalysesAttributes table', required=True)
+    AddAnalyses.add_argument('--Time', dest='time', action='store_true', help='Add date to FileDir. Do not add date by default')
+    AddAnalyses.add_argument('--Config', dest='config', help='Path to config file', required=True)
+    AddAnalyses.add_argument('--StagePath', dest='stagepath', type=RejectRoot, help='Path on the staging server. Root is not allowed', required=True)
+    AddAnalyses.add_argument('--Center', dest='center', default='OICR_ICGC', help='Name of the Analysis Center')
+    AddAnalyses.add_argument('--Study', dest='study', default='EGAS00001000900', help='Study accession Id. Default is EGAS00001000900')
+    AddAnalyses.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
+    AddAnalyses.add_argument('--Experiment', dest='experiment', default='Whole genome sequencing', choices=['Genotyping by array', 'Exome sequencing', 'Whole genome sequencing', 'transcriptomics'], help='Experiment type. Default is Whole genome sequencing')
+    AddAnalyses.add_argument('--AnalysisType', dest='analysistype', choices=['Reference Alignment (BAM)', 'Sequence variation (VCF)'], help='Analysis type', required=True)
     AddAnalyses.set_defaults(func=AddAnalysesInfo)
 
-    # add analyses to Analyses Table
-    AddAttributesProjects = subparsers.add_parser('AddAttributesProjects', help ='Add information to AnalysesAttributes or AnalysesProjects Tables')
-    AddAttributesProjects.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AddAttributesProjects.add_argument('-t', '--Table', dest='table', choices = ['AnalysesAttributes', 'AnalysesProjects'], help='Database Tables AnalysesAttributes or AnalysesProjects', required=True)
-    AddAttributesProjects.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    AddAttributesProjects.add_argument('-d', '--DataType', dest='datatype', choices=['Projects', 'Attributes'], help='Add Projects or Attributes infor to db')
-    AddAnalyses.set_defaults(func=AddAnalysesAttributes)
-    
     # submit samples to EGA
     SampleSubmission = subparsers.add_parser('SampleSubmission', help ='Submit samples to EGA')
     SampleSubmission.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
@@ -1869,15 +1531,13 @@ if __name__ == '__main__':
     # submit analyses to EGA       
     AnalysisSubmission = subparsers.add_parser('AnalysisSubmission', help ='Submit analyses to EGA')
     AnalysisSubmission.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AnalysisSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+    AnalysisSubmission.add_argument('-t', '--Table', dest='table', default='Analyses', help='Samples table. Default is Analyses')
     AnalysisSubmission.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     AnalysisSubmission.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AnalysisSubmission.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     AnalysisSubmission.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
-    AnalysisSubmission.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
-    AnalysisSubmission.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+    AnalysisSubmission.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
-    AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
