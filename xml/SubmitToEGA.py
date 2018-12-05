@@ -335,26 +335,6 @@ def FormatData(L):
     return tuple(Values)
 
 
-# use this function to get the enumerations from EGA
-def GrabEgaEnums(Enumeration):
-    '''
-    (str) -> dict
-    Returns a dict with tag: value pairs for a given enumeration
-    '''
-    
-    # create a dict to store the enumeration info {value: tag}
-    Enum = {}
-    # connect to the api, retrieve the information for the given enumeration
-    response = requests.get(Enumeration)
-    # check response code
-    if response.status_code == requests.codes.ok:
-        # loop over dict in list
-        for i in response.json()['response']['result']:
-            assert i['value'] not in Enum
-            Enum[i['value']] = i['tag']
-    return Enum
-
-
 # use this function to format the sample json
 def FormatSampleJson(D):
     '''
@@ -397,6 +377,25 @@ def FormatSampleJson(D):
                     J[field] = D[field]
     return J                
 
+
+# use this function to print a dict the enumerations from EGA to std output
+def GrabEgaEnums(URL):
+    '''
+    (str) -> dict
+    Take the URL for a given enumeration and return and dict of tag: value pairs
+    '''
+    
+    # create a dict to store the enumeration info {value: tag}
+    Enum = {}
+    # connect to the api, retrieve the information for the given enumeration
+    response = requests.get(URL)
+    # check response code
+    if response.status_code == requests.codes.ok:
+        # loop over dict in list
+        for i in response.json()['response']['result']:
+            assert i['value'] not in Enum
+            Enum[i['value']] = i['tag']
+    return Enum
 
 # use this function to format the analysis json
 def FormatAnalysisJson(D):
@@ -611,8 +610,8 @@ def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Pro
     if Table in Tables and AttributesTable in Tables and ProjectsTable in Tables:
         ## form json, add to table and update status -> submit
         cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
-                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, \
-                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId, {2}.platform \
+                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
+                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId  \
                     FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
                     AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
 
@@ -732,7 +731,7 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
         newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
         newfile.close()
         # launch qsub directly and return exit code
-        JobName = 'Encrypt.{0}'.format(alias + '_' + fileName)
+        JobName = 'Encrypt.{0}'.format(alias + '__' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -793,7 +792,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable
                 # check if encription was launched successfully
                 if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
                     # store the job names in errorMessages
-                    JobNames = ':'.join(JobNames)
+                    JobNames = ';'.join(JobNames)
                     # encryption and md5sums jobs launched succcessfully, update status -> encrypting
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
@@ -875,7 +874,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
                 # loop over files for that alias
                 for i in D[alias]['files']:
                     # check if the jobs used for encrypting any files for this alias are running
-                    for JobName in D[alias]['jobName'].split(':'):
+                    for JobName in D[alias]['jobName'].split(';'):
                         if CheckRunningJob(JobName) == True:
                             Encrypted = False
                     # get the fileName
@@ -954,7 +953,6 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
         
     # get filename
     fileName = os.path.basename(filePath)
-    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
     encryptedFile = os.path.join(FileDir, D[alias]['files'][filePath]['encryptedName'])
     originalMd5 = os.path.join(FileDir, fileName + '.md5')
     encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
@@ -970,7 +968,7 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
         newfile.write(MyCmd + '\n')
         newfile.close()
         # launch job directly
-        JobName = 'Upload.{0}'.format(alias + '_' + fileName)
+        JobName = 'Upload.{0}'.format(alias + '__' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)    
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -1042,7 +1040,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                 # check if upload launched properly for all files under that alias, update status -> uploading
                 if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
                     # store the job names in errorMessages
-                    JobNames = ':'.join(JobNames)
+                    JobNames = ';'.join(JobNames)
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
                     cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"{1}\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
@@ -1088,147 +1086,69 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box
                 FilesBox[i] = uploaded_files
     return FilesBox
     
-###############################################################
     
-## use this function to count the number of uploading files a given fileType
-#def CountUploadingFiles(CredentialFile, DataBase, Table, ProjectsTable, Box):
-#    '''
-#    (str, str, str, str, bool) -> int
-#    Take the file with db credentials, the table name and box for the Database
-#    and update status of all alias from uploading to uploaded if all the files
-#    for that alias were successfuly uploaded. 
-#    '''
-#
-#
-#    ### continue here
-#    
-#    
-#    
-#    # grap the uploading jobs from qstat
-#    
-#    # grab the corresponding jobs from errorMessages column
-#    
-#    
-#    # grab the alias and filetype id for uploading files
-#    
-#    # grab the experimenttype Id: WGS or others?
-#    
-#    # count the number of uploading jobs for each filetype
-#    
-#    
-#    # return a dict with filetype:count
-#    
-#    
-#
-#
-#
-#
-#
-#
-#    # parse credential file to get EGA username and password
-#    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
-#        
-#    # check that Analysis table exists
-#    Tables = ListTables(CredentialFile, DataBase)
-#    if Table in Tables and ProjectsTable in Tables:
-#        
-#        
-#        
-#        
-#        
-#        
-#        
-#        
-#        
-#        
-#        
-#        
-#        # make a dict {directory: [files]} for alias with uploading status 
-#        FilesBox = ListFilesStagingServer(CredentialFile, DataBase, Table, ProjectsTable, Box)
-#        
-#        # connect to database
-#        conn = EstablishConnection(CredentialFile, DataBase)
-#        cur = conn.cursor()
-#        # extract files for alias in upload mode for given box
-#        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.projects = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, ProjectsTable, Box))
-#        # check that some alias are in upload mode
-#        Data = cur.fetchall()
-#        # close connection
-#        conn.close()
-#        
-#        if len(Data) != 0:
-#            # check that some files are in uploading mode
-#            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
-#            L = []
-#            for i in Data:
-#                D = {}
-#                assert i[0] not in D
-#                # convert single quotes to double quotes for str -> json conversion
-#                files = i[1].replace("'", "\"")
-#                D[i[0]] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
-#                L.append(D)
-#            # check file directory
-#            for D in L:
-#                assert len(list(D.keys())) == 1
-#                alias = list(D.keys())[0]
-#                # set up boolean to be updated if uploading is not complete
-#                Uploaded = True
-#
-#                # loop over files for that alias
-#                for i in D[alias]['files']:
-#                    # check if the jobs used for uploading any files for this alias are running
-#                    for JobName in D[alias]['jobName'].split(':'):
-#                        if CheckRunningJob(JobName) == True:
-#                            Uploaded = False
-#                
-#                # check if files are uploaded on the server
-#                for filePath in D[alias]['files']:
-#                    # get filename
-#                    fileName = os.path.basename(filePath)
-#                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-#                    encryptedFile = D[alias]['files'][filePath]['encryptedName']
-#                    originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
-#                    for j in [encryptedFile, encryptedMd5, originalMd5]:
-#                        if j not in FilesBox[D['StagePath']]:
-#                            Uploaded = False
-#                # check if all files for that alias have been uploaded
-#                if Uploaded == True:
-#                    # update status
-#                    # connect to database, updatestatus and close connection
-#                    conn = EstablishConnection(CredentialFile, DataBase)
-#                    cur = conn.cursor()
-#                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
-#                    conn.commit()                                
-#                    conn.close()              
-#
+# use this function to count the number of uploading or encrypting files a given fileType
+def CountFiles(CredentialFile, DataBase, Table, Box, Status):
+    '''
+    (str, str, str, str, str) -> int
+    Take the file with db credentials, the table name and box for the Database
+    and return the number of bams currently being uploaded or encrypted 
+    '''
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-########################################################
+    # parse credential file to get EGA username and password
+    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+    
+    # create a dict {fileTypeId: [jobNames]}
+    Jobs = {}
+    # grab uploading jobs from errorMessages column
+    Tables = ListTables(CredentialFile, DataBase)
+    if Table in Tables:
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        # extract files and jobNames for alias in upload mode for given box
+        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
+        # check that some alias are in upload mode
+        Data = cur.fetchall()
+        # close connection
+        conn.close()
+        # check that some files are in uploading mode
+        if len(Data) != 0:
+            for i in Data:
+                # create a dict {alias: value, files: dict, jobNames: list}
+                jobNames = i[1].split(';')
+                # get the dict with file info
+                files = json.loads(i[0].replace("'", "\""))
+                # for each job, extract the fileName
+                for j in jobNames:
+                    fileName = j.split('__')[1]
+                    # find corresponding file type Id
+                    for filePath in files:
+                        if fileName == os.path.basename(filePath):
+                            fileTypeId = files[filePath]['fileTypeId']
+                            # populate dict
+                            if fileTypeId in Jobs:
+                                Jobs[fileTypeId].append(j)
+                            else:
+                                Jobs[fileTypeId] = [j]
+    # check which jobs are running
+    # create a dict {fileTypeId :[array of bool: True if running, False if done]}
+    Running = {}
+    for fileTypeId in Jobs:
+        for jobName in Jobs[fileTypeId]:
+            isRunning = CheckRunningJob(jobName)
+            if fileTypeId in Running:
+                Running[fileTypeId].append(isRunning)
+            else:
+                Running[fileTypeId] = [isRunning]
+                
+    # count the number of uploading bams
+    if 'bam' not in Running:
+        bams = 0
+    else:
+        bams = Running['bam'].count(True)
+    return bams
+    
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
@@ -1280,7 +1200,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
                 # loop over files for that alias
                 for i in D[alias]['files']:
                     # check if the jobs used for uploading any files for this alias are running
-                    for JobName in D[alias]['jobName'].split(':'):
+                    for JobName in D[alias]['jobName'].split(';'):
                         if CheckRunningJob(JobName) == True:
                             Uploaded = False
                 
@@ -1629,8 +1549,7 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
     conn.close()
 
 
-
-                
+               
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
@@ -1964,23 +1883,19 @@ def SubmitAnalyses(args):
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## do not allow new bams to be encrypted if at least xxx bams are still uploading
-        
-        
-        
-     
-
-
-
-
-
-
-
-
-
-
-        ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        #EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+        ## count the number of bams being uploaded and being encrypted
+        UploadingBams =  CountFiles(args.credential, args.subdb, args.table, args.box, 'uploading')
+        EncryptingBams = CountFiles(args.credential, args.subdb, args.table, args.box, 'encrypting')
                 
+        print(UploadingBams)
+        print(EncryptingBams)
+        
+        
+        ## encrypt new files only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
+        ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
+        if UploadingBams + EncryptingBams < int(args.max):
+            EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+               
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
@@ -1988,7 +1903,7 @@ def SubmitAnalyses(args):
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
         
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
@@ -2072,7 +1987,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
     AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
-    AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
+    AnalysisSubmission.add_argument('--Max', dest='max', default=10, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
