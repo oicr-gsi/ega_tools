@@ -731,7 +731,7 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
         newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
         newfile.close()
         # launch qsub directly and return exit code
-        JobName = 'Encrypt.{0}'.format(alias + '_' + fileName)
+        JobName = 'Encrypt.{0}'.format(alias + '__' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -968,7 +968,7 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
         newfile.write(MyCmd + '\n')
         newfile.close()
         # launch job directly
-        JobName = 'Upload.{0}'.format(alias + ':' + fileName)
+        JobName = 'Upload.{0}'.format(alias + '__' + fileName)
         QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)    
         job = subprocess.call(QsubCmd, shell=True)
         return job, JobName
@@ -1087,12 +1087,12 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box
     return FilesBox
     
     
-# use this function to count the number of uploading files a given fileType
-def CountUploadingFiles(CredentialFile, DataBase, Table, Box):
+# use this function to count the number of uploading or encrypting files a given fileType
+def CountFiles(CredentialFile, DataBase, Table, Box, Status):
     '''
-    (str, str, str, str) -> int
+    (str, str, str, str, str) -> int
     Take the file with db credentials, the table name and box for the Database
-    and return the number of bams currently being uploaded 
+    and return the number of bams currently being uploaded or encrypted 
     '''
 
     # parse credential file to get EGA username and password
@@ -1107,7 +1107,7 @@ def CountUploadingFiles(CredentialFile, DataBase, Table, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files and jobNames for alias in upload mode for given box
-        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1118,10 +1118,10 @@ def CountUploadingFiles(CredentialFile, DataBase, Table, Box):
                 # create a dict {alias: value, files: dict, jobNames: list}
                 jobNames = i[1].split(';')
                 # get the dict with file info
-                files = json.loads(i[1].replace("'", "\""))
+                files = json.loads(i[0].replace("'", "\""))
                 # for each job, extract the fileName
                 for j in jobNames:
-                    fileName = j.split(':')[1]
+                    fileName = j.split('__')[1]
                     # find corresponding file type Id
                     for filePath in files:
                         if fileName == os.path.basename(filePath):
@@ -1131,7 +1131,6 @@ def CountUploadingFiles(CredentialFile, DataBase, Table, Box):
                                 Jobs[fileTypeId].append(j)
                             else:
                                 Jobs[fileTypeId] = [j]
-            
     # check which jobs are running
     # create a dict {fileTypeId :[array of bool: True if running, False if done]}
     Running = {}
@@ -1884,24 +1883,19 @@ def SubmitAnalyses(args):
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## do not allow new bams to be encrypted if at least xxx bams are still uploading
-        ## count the number of bams being uploaded
-        Bams =  CountUploadingFiles(args.credential, args.subdb, args.table, args.box)
-        print(Bams)
-        
-     
-
-
-
-
-
-
-
-
-
-
-        ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        #EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+        ## count the number of bams being uploaded and being encrypted
+        UploadingBams =  CountFiles(args.credential, args.subdb, args.table, args.box, 'uploading')
+        EncryptingBams = CountFiles(args.credential, args.subdb, args.table, args.box, 'encrypting')
                 
+        print(UploadingBams)
+        print(EncryptingBams)
+        
+        
+        ## encrypt new files only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
+        ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
+        if UploadingBams + EncryptingBams < int(args.max):
+            EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+               
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
