@@ -808,7 +808,7 @@ def CheckRunningJob(JobName):
     Take the name of a job and the description of all running jobs and return
     True in the given job name is this description and false otherwise
     '''
-
+    
     # store the content of the job description 
     JobDetails = []
     # get the list of job Ids
@@ -1887,17 +1887,16 @@ def SubmitAnalyses(args):
         UploadingBams =  CountFiles(args.credential, args.subdb, args.table, args.box, 'uploading')
         EncryptingBams = CountFiles(args.credential, args.subdb, args.table, args.box, 'encrypting')
                 
-        print(UploadingBams)
-        print(EncryptingBams)
-        
-        
-        ## encrypt new files only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
+        ## encrypt new files to a maximum of Max and only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        if UploadingBams + EncryptingBams < int(args.max):
-            EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, args.max)
+        Maximum = int(args.max) - (UploadingBams + EncryptingBams)
+        if Maximum < 0:
+            Maximum = 0
+        if Maximum > 0:
+            EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
                
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## upload files and change the status upload -> uploading 
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
