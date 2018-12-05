@@ -1088,12 +1088,11 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box
     
     
 # use this function to count the number of uploading files a given fileType
-def CountUploadingFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
+def CountUploadingFiles(CredentialFile, DataBase, Table, Box):
     '''
-    (str, str, str, str, bool) -> int
+    (str, str, str, str) -> int
     Take the file with db credentials, the table name and box for the Database
-    and update status of all alias from uploading to uploaded if all the files
-    for that alias were successfuly uploaded. 
+    and return the number of bams currently being uploaded 
     '''
 
     # parse credential file to get EGA username and password
@@ -1103,12 +1102,12 @@ def CountUploadingFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
     Jobs = {}
     # grab uploading jobs from errorMessages column
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables and AttributesTable in Tables:
+    if Table in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files and jobNames for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1116,10 +1115,8 @@ def CountUploadingFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         # check that some files are in uploading mode
         if len(Data) != 0:
             for i in Data:
-                # get the alias
-                alias = i[0]
                 # create a dict {alias: value, files: dict, jobNames: list}
-                jobNames = i[2].split(';')
+                jobNames = i[1].split(';')
                 # get the dict with file info
                 files = json.loads(i[1].replace("'", "\""))
                 # for each job, extract the fileName
@@ -1887,8 +1884,9 @@ def SubmitAnalyses(args):
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## do not allow new bams to be encrypted if at least xxx bams are still uploading
-        
-        
+        ## count the number of bams being uploaded
+        Bams =  CountUploadingFiles(args.credential, args.subdb, args.table, args.box)
+        print(Bams)
         
      
 
@@ -1911,13 +1909,13 @@ def SubmitAnalyses(args):
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
         
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
+        #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
         
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
         #if args.remove == True:
@@ -1995,7 +1993,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
     AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
-    AnalysisSubmission.add_argument('--Max', dest='max', default=50, help='Maximum number of files to be uploaded at once. Default 50')
+    AnalysisSubmission.add_argument('--Max', dest='max', default=10, help='Maximum number of files to be uploaded at once. Default 50')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
