@@ -1094,7 +1094,7 @@ def CountFiles(CredentialFile, DataBase, Table, Box, Status):
     '''
     (str, str, str, str, str) -> int
     Take the file with db credentials, the table name and box for the Database
-    and return the number of bams currently being uploaded or encrypted 
+    and return the number of bams and fastqs currently being uploaded or encrypted 
     '''
 
     # parse credential file to get EGA username and password
@@ -1144,12 +1144,16 @@ def CountFiles(CredentialFile, DataBase, Table, Box, Status):
             else:
                 Running[fileTypeId] = [isRunning]
                 
-    # count the number of uploading bams
+    # count the number of uploading or encrypting bams and fastqs
     if 'bam' not in Running:
         bams = 0
     else:
         bams = Running['bam'].count(True)
-    return bams
+    if 'fastq' not in Running:
+        fastqs = 0
+    else:
+        fastqs = Running['fastq'].count(True)
+    return bams + fastqs
     
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
@@ -1913,8 +1917,8 @@ def SubmitAnalyses(args):
         RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        #if args.remove == True:
-        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        if args.remove == True:
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
 
 
     
