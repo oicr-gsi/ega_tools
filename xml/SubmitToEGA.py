@@ -69,7 +69,9 @@ def EstablishConnection(CredentialFile, database):
     # get the database name
     assert database in [Credentials['DbMet'], Credentials['DbSub']]
     # connnect to the database
-    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'], password = Credentials['DbPasswd'], db = database, charset = "utf8")
+    conn = pymysql.connect(host = Credentials['DbHost'], user = Credentials['DbUser'],
+                           password = Credentials['DbPasswd'], db = database, charset = "utf8",
+                           port=3306, unix_socket='/var/run/mysqld/mysqld.sock')
     return conn 
 
 
@@ -1092,7 +1094,7 @@ def CountFiles(CredentialFile, DataBase, Table, Box, Status):
     '''
     (str, str, str, str, str) -> int
     Take the file with db credentials, the table name and box for the Database
-    and return the number of bams currently being uploaded or encrypted 
+    and return the number of bams and fastqs currently being uploaded or encrypted 
     '''
 
     # parse credential file to get EGA username and password
@@ -1142,12 +1144,16 @@ def CountFiles(CredentialFile, DataBase, Table, Box, Status):
             else:
                 Running[fileTypeId] = [isRunning]
                 
-    # count the number of uploading bams
+    # count the number of uploading or encrypting bams and fastqs
     if 'bam' not in Running:
         bams = 0
     else:
         bams = Running['bam'].count(True)
-    return bams
+    if 'fastq' not in Running:
+        fastqs = 0
+    else:
+        fastqs = Running['fastq'].count(True)
+    return bams + fastqs
     
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
@@ -1884,19 +1890,19 @@ def SubmitAnalyses(args):
 
         ## do not allow new bams to be encrypted if at least xxx bams are still uploading
         ## count the number of bams being uploaded and being encrypted
-        UploadingBams =  CountFiles(args.credential, args.subdb, args.table, args.box, 'uploading')
-        EncryptingBams = CountFiles(args.credential, args.subdb, args.table, args.box, 'encrypting')
+        #UploadingBams =  CountFiles(args.credential, args.subdb, args.table, args.box, 'uploading')
+        #EncryptingBams = CountFiles(args.credential, args.subdb, args.table, args.box, 'encrypting')
                 
         ## encrypt new files to a maximum of Max and only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        Maximum = int(args.max) - (UploadingBams + EncryptingBams)
-        if Maximum < 0:
-            Maximum = 0
-        if Maximum > 0:
-            EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
+        #Maximum = int(args.max) - (UploadingBams + EncryptingBams)
+        #if Maximum < 0:
+        #    Maximum = 0
+        #if Maximum > 0:
+        #    EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
                
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## upload files and change the status upload -> uploading 
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
@@ -1905,14 +1911,14 @@ def SubmitAnalyses(args):
         #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
+        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
         
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        #if args.remove == True:
-        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        if args.remove == True:
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
 
 
     
