@@ -898,6 +898,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Interactive):
 
     # parse credential file to get EGA username and password
     UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+    
         
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
@@ -1453,10 +1454,10 @@ def SubmitAnalyses(args):
         #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.max)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.box)
+        #CheckEncryption(args.credential, args.subdb, args.table, args.box)
 
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
+        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.box, args.max, args.queue, args.memory, args.interactive)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         #CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.interactive)
@@ -1465,11 +1466,11 @@ def SubmitAnalyses(args):
         #AddJsonToTable(args.credential, args.subdb, args.table, 'analysis', args.box)
 
         ## submit analyses with submit status                
-        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        #if args.remove == True:
-        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
+        if args.remove == True:
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box)
             
 
 
