@@ -1089,6 +1089,21 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box
                 FilesBox[i] = uploaded_files
     return FilesBox
     
+  
+# use this function to check usage of working directory
+def GetWorkDirSpace():
+    '''
+    () -> int
+    Return disk availability in Tb for the working directory
+    (/scratch2/groups/gsi/bis/EGA_Submissions/)
+    '''
+
+    # get total, free, and used space in working directory
+    available = subprocess.check_output('df -h /scratch2/groups/gsi/bis/EGA_Submissions/', shell=True).decode('utf-8').rstrip().split()[10]
+    if 'T' in available:
+        return int(available.replace('T', ''))
+    else:
+        return 0
     
 # use this function to count the number of uploading or encrypting files a given fileType
 def CountFiles(CredentialFile, DataBase, Table, Box, Status):
