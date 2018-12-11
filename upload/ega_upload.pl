@@ -78,8 +78,8 @@ print $QSUB "qsub -cwd -b y -N ega.$fn.premd5                             \"md5s
 print $QSUB "qsub -cwd -b y -N ega.$fn.gpg  	                          \"gpg --trust-model always $keystring -o $fn.gpg -e $fn\"\n";
 print $QSUB "qsub -cwd -b y -N ega.$fn.postmd5 -hold_jid ega.$fn.gpg      \"md5sum $fn.gpg | cut -f1 -d\' \'> $fn.gpg.md5\"\n";
 print $QSUB "qsub -cwd -b y -N ega.$fn.upload  -hold_jid ega.$fn.postmd5  \"bash upload.sh\"\n";
-print $QSUB "qsub -cwd -b y -N ega.$fn.rmgpg   -hold_jid ega.$fn.upload   \"rm $fn.gpg;\"\n"  if($opts{delete} eq "True");
-
+#print $QSUB "qsub -cwd -b y -N ega.$fn.rmgpg   -hold_jid ega.$fn.upload   \"rm $fn.gpg;\"\n"  if($opts{delete} eq "True");
+print $QSUB "qsub -cwd -b y -N ega.$fn.rmgpg   -hold_jid ega.$fn.upload   \"bash check_and_remove.sh\"\n";
 if($opts{next} eq "True"){
 	#### need to run the same command, is there way of echoing this in the program
 	print $QSUB "qsub -cwd -b y  -N ega.$fn.startnext -hold_jid ega.$fn.upload  \"sleep 5m;cd $pwd;$commandline\"\n";
@@ -91,8 +91,6 @@ print STDERR "Preparing upload script under $workdir\n";
 
 my $script_upload="$workdir/upload.sh";
 (open my $UP,">",$script_upload) || die "unable to open $script_upload";
-
-
 if($opts{xfer_method} eq "lftp"){
 	print $UP "ssh $opts{xfer} \"lftp -u $opts{box},$opts{pw} -e \\\"set ftp:ssl-allow false; mput $workdir/$fn.gpg $workdir/$fn*.md5 -O $opts{boxpath}; bye;\\\" ftp://ftp-private.ebi.ac.uk\"";
 }elsif($opts{xfer_method} eq "aspera"){
@@ -100,12 +98,22 @@ if($opts{xfer_method} eq "lftp"){
 	          "ascp -P33001 -O33001 -QT -l300M $workdir/$fn*.md5 $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};".
 	          "ascp -P33001 -O33001 -QT -l300M $workdir/$fn.gpg $opts{box}\@fasp.ega.ebi.ac.uk:$opts{boxpath};\"";
 }
-
-
 close $UP;
 
 
-close $UP;
+	
+my $script_remove="$workdir/check_and_remove.sh";
+(open my $RM,">",$script_remove) || die "unable to open $script_upload";
+print $RM "completed=`cat ega.$fn.upload.o* |grep Completed | wc -l`\n";
+print $RM "if [ \$completed == 2 ]; then\n";
+if($opts{delete} eq "True"){
+	print $RM "   rm $fn.gpg\n";
+}
+print $RM "   touch COMPLETE\n";
+print $RM "else\n";
+print $RM "  cat process.sh | grep 'bash upload' > RESTART_UPLOAD.sh   \n";
+print $RM "fi\n";
+close $RM;
 
 
 
