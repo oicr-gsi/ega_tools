@@ -666,7 +666,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"set\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     Data = cur.fetchall()
     
     # create a dict {samplealias: [sampleaccessions, analysisalias]}
@@ -685,7 +685,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
         if len(Samples) != 0:
             for alias in Samples:
                 if Samples[alias][0] != 'NULL':
-                    # update sample accessions
+                    # update sample accessions and status start --> encrypt
                     cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
                     conn.commit()
     conn.close()    
@@ -1470,8 +1470,13 @@ def CheckAnalysesInformation(CredentialFile, DataBase, Table):
                         Error.append('fileTypeId')
                 # check if object has missing/non-valid information
                 if Missing == True:
+                    # record error message and update status ready --> dead
                     Error = 'invalid:' + ';'.join(list(set(Error)))
                     cur.execute('UPDATE {0} SET {0}.Status=\"dead\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], D['egaBox']))
+                    conn.commit()
+                elif Missing == False:
+                    # update status ready --> clean
+                    cur.execute('UPDATE {0} SET {0}.Status=\"clean\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, D['alias'], D['egaBox']))
                     conn.commit()
     conn.close()                    
 
@@ -1501,7 +1506,7 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
         # get required information
         cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath, \
                     {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
-                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{3}\" AND {0}.attributes={1}.alias \
+                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{3}\" AND {0}.attributes={1}.alias \
                     AND {0}.projects={2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
 
         Data = cur.fetchall()
@@ -1550,8 +1555,8 @@ def CheckAttributesProjectsInformation(CredentialFile, DataBase, Table, Projects
                     cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, D['alias'], Box))
                     conn.commit()
                 elif Missing == False:
-                    # erase eventual error messages and change status read -> set
-                    cur.execute('UPDATE {0} SET {0}.Status=\"set\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, D['alias'], Box))
+                    # erase eventual error messages and change status clean -> start
+                    cur.execute('UPDATE {0} SET {0}.Status=\"start\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, D['alias'], Box))
                     conn.commit()
     conn.close()
 
@@ -1878,15 +1883,15 @@ def SubmitAnalyses(args):
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
         
-        ## check if required information is present in Analyses Table. change status ready -> dead or keep status ready -> ready
+        ## check if required information is present in Analyses Table. change status ready -> dead or keep status ready -> clean
         ## pre-condition. status must be set to "ready" upon adding table information
         #CheckAnalysesInformation(args.credential, args.subdb, args.table)
         
-        ## check attributes and projects. change status ready -> set or keep status ready -> ready
-        ## delete eventual pas-error messages when setting status to set
+        ## check attributes and projects. change status clean -> start or keep status clean -> clean
+        ## delete eventual past error messages when setting status to start
         #CheckAttributesProjectsInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
-        ## update Analysis table in submission database with sample accessions and change status set -> encrypt
+        ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## do not allow new bams to be encrypted if at least xxx bams are still uploading
