@@ -841,6 +841,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
         
     # check that table exists
     Tables = ListTables(CredentialFile, DataBase)
+    
     if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
@@ -849,7 +850,6 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
         cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
-        
         # check that some files are in encrypting mode
         if len(Data) != 0:
             # create a list of dict for each alias {alias: {'files':files, 'jonName': jobs, 'FileDirectory':filedirectory}}
@@ -901,6 +901,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
                     else:
                         # update boollean
                         Encrypted = False
+                
                 # check if md5sums and encrypted files is available for all files
                 if Encrypted == True:
                     # update file info and status only if all files do exist and md5sums can be extracted
@@ -1896,8 +1897,6 @@ def SubmitAnalyses(args):
         ## encrypt new files to a maximum of Max and only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
         ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
         #Maximum = int(args.max) - (UploadingBams + EncryptingBams)
-        #if Maximum < 0:
-        #    Maximum = 0
         #if Maximum > 0:
         #    EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
                
