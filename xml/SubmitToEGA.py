@@ -739,7 +739,8 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
         return job, JobName
 
 
-
+##############################
+        
 # use this function to encrypt files and update status to encrypting
 def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, KeyRing, Queue, Mem, Max):
     '''
@@ -801,6 +802,81 @@ def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable
                     cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
                     conn.commit()
                     conn.close()
+    
+    
+    
+##############################
+
+
+
+
+
+
+
+
+
+
+## use this function to encrypt files and update status to encrypting
+#def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, KeyRing, Queue, Mem, Max):
+#    '''
+#    (file, str, str, str, str, str, int, int) -> None
+#    Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
+#    with encrypt status for Box and update file status to encrypting if encryption and
+#    md5sum jobs are successfully launched using the specified queue and memory
+#    '''
+#    
+#    # check if Table exist
+#    Tables = ListTables(CredentialFile, DataBase)
+#    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
+#        # connect to database
+#        conn = EstablishConnection(CredentialFile, DataBase)
+#        cur = conn.cursor()
+#        # pull alias and files for status = encrypt
+#        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+#        Data = cur.fetchall()
+#        conn.close()
+#        
+#        # check that some files are in encrypt mode
+#        if len(Data) != 0:
+#            # encrypt only the Maxth files
+#            Data = Data[:int(Max)]
+#            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
+#            L = []
+#            for i in Data:
+#                D = {}
+#                assert i[0] not in D
+#                # get the working directory for that alias
+#                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, i[0], Box)
+#                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+#                # convert single quotes to double quotes for str -> json conversion
+#                files = i[1].replace("'", "\"")
+#                D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
+#                L.append(D)
+#            # check file directory
+#            for D in L:
+#                assert len(list(D.keys())) == 1
+#                alias = list(D.keys())[0]
+#                # store the job names and exit codes for that alias
+#                JobCodes, JobNames = [], []
+#                # loop over files for that alias
+#                for i in D[alias]['files']:
+#                    # get the filePath and fileName
+#                    filePath = D[alias]['files'][i]['filePath']
+#                    fileName = D[alias]['files'][i]['fileName']
+#                    # encrypt and run md5sums on original and encrypted files
+#                    j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
+#                    JobCodes.append(j)
+#                    JobNames.append(k)
+#                # check if encription was launched successfully
+#                if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
+#                    # store the job names in errorMessages
+#                    JobNames = ';'.join(JobNames)
+#                    # encryption and md5sums jobs launched succcessfully, update status -> encrypting
+#                    conn = EstablishConnection(CredentialFile, DataBase)
+#                    cur = conn.cursor()
+#                    cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
+#                    conn.commit()
+#                    conn.close()
                                         
 
 # use this function to check if a job is still running
@@ -1093,84 +1169,182 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box
 # use this function to check usage of working directory
 def GetWorkDirSpace():
     '''
-    () -> int
-    Return disk availability in Tb for the working directory
-    (/scratch2/groups/gsi/bis/EGA_Submissions/)
+    () -> list
+    Return a list with total size, used space and available space (all in Tb)
+    for the working directory /scratch2/groups/gsi/bis/EGA_Submissions/
     '''
-
+    
     # get total, free, and used space in working directory
-    available = subprocess.check_output('df -h /scratch2/groups/gsi/bis/EGA_Submissions/', shell=True).decode('utf-8').rstrip().split()[10]
-    if 'T' in available:
-        return int(available.replace('T', ''))
-    else:
-        return 0
+    Usage = subprocess.check_output('df -h /scratch2/groups/gsi/bis/EGA_Submissions/', shell=True).decode('utf-8').rstrip().split()
+    total, used, available = Usage[8], Usage[9], Usage[10]
+    L = [total, used, available]
+    for i in range(len(L)):
+        if 'T' in L[i]:
+            L[i] = float(L[i].replace('T', ''))
+        elif 'K' in L[i]:
+            L[i] = float(L[i].replace('K', '')) / 1000000000
+        elif 'M' in L[i]:
+            L[i] = float(L[i].replace('M', '')) / 1000000
+        elif 'G' in L[i]:
+            L[i] = float(L[i].replace('G', '')) / 1000
+    return L
     
-# use this function to count the number of uploading or encrypting files a given fileType
-def CountFiles(CredentialFile, DataBase, Table, Box, Status):
+# use this function to check usage of a single file
+def GetFileSize(FilePath):
     '''
-    (str, str, str, str, str) -> int
-    Take the file with db credentials, the table name and box for the Database
-    and return the number of bams and fastqs currently being uploaded or encrypted 
+    (str) -> float
+    Return the size in Tb of FilePath
     '''
+        
+    filesize = subprocess.check_output('du -sh {0}'.format(FilePath), shell=True).decode('utf-8').rstrip().split()
+    assert FilePath == filesize[1]
+    # convert file size to Tb
+    if 'T' in filesize[0]:
+        filesize = float(filesize[0].replace('T', ''))
+    elif 'K' in filesize[0]:
+        filesize = filesize[0].replace('K', '')
+        filesize = float(filesize) / 1000000000
+    elif 'M' in filesize[0]:
+        filesize = filesize[0].replace('M', '')
+        filesize = float(filesize) / 1000000
+    elif 'G' in filesize[0]:
+        filesize = filesize[0].replace('G', '')
+        filesize = float(filesize) / 1000
+    return filesize
 
-    # parse credential file to get EGA username and password
-    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
-    
-    # create a dict {fileTypeId: [jobNames]}
-    Jobs = {}
-    # grab uploading jobs from errorMessages column
+
+# use this function to compute disk usage of files in encrypt status
+def CountFileUsage(CredentialFile, DataBase, Table, Box, Status):
+    '''
+    (str, str, str, str, int) -> dict
+    Return a dictionary with the size of all files for a given alias for alias
+    with encrypting status
+    '''
+        
+    # create a dict {alias : file size}
+    D = {}
+        
+    # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        # extract files and jobNames for alias in upload mode for given box
-        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
-        # check that some alias are in upload mode
+        # pull alias and files for status = encrypt
+        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
         Data = cur.fetchall()
-        # close connection
         conn.close()
-        # check that some files are in uploading mode
+        
+        # check that some files are in encrypt mode
         if len(Data) != 0:
             for i in Data:
-                # create a dict {alias: value, files: dict, jobNames: list}
-                jobNames = i[1].split(';')
-                # get the dict with file info
-                files = json.loads(i[0].replace("'", "\""))
-                # for each job, extract the fileName
-                for j in jobNames:
-                    fileName = j.split('__')[1]
-                    # find corresponding file type Id
-                    for filePath in files:
-                        if fileName == os.path.basename(filePath):
-                            fileTypeId = files[filePath]['fileTypeId']
-                            # populate dict
-                            if fileTypeId in Jobs:
-                                Jobs[fileTypeId].append(j)
-                            else:
-                                Jobs[fileTypeId] = [j]
-    # check which jobs are running
-    # create a dict {fileTypeId :[array of bool: True if running, False if done]}
-    Running = {}
-    for fileTypeId in Jobs:
-        for jobName in Jobs[fileTypeId]:
-            isRunning = CheckRunningJob(jobName)
-            if fileTypeId in Running:
-                Running[fileTypeId].append(isRunning)
-            else:
-                Running[fileTypeId] = [isRunning]
-                
-    # count the number of uploading or encrypting bams and fastqs
-    if 'bam' not in Running:
-        bams = 0
-    else:
-        bams = Running['bam'].count(True)
-    if 'fastq' not in Running:
-        fastqs = 0
-    else:
-        fastqs = Running['fastq'].count(True)
-    return bams + fastqs
+                assert i[0] not in D
+                # convert single quotes to double quotes for str -> json conversion
+                files = json.loads(i[1].replace("'", "\""))
+                # make a list to record file sizes of all files under the given alias
+                filesize = []
+                # loop over filepath:
+                for j in files:
+                    # get the file size
+                    filesize.append(GetFileSize(files[j]['filePath']))
+                D[i[0]] = sum(filesize)
+    return D            
+
+# use this function to select alias to encrypt based on disk usage
+def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box):
+    '''
+    (str, str, str, str) -> list
+    Connect to submission DataBase with file credentials, extract alias with encrypt
+    status and return a list of aliases with files that can be encrypted while 
+    keeping 15Tb of free space in scratch
+    '''
+        
+    # get disk space of working directory
+    total, used, available = GetWorkDirSpace()
+        
+    # get file size of all files under each alias with encrypt status
+    Encrypt = CountFileUsage(CredentialFile, DataBase, Table, Box, 'encrypt')
+    # get file size of all files under each alias with encrypting status
+    Encrypting = CountFileUsage(CredentialFile, DataBase, Table, Box, 'encrypting')
     
+    # set the file size at the current usage
+    FileSize = used
+    # add file size for all aliases with encrypting status
+    for alias in Encrypting:
+        FileSize += Encrypting[alias]
+       
+    # record aliases for encryption
+    Aliases = []
+    for alias in Encrypt:
+        # do not encrypt if the new files result is < 15Tb of disk availability 
+        if available - (FileSize + Encrypt[alias]) > 15:
+            FileSize += Encrypt[alias]
+            Aliases.append(alias)
+    return Aliases
+
+
+## use this function to count the number of encrypting files a given fileType
+#def CountFiles(CredentialFile, DataBase, Table, Box):
+#    '''
+#    (str, str, str, str, str) -> int
+#    Take the file with db credentials, the table name and box for the Database
+#    and return the number of bams and fastqs currently being uploaded or encrypted 
+#    '''
+#
+#    # parse credential file to get EGA username and password
+#    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+#    
+#    # create a dict {fileTypeId: [jobNames]}
+#    Jobs = {}
+#    # grab uploading jobs from errorMessages column
+#    Tables = ListTables(CredentialFile, DataBase)
+#    if Table in Tables:
+#        # connect to database
+#        conn = EstablishConnection(CredentialFile, DataBase)
+#        cur = conn.cursor()
+#        # extract files and jobNames for alias in upload mode for given box
+#        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+#        # check that some alias are in upload mode
+#        Data = cur.fetchall()
+#        # close connection
+#        conn.close()
+#        # check that some files are in uploading mode
+#        if len(Data) != 0:
+#            for i in Data:
+#                # create a dict {alias: value, files: dict, jobNames: list}
+#                jobNames = i[1].split(';')
+#                # get the dict with file info
+#                files = json.loads(i[0].replace("'", "\""))
+#                # for each job, extract the fileName
+#                for j in jobNames:
+#                    fileName = j.split('__')[1]
+#                    # find corresponding file type Id
+#                    for filePath in files:
+#                        if fileName == os.path.basename(filePath):
+#                            fileTypeId = files[filePath]['fileTypeId']
+#                            # populate dict
+#                            if fileTypeId in Jobs:
+#                                Jobs[fileTypeId].append(j)
+#                            else:
+#                                Jobs[fileTypeId] = [j]
+#    # check which jobs are running
+#    # create a dict {fileTypeId :[array of bool: True if running, False if done]}
+#    Running = {}
+#    for fileTypeId in Jobs:
+#        for jobName in Jobs[fileTypeId]:
+#            isRunning = CheckRunningJob(jobName)
+#            if fileTypeId in Running:
+#                Running[fileTypeId].append(isRunning)
+#            else:
+#                Running[fileTypeId] = [isRunning]
+#                
+#    # count the number of uploading or encrypting bams and fastqs
+#    C = 0
+#    for i in ['bam', 'fastq']:
+#        if i in Running:
+#            C += Running[i].count(True)
+#    return C
+   
 
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
@@ -1909,17 +2083,12 @@ def SubmitAnalyses(args):
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
-        ## do not allow new bams to be encrypted if at least xxx bams are still uploading
-        ## count the number of bams being uploaded and being encrypted
-        #UploadingBams =  CountFiles(args.credential, args.subdb, args.table, args.box, 'uploading')
-        #EncryptingBams = CountFiles(args.credential, args.subdb, args.table, args.box, 'encrypting')
-                
-        ## encrypt new files to a maximum of Max and only if the number of uploading bams and encrypting bams < Max (Max = 10 by default)
-        ## encrypt files and do a checksum on the original and encrypted file change status encrypt -> encrypting
-        #Maximum = int(args.max) - (UploadingBams + EncryptingBams)
-        #if Maximum > 0:
-        #    EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
-               
+        # monitor disk space in scratch. encrypt new files only if 15Tb is available
+        # make a list of aliases that can undergo encryption
+        Aliases = SelectAliasesForEncryption(args.credential, args.subdb, args.table, args.box)
+        
+        EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
+        
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
