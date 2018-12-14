@@ -1733,30 +1733,41 @@ def CheckTableInformation(CredentialFile, DataBase, Table, ProjectsTable, Attrib
     or keep status to "ready" if incorrect or missing
     '''
 
+    # create dict {alias: [errors]}
+    K = {}
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()      
+    cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    Data = cur.fetchall()
+    conn.close()
+    if len(Data) != 0:
+        for i in Data:
+            K[i[0]] = []
+    
     # get error messages for the different tables. create dicts {alias" error}
     D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'analyses')
     E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'attributes')
     F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'projects')
 
     # merge dicts
-    K = {}
-    for alias in D:
-        K[alias] = [D[alias]]
-    for alias in E:
-        if alias in K:
+    for alias in K:
+        if alias in D:
+            K[alias].append(D[alias])
+        else:
+            K[alias].append('In {0} table, no information'.format(Table))
+        if alias in E:
             K[alias].append(E[alias])
         else:
-            K[alias] = [E[alias]]
-    for alias in F:
-        if alias in K:
+            K[alias].append('In {0} table, no information'.format(AttributesTable))
+        if alias in F:
             K[alias].append(F[alias])
         else:
-            K[alias] = [F[alias]]
-    
+            K[alias].append('In {0} table, no information'.format(ProjectsTable))
+            
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()      
-    
     # update status and record errorMessage
     if len(K) != 0:
         for alias in K:
@@ -1766,6 +1777,11 @@ def CheckTableInformation(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                     # record error message, update status ready --> valid
                     cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
                     conn.commit()
+            elif len(list(set(K[alias]))) == 0:
+                Error = ['In {0} table, no information'.format(Table), 'In {0} table, no information'.format(AttributesTable), 'In {0} table, no information'.format(ProjectsTable)]
+                # record error message, update status ready --> valid
+                cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(Error), alias, Box))
+                conn.commit()
             else:
                 # record errorMessage and keep status ready --> ready
                 cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(K[alias]), alias, Box))
