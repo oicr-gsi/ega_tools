@@ -703,7 +703,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     Data = cur.fetchall()
     
-    # create a dict {samplealias: [sampleaccessions, analysisalias]}
+    # create a dict {alias: [sampleaccessions, ErrorMessage]}
     Samples = {}
     # check if alias are in ready status
     if len(Data) != 0:
@@ -712,15 +712,22 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
             sampleAlias = i[0].split(':')
             # make a list of sample accessions
             sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
-            # add sample accessions only if all sample aliases have accessions
-            if len(sampleAlias) == len(sampleAccessions):
-                Samples[i[0]] = [':'.join(sampleAccessions), i[2]]
-        # loop over samples, update if  sample accessions are available  
+            # record error if sample aliases have missing accessions
+            if len(sampleAlias) != len(sampleAccessions):
+                Error = 'Sample accessions not available'
+            else:
+                Error = ''
+            Samples[i[2]] = [':'.join(sampleAccessions), Error]
         if len(Samples) != 0:
             for alias in Samples:
-                if Samples[alias][0] != 'NULL':
+                # update status start --> encrypt if no error
+                if Samples[alias][1] == '':
                     # update sample accessions and status start --> encrypt
-                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.sampleAlias=\"{2}\" AND {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], alias, Samples[alias][1], Box)) 
+                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                    conn.commit()
+                else:
+                    # record error message and keep status start --> start
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
     conn.close()    
 
