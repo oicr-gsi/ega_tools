@@ -671,15 +671,15 @@ def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Pro
             for D in Jsons:
                 # check if json is correctly formed (ie. required fields are present)
                 if len(D) == 1:
-                    print('cannot form analysis json for {0}, required field(s) missing'.format(D['alias']))
+                    Error = 'Cannot form json, required field(s) missing'
+                    # add error in table and keep status uploaded --> uploaded
+                    alias = D['alias']
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                    conn.commit()
                 else:
                     # add json back in table and update status
                     alias = D['alias']
-                    # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
-                    conn.commit()
-                    # update status to submit
-                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
                     conn.commit()
     conn.close()
     
