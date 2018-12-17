@@ -91,47 +91,56 @@ def ListTables(CredentialFile, DataBase):
     conn.close()
     return Tables
 
+
+
 # use this function to to generate a working directory to save the encrypted and md5sums 
-def GetWorkingDirectory(CredentialFile, DataBase, AnalysisTable, ProjectsTable, AttributesTable, Alias, Box, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
+def GetWorkingDirectory(S, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
     '''
-    (str, str, str, str, str, str) -> str
+    (str, str) -> str
     Returns a working directory where to save the encrypted and md5sum files
-    for a given Alias and Box in Table using the credentials for DataBase:
-    /scratch2/groups/gsi/bis/EGA_Submissions/ProjectAlias/{aligner}/{aligner_ver}/{indel_realigner}/{indel_realigner_ver}
+    by appending str S to WorkingDir
     '''
     
-    # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    # get the title project and the attributes for that alias
-    cur.execute('SELECT {0}.alias, {1}.attributes FROM {0} join {1} join {2} WHERE {2}.alias=\"{3}\" and {2}.egaBox=\"{4}\" \
-                and {2}.projects = {0}.alias and {2}.attributes = {1}.alias'.format(ProjectsTable, AttributesTable, AnalysisTable, Alias, Box))
-    Data = cur.fetchall()
-    if len(Data) != 0:
-        Data = Data[0]     
-        # get project title
-        a, b = Data[0], Data[1]
-        if a != '' and a != 'NULL':
-            title = a.replace(' ', '_')
-            # add title to WorkingDir    
-            WorkingDir = os.path.join(WorkingDir, title)
-        if b != '' and b != 'NULL':
-            # get attributes
-            b = b.split(';')
-            # create a dict to store attributes
-            attributes = {}
-            for i in b:
-                i = json.loads(i)
-                attributes[i['tag'].lower()] = i['value']
-            if 'aligner' in attributes:
-                WorkingDir = os.path.join(WorkingDir, attributes['aligner'])
-                if 'aligner_ver' in attributes:
-                    WorkingDir = os.path.join(WorkingDir, attributes['aligner_ver'])
-            if 'indel_realigner' in attributes:
-                WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner'])
-                if 'indel_realigner_ver' in attributes:
-                    WorkingDir = os.path.join(WorkingDir, attributes['indel_realigner_ver'])
-    return WorkingDir                
+    return os.path.join(WorkingDir, S)
+    
+
+# use this function to add a working directory for each alias
+def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
+    '''
+    (str, str, str, str) --> None
+    Take the file with credentials to connect to Database, create unique directories
+    in file system for each alias in Table with ready Status and Box and record       
+    working directory in Table
+    '''
+    
+    # check if table exists
+    Tables = ListTables(CredentialFile, DataBase)
+    
+    if Table in Tables:
+        # connect to db
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        # get the title project and the attributes for that alias
+        cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"valid\" and {0}.egaBox=\"{1}\"'.format(Table, Box))
+        Data = cur.fetchall()
+    
+        if len(Data) != 0:
+            # loop over alias
+            for i in Data:
+                alias = i[0]
+                # create working directory
+                
+                ### continue here command to generate uuid
+                
+                Suffix = 'xxxxx'             
+                
+                # record suffix in table, update status valid --> start
+                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Suffix, alias, Box))  
+                conn.commit()
+                # create working directories
+                WorkingDir = GetWorkingDirectory(Suffix, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+                os.makedirs(WorkingDir)
+        conn.close()                
 
 
 # use this function to parse the input sample table
@@ -1788,7 +1797,8 @@ def CheckTableInformation(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                 conn.commit()
     conn.close()
 
-               
+  
+            
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
@@ -1991,7 +2001,7 @@ def AddAnalysesInfo(args):
     
     if args.table not in Tables:
         Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "analysisDate",
-                  "files", "Json", "submissionStatus", "errorMessages", "Receipt",
+                  "files", "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "projects",
                   "attributes", "Status"]
         # format colums with datatype
@@ -2113,6 +2123,9 @@ def SubmitAnalyses(args):
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
         CheckTableInformation(args.credential, args.database, args.table, args.projects, args.attributes, args.box)
+        
+        ## set up working directory, add to analyses table and update status valid --> start
+        AddWorkingDirectory(args.credential, args.database, args.table, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
