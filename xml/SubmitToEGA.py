@@ -844,7 +844,7 @@ def CheckRunningJob(JobName):
 
                 
 # use this function to check that encryption is done
-def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box):
+def CheckEncryption(CredentialFile, DataBase, Table, Box):
     '''
     (file, str, str, str, str, str) -> None
     Take the file with DataBase credentials, the tables in this db used to pull
@@ -855,7 +855,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
     # check that table exists
     Tables = ListTables(CredentialFile, DataBase)
     
-    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
+    if Table in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
@@ -1238,7 +1238,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1246,24 +1246,20 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         
         if len(Data) != 0:
             # check that some files are in uploading mode
-            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
-            L = []
             for i in Data:
+                # create a dict {alias: {'files':files, 'FileDirectory':filedirectory}}
                 D = {}
-                assert i[0] not in D
+                alias = i[0]
+                assert alias not in D
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
-                L.append(D)
-            # check file directory
-            for D in L:
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
+                D[alias] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
+                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
                 # set up boolean to be updated if uploading is not complete
                 Uploaded = True
 
                 # loop over files for that alias
-                for i in D[alias]['files']:
+                for filePath in D[alias]['files']:
                     # check if the jobs used for uploading any files for this alias are running
                     for JobName in D[alias]['jobName'].split(';'):
                         if CheckRunningJob(JobName) == True:
@@ -1281,7 +1277,6 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
                             Uploaded = False
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
-                    # update status
                     # connect to database, updatestatus and close connection
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
@@ -1994,7 +1989,7 @@ def SubmitAnalyses(args):
         #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #CheckEncryption(args.credential, args.subdb, args.table, args.box)
         
         ## upload files and change the status upload -> uploading 
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
