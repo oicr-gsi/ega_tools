@@ -806,7 +806,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         JobNames.append(k)
                     # check if encription was launched successfully
                     if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
-                        # store the job names in errorMessages
+                        # store the job names
                         JobNames = ';'.join(JobNames)
                         # encryption and md5sums jobs launched succcessfully, update status -> encrypting
                         conn = EstablishConnection(CredentialFile, DataBase)
@@ -814,7 +814,16 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.JobNames=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
                         conn.commit()
                         conn.close()
-    
+                    else:
+                        # store error message and jobnames, keep status encrypt --> encrypt
+                        JobNames = ';'.join(JobNames)
+                        Error = 'Could not launch encryption jobs'
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.JobNames=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Error, JobNames, alias, Box))
+                        conn.commit()
+                        conn.close()
+                        
 
 # use this function to check if a job is still running
 def CheckRunningJob(JobName):
