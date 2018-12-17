@@ -748,81 +748,73 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
         return job, JobName
 
 
-##############################
         
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, KeyRing, Queue, Mem, Max):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
     '''
-    (file, str, str, str, str, str, int, int) -> None
-    Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
-    with encrypt status for Box and update file status to encrypting if encryption and
-    md5sum jobs are successfully launched using the specified queue and memory
+    (file, str, str, str, str, str, int) -> None
+    Take a file with credentials to connect to Database, encrypt files of aliases
+    only if Size (in TB) is available in scratch after encryption and update
+    file status to encrypting if encryption and md5sum jobs are successfully
+    launched using the specified queue and memory
     '''
+    
+    # create a list of aliases for encryption 
+    Aliases = SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box)
     
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
+    if Table in Tables:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        # pull alias and files for status = encrypt
-        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        # pull alias, files and working directory for status = encrypt
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         
         # check that some files are in encrypt mode
         if len(Data) != 0:
-            # encrypt only the Maxth files
-            Data = Data[:int(Max)]
-            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
-            L = []
             for i in Data:
+                # create a dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}} 
                 D = {}
-                assert i[0] not in D
-                # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, i[0], Box)
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-                # convert single quotes to double quotes for str -> json conversion
-                files = i[1].replace("'", "\"")
-                D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
-                L.append(D)
-            # check file directory
-            for D in L:
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
-                # store the job names and exit codes for that alias
-                JobCodes, JobNames = [], []
-                # loop over files for that alias
-                for i in D[alias]['files']:
-                    # get the filePath and fileName
-                    filePath = D[alias]['files'][i]['filePath']
-                    fileName = D[alias]['files'][i]['fileName']
-                    # encrypt and run md5sums on original and encrypted files
-                    j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
-                    JobCodes.append(j)
-                    JobNames.append(k)
-                # check if encription was launched successfully
-                if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
-                    # store the job names in errorMessages
-                    JobNames = ';'.join(JobNames)
-                    # encryption and md5sums jobs launched succcessfully, update status -> encrypting
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
-                    conn.commit()
-                    conn.close()
+                alias = i[0]
+                # encrypt only files of aliases that were pre-selected
+                if alias in Aliases:
+                    assert alias not in D
+                    # get working directory
+                    WorkingDir = GetWorkingDirectory(i[2], WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+                    # create working directory iof doesn't exist
+                    if os.path.isdir(WorkingDir) == False:
+                        os.makedirs(WorkingDir)
+                    assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+                    # convert single quotes to double quotes for str -> json conversion
+                    files = i[1].replace("'", "\"")
+                    D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
+                    
+                    assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
+                    # store the job names and exit codes for that alias
+                    JobCodes, JobNames = [], []
+                    # loop over files for that alias
+                    for file in D[alias]['files']:
+                        # get the filePath and fileName
+                        filePath = D[alias]['files'][file]['filePath']
+                        fileName = D[alias]['files'][file]['fileName']
+                        # encrypt and run md5sums on original and encrypted files
+                        j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
+                        JobCodes.append(j)
+                        JobNames.append(k)
+                    # check if encription was launched successfully
+                    if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
+                        # store the job names in errorMessages
+                        JobNames = ';'.join(JobNames)
+                        # encryption and md5sums jobs launched succcessfully, update status -> encrypting
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
+                        conn.commit()
+                        conn.close()
     
-    
-    
-##############################
-
-
-
-
-
-
-
-
 
 
 ## use this function to encrypt files and update status to encrypting
@@ -2067,11 +2059,8 @@ def SubmitAnalyses(args):
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
-        # monitor disk space in scratch. encrypt new files only if 15Tb is available
-        # make a list of aliases that can undergo encryption
-        #Aliases = SelectAliasesForEncryption(args.credential, args.subdb, args.table, args.box)
-        
-        #EncryptFiles(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.keyring, args.queue, args.memory, Maximum)
+        ## encrypt new files only if 15Tb is available. update status encrypt --> encrypting
+        #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
