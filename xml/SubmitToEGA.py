@@ -123,7 +123,6 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
         # get the title project and the attributes for that alias
         cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"valid\" and {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
-    
         if len(Data) != 0:
             # loop over alias
             for i in Data:
@@ -134,14 +133,40 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
                 
                 Suffix = 'xxxxx'             
                 
-                # record suffix in table, update status valid --> start
-                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Suffix, alias, Box))  
+                # record suffix in table, create working directory in file system
+                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Suffix, alias, Box))  
                 conn.commit()
                 # create working directories
                 WorkingDir = GetWorkingDirectory(Suffix, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
                 os.makedirs(WorkingDir)
-        conn.close()                
-
+        conn.close()
+        
+        # check that working directory was recorded and created
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        # get the title project and the attributes for that alias
+        cur.execute('SELECT {0}.alias, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"valid\" and {0}.egaBox=\"{1}\"'.format(Table, Box))
+        Data = cur.fetchall()
+        if len(Data) != 0:
+            for i in Data:
+                Error = []
+                alias = i[0]
+                WorkingDir = GetWorkingDirectory(i[1])
+                if i[1] in ['', 'NULL', '(null)']:
+                    Error.append('Working directory does not have a valid Id')
+                if os.path.isdir(WorkingDir) == False:
+                    Error.append('Working directory not generated')
+                # check if error message
+                if len(Error) != 0:
+                    # error is found, record error message, keep status valid --> valid
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))  
+                    conn.commit()
+                else:
+                    # no error, update Status valid --> start
+                    cur.execute('UPDATE {0} SET {0}.Status=\"start\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))  
+                    conn.commit()
+        conn.close()            
+        
 
 # use this function to parse the input sample table
 def ParseSampleInputTable(Table):
