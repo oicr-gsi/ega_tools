@@ -1292,69 +1292,6 @@ def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box):
     return Aliases
 
 
-## use this function to count the number of encrypting files a given fileType
-#def CountFiles(CredentialFile, DataBase, Table, Box):
-#    '''
-#    (str, str, str, str, str) -> int
-#    Take the file with db credentials, the table name and box for the Database
-#    and return the number of bams and fastqs currently being uploaded or encrypted 
-#    '''
-#
-#    # parse credential file to get EGA username and password
-#    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
-#    
-#    # create a dict {fileTypeId: [jobNames]}
-#    Jobs = {}
-#    # grab uploading jobs from errorMessages column
-#    Tables = ListTables(CredentialFile, DataBase)
-#    if Table in Tables:
-#        # connect to database
-#        conn = EstablishConnection(CredentialFile, DataBase)
-#        cur = conn.cursor()
-#        # extract files and jobNames for alias in upload mode for given box
-#        cur.execute('SELECT {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-#        # check that some alias are in upload mode
-#        Data = cur.fetchall()
-#        # close connection
-#        conn.close()
-#        # check that some files are in uploading mode
-#        if len(Data) != 0:
-#            for i in Data:
-#                # create a dict {alias: value, files: dict, jobNames: list}
-#                jobNames = i[1].split(';')
-#                # get the dict with file info
-#                files = json.loads(i[0].replace("'", "\""))
-#                # for each job, extract the fileName
-#                for j in jobNames:
-#                    fileName = j.split('__')[1]
-#                    # find corresponding file type Id
-#                    for filePath in files:
-#                        if fileName == os.path.basename(filePath):
-#                            fileTypeId = files[filePath]['fileTypeId']
-#                            # populate dict
-#                            if fileTypeId in Jobs:
-#                                Jobs[fileTypeId].append(j)
-#                            else:
-#                                Jobs[fileTypeId] = [j]
-#    # check which jobs are running
-#    # create a dict {fileTypeId :[array of bool: True if running, False if done]}
-#    Running = {}
-#    for fileTypeId in Jobs:
-#        for jobName in Jobs[fileTypeId]:
-#            isRunning = CheckRunningJob(jobName)
-#            if fileTypeId in Running:
-#                Running[fileTypeId].append(isRunning)
-#            else:
-#                Running[fileTypeId] = [isRunning]
-#                
-#    # count the number of uploading or encrypting bams and fastqs
-#    C = 0
-#    for i in ['bam', 'fastq']:
-#        if i in Running:
-#            C += Running[i].count(True)
-#    return C
-   
-
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
     '''
