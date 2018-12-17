@@ -959,7 +959,15 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
                     cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
                     conn.commit()
                     conn.close()
-
+                elif Encrypted == False:
+                    # reset status encrypting -- > encrypt, record error message
+                    Error = 'Encryption or md5sum did not complete'
+                    conn = EstablishConnection(CredentialFile, DataBase)
+                    cur = conn.cursor()
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                    conn.commit()
+                    conn.close()
+                    
 
 # use this script to launch qsubs to encrypt the files and do a checksum
 def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue, Mem, UploadMode):
