@@ -1007,7 +1007,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box))
         
         # check that some alias are in upload mode
         Data = cur.fetchall()
@@ -1015,26 +1015,19 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
         conn.close()
         
         if len(Data) != 0:
-            # upload only Max objects: the first Nth numbers of objects
-            Data = Data[:int(Max)]
-            # create a list of dict for each alias {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
-            L = []
             for i in Data:
+                # create dict {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
                 D = {}
                 alias = i[0]
                 assert alias not in D
                 files = i[1].replace("'", "\"")
                 # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
+                WorkingDir = GetWorkingDirectory(i[2])
                 assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-                D[i[0]] = {'files': json.loads(files), 'StagePath': i[2], 'FileDirectory': WorkingDir}
-                L.append(D)
- 
-           # check stage folder, file directory
-            for D in L:
+                D[alias] = {'files': json.loads(files), 'StagePath': i[3], 'FileDirectory': WorkingDir}
+                
                 # check stage folder, file directory
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
+                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
                 # get the source and destination directories
                 StagePath = D[alias]['StagePath']
                 FileDir = D[alias]['FileDirectory']
@@ -1054,7 +1047,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, Attrib
                     JobNames = ';'.join(JobNames)
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"{1}\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.JobNames=\"{1}\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
                     conn.commit()
                     conn.close()
                       
