@@ -750,17 +750,17 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
 
         
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace):
     '''
     (file, str, str, str, str, str, int) -> None
     Take a file with credentials to connect to Database, encrypt files of aliases
-    only if Size (in TB) is available in scratch after encryption and update
+    only if DiskSpace (in TB) is available in scratch after encryption and update
     file status to encrypting if encryption and md5sum jobs are successfully
     launched using the specified queue and memory
     '''
     
     # create a list of aliases for encryption 
-    Aliases = SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box)
+    Aliases = SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace)
     
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
@@ -1252,12 +1252,12 @@ def CountFileUsage(CredentialFile, DataBase, Table, Box, Status):
     return D            
 
 # use this function to select alias to encrypt based on disk usage
-def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box):
+def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
     '''
     (str, str, str, str) -> list
     Connect to submission DataBase with file credentials, extract alias with encrypt
     status and return a list of aliases with files that can be encrypted while 
-    keeping 15Tb of free space in scratch
+    keeping DiskSpace (in TB) of free space in scratch
     '''
         
     # get disk space of working directory
@@ -1278,7 +1278,7 @@ def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box):
     Aliases = []
     for alias in Encrypt:
         # do not encrypt if the new files result is < 15Tb of disk availability 
-        if available - (FileSize + Encrypt[alias]) > 15:
+        if available - (FileSize + Encrypt[alias]) > DiskSpace:
             FileSize += Encrypt[alias]
             Aliases.append(alias)
     return Aliases
@@ -2059,8 +2059,8 @@ def SubmitAnalyses(args):
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
-        ## encrypt new files only if 15Tb is available. update status encrypt --> encrypting
-        #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory)
+        ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
+        #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
         
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
         #CheckEncryption(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
@@ -2151,6 +2151,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     AnalysisSubmission.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
+    AnalysisSubmission.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type='int', help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=10, help='Maximum number of files to be uploaded at once. Default 50')
