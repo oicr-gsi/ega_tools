@@ -816,70 +816,6 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         conn.close()
     
 
-
-## use this function to encrypt files and update status to encrypting
-#def EncryptFiles(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, KeyRing, Queue, Mem, Max):
-#    '''
-#    (file, str, str, str, str, str, int, int) -> None
-#    Take a file with credentials to connect to Database, encrypt the first Maxth files in Table
-#    with encrypt status for Box and update file status to encrypting if encryption and
-#    md5sum jobs are successfully launched using the specified queue and memory
-#    '''
-#    
-#    # check if Table exist
-#    Tables = ListTables(CredentialFile, DataBase)
-#    if Table in Tables and ProjectsTable in Tables and AttributesTable in Tables:
-#        # connect to database
-#        conn = EstablishConnection(CredentialFile, DataBase)
-#        cur = conn.cursor()
-#        # pull alias and files for status = encrypt
-#        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.Status=\"encrypt\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-#        Data = cur.fetchall()
-#        conn.close()
-#        
-#        # check that some files are in encrypt mode
-#        if len(Data) != 0:
-#            # encrypt only the Maxth files
-#            Data = Data[:int(Max)]
-#            # create a list of dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}}
-#            L = []
-#            for i in Data:
-#                D = {}
-#                assert i[0] not in D
-#                # get the working directory for that alias
-#                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, i[0], Box)
-#                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-#                # convert single quotes to double quotes for str -> json conversion
-#                files = i[1].replace("'", "\"")
-#                D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
-#                L.append(D)
-#            # check file directory
-#            for D in L:
-#                assert len(list(D.keys())) == 1
-#                alias = list(D.keys())[0]
-#                # store the job names and exit codes for that alias
-#                JobCodes, JobNames = [], []
-#                # loop over files for that alias
-#                for i in D[alias]['files']:
-#                    # get the filePath and fileName
-#                    filePath = D[alias]['files'][i]['filePath']
-#                    fileName = D[alias]['files'][i]['fileName']
-#                    # encrypt and run md5sums on original and encrypted files
-#                    j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
-#                    JobCodes.append(j)
-#                    JobNames.append(k)
-#                # check if encription was launched successfully
-#                if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
-#                    # store the job names in errorMessages
-#                    JobNames = ';'.join(JobNames)
-#                    # encryption and md5sums jobs launched succcessfully, update status -> encrypting
-#                    conn = EstablishConnection(CredentialFile, DataBase)
-#                    cur = conn.cursor()
-#                    cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
-#                    conn.commit()
-#                    conn.close()
-                                        
-
 # use this function to check if a job is still running
 def CheckRunningJob(JobName):
     '''
@@ -2051,10 +1987,10 @@ def SubmitAnalyses(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        CheckTableInformation(args.credential, args.database, args.table, args.projects, args.attributes, args.box)
+        #CheckTableInformation(args.credential, args.database, args.table, args.projects, args.attributes, args.box)
         
         ## set up working directory, add to analyses table and update status valid --> start
-        AddWorkingDirectory(args.credential, args.database, args.table, args.box)
+        #AddWorkingDirectory(args.credential, args.database, args.table, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
@@ -2069,17 +2005,17 @@ def SubmitAnalyses(args):
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
         
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
+        #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
         
         ## submit analyses with submit status                
-        RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
+        #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        if args.remove == True:
-            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #if args.remove == True:
+        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
 
 
     
@@ -2151,7 +2087,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     AnalysisSubmission.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     AnalysisSubmission.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
-    AnalysisSubmission.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type='int', help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
+    AnalysisSubmission.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     AnalysisSubmission.add_argument('--Max', dest='max', default=10, help='Maximum number of files to be uploaded at once. Default 50')
