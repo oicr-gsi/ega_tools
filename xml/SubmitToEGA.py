@@ -1335,7 +1335,15 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
                     cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
                     conn.commit()                                
                     conn.close()              
-
+                elif Uploaded == False:
+                    # reset status uploading --> upload, record error message
+                    Error = 'Upload failed'
+                    conn = EstablishConnection(CredentialFile, DataBase)
+                    cur = conn.cursor()
+                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                    conn.commit()                                
+                    conn.close()
+                    
     
 # use this function to format the error Messages prior saving into db table
 def CleanUpError(errorMessages):
