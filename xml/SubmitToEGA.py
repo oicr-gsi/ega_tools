@@ -1059,7 +1059,17 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
                     cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.JobNames=\"{1}\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
                     conn.commit()
                     conn.close()
-                      
+                else:
+                    # record error message and job names, keep status same upload --> upload
+                    JobNames = ';'.join(JobNames)
+                    Error = 'Could not launch upload jobs'
+                    conn = EstablishConnection(CredentialFile, DataBase)
+                    cur = conn.cursor()
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.JobNames=\"{2}\"  WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Error, JobNames, alias, Box))
+                    conn.commit()
+                    conn.close()
+                    
+                    
 # use this function to print a dictionary of directory
 def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box):
     '''
