@@ -811,7 +811,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         # encryption and md5sums jobs launched succcessfully, update status -> encrypting
                         conn = EstablishConnection(CredentialFile, DataBase)
                         cur = conn.cursor()
-                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
+                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.JobNames=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
                         conn.commit()
                         conn.close()
     
@@ -860,41 +860,36 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files and encryption job names for status = encrypting
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.errorMessages FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         # check that some files are in encrypting mode
         if len(Data) != 0:
-            # create a list of dict for each alias {alias: {'files':files, 'jonName': jobs, 'FileDirectory':filedirectory}}
-            L = []
             for i in Data:
+                # create a dict {alias: {'files':files, 'jobName': jobs, 'FileDirectory':filedirectory}}
                 D = {}
                 alias = i[0]
                 assert alias not in D
                 # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, alias, Box)
+                WorkingDir = GetWorkingDirectory(i[3])
                 assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
                 files = i[1].replace("'", "\"")
                 D[alias] = {'files': json.loads(files), 'FileDirectory': WorkingDir, 'jobName': i[2]}
-                L.append(D)
-            # check file directory
-            for D in L:
-                assert len(list(D.keys())) == 1
-                alias = list(D.keys())[0]
+                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
                 # create a dict to store the updated file info
                 Files = {}
                 # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
                 Encrypted = True
                 # loop over files for that alias
-                for i in D[alias]['files']:
+                for file in D[alias]['files']:
                     # check if the jobs used for encrypting any files for this alias are running
                     for JobName in D[alias]['jobName'].split(';'):
                         if CheckRunningJob(JobName) == True:
                             Encrypted = False
                     # get the fileName
-                    fileName = D[alias]['files'][i]['fileName']
-                    fileTypeId = D[alias]['files'][i]['fileTypeId']
+                    fileName = D[alias]['files'][file]['fileName']
+                    fileTypeId = D[alias]['files'][file]['fileTypeId']
                     # check that encryoted and md5sum files do exist
                     originalMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.md5')
                     encryptedMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg.md5')
@@ -907,7 +902,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
                         originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
                         if encryptedMd5 != '' and originalMd5 != '':
                             # capture md5sums, build updated dict
-                            Files[i] = {'filePath': i, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
+                            Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
                         else:
                             # update boolean
                             Encrypted = False
@@ -920,7 +915,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, ProjectsTable, AttributesTa
                     # update file info and status only if all files do exist and md5sums can be extracted
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(Files), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
                     conn.commit()
                     conn.close()
 
