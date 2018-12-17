@@ -988,12 +988,12 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, ProjectsTable, AttributesTable, Box, Max, Queue, Mem, UploadMode):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode):
     '''
-    (file, str, str, str, int, str, int, bool) -> None
+    (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files for the Maxth first aliases in upload status using specified
-    Queue and Memory and update status to uploading. 
+    and upload files of aliases with upload status using specified
+    Queue, Memory and UploadMode and update status to uploading. 
     '''
        
     # check that Analysis table exists
