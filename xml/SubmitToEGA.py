@@ -741,7 +741,7 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
 
     # command to do a checksum and encryption
     MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
-    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0} && \
+    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0}; \
     md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
 
 
@@ -812,7 +812,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                 if alias in Aliases:
                     assert alias not in D
                     # get working directory
-                    WorkingDir = GetWorkingDirectory(i[2], WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+                    WorkingDir = GetWorkingDirectory(i[2])
                     # create working directory iof doesn't exist
                     if os.path.isdir(WorkingDir) == False:
                         os.makedirs(WorkingDir)
