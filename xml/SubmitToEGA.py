@@ -14,6 +14,7 @@ import pymysql
 import os
 import argparse
 import requests
+import uuid
 
 
 # resource for jaon formatting and api submission
@@ -127,17 +128,13 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
             # loop over alias
             for i in Data:
                 alias = i[0]
-                # create working directory
-                
-                ### continue here command to generate uuid
-                
-                Suffix = 'xxxxx'             
-                
-                # record suffix in table, create working directory in file system
-                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Suffix, alias, Box))  
+                # create working directory with random unique identifier
+                UID = str(uuid.uuid4())             
+                # record identifier in table, create working directory in file system
+                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, UID, alias, Box))  
                 conn.commit()
                 # create working directories
-                WorkingDir = GetWorkingDirectory(Suffix, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+                WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
                 os.makedirs(WorkingDir)
         conn.close()
         
@@ -1267,6 +1264,65 @@ def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
     return Aliases
 
 
+# use this function to check the success of the upload
+def IsUploadSuccessfull(LogFile):
+    '''
+    (str) --> bool
+    Read the log of the upload script and return True if 3 lines with 'Completed'
+    are in the log (ie. successfull upload of 2 md5sums and 1 .gpg), and return
+    False otherwise
+    Pre-condition: this log output is for aspera upload    
+    '''
+    
+    infile = open(LogFile)
+    content = infile.read()
+    infile.close()
+    
+    # 3 'Completed' if successful upload (2 md5sums and 1 encrypted are uploaded together) 
+    if content.count('Completed') == 3:
+        return True
+    else:
+        return False
+
+# use this function to check the success of the upload
+def CheckUploadSuccess(LogDir, alias, FileName):
+    '''
+    (str) --> bool
+    Take the directory where logs of the upload script are saved, retrieve the
+    most recent out log and return True if all files are uploaded (ie no error)
+    or False if errors are found
+    '''
+
+    # sort the out log files from the most recent to the older ones
+    logfiles = subprocess.check_output('ls -lt {0}'.format(os.path.join(LogDir, 'Upload.*.o*')), shell=True).decode('utf-8').rstrip().split('\n')
+    # keep the log out file names
+    for i in range(len(logfiles)):
+        logfiles[i] = logfiles[i].strip().split()[-1]
+    
+    # set up a boolean to update if most recent out log is found for FileName
+    Found = False
+    
+    # loop over the out log
+    for filepath in logfiles:
+        # extract logname and split to get alias and file name
+        logname = os.path.basename(filepath).split('__') 
+        if alias == logname[0].replace('Upload.', '') and FileName == logname[1][:logname[1].rfind('.o')]:
+            # update boolean and exit
+            Found = True
+            break   
+    
+    # check if most recent out log is found
+    if Found == True:
+        # check that log file exists
+        if os.path.isfile(filepath):
+            # check if upload was successful
+            return IsUploadSuccessfull(filepath)
+        else:
+            return False
+    else:
+        return False
+    
+    
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
     '''
@@ -1290,7 +1346,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1299,33 +1355,40 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         if len(Data) != 0:
             # check that some files are in uploading mode
             for i in Data:
-                # create a dict {alias: {'files':files, 'FileDirectory':filedirectory}}
-                D = {}
                 alias = i[0]
-                assert alias not in D
                 # convert single quotes to double quotes for str -> json conversion
-                files = i[1].replace("'", "\"")
-                D[alias] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
-                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
+                files = json.loads(i[1].replace("'", "\""))
+                WorkingDirectory = GetWorkingDirectory(i[3])
+                StagePath = i[4]
+                JobNames = i[2]
                 # set up boolean to be updated if uploading is not complete
                 Uploaded = True
-
+                
                 # loop over files for that alias
-                for filePath in D[alias]['files']:
+                for filePath in files:
                     # check if the jobs used for uploading any files for this alias are running
-                    for JobName in D[alias]['jobName'].split(';'):
+                    for JobName in JobNames.split(';'):
                         if CheckRunningJob(JobName) == True:
                             Uploaded = False
+                # get the log directory
+                LogDir = os.path.join(WorkingDirectory, 'qsubs/log')
+                # check the out logs for each file
+                for filePath in files:
+                    # get filename
+                    filename = os.path.basename(filePath)
+                    # check if errors are found in log
+                    if CheckUploadSuccess(LogDir, alias, filename) == False:
+                        Uploaded = False
                 
                 # check if files are uploaded on the server
-                for filePath in D[alias]['files']:
+                for filePath in files:
                     # get filename
                     fileName = os.path.basename(filePath)
-                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                    encryptedFile = D[alias]['files'][filePath]['encryptedName']
+                    assert fileName + '.gpg' == files[filePath]['encryptedName']
+                    encryptedFile = files[filePath]['encryptedName']
                     originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
                     for j in [encryptedFile, encryptedMd5, originalMd5]:
-                        if j not in FilesBox[D[alias]['StagePath']]:
+                        if j not in FilesBox[StagePath]:
                             Uploaded = False
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
