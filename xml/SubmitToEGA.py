@@ -1288,7 +1288,7 @@ def IsUploadSuccessfull(LogFile):
         return False
 
 # use this function to check the success of the upload
-def CheckUploadSuccess(LogDir):
+def CheckUploadSuccess(LogDir, alias, FileName):
     '''
     (str) --> bool
     Take the directory where logs of the upload script are saved, retrieve the
@@ -1296,15 +1296,36 @@ def CheckUploadSuccess(LogDir):
     or False if errors are found
     '''
 
-    # extract the most recent out log file
-    logfile = subprocess.check_output('ls -lt {0}'.format(os.path.join(LogDir, 'Upload.*.o*')), shell=True).decode('utf-8').rstrip().split('\n')[0].strip().split()[-1]
-    # check ythat log file exists
-    if os.path.isfile(logfile):
-        # check if upload was successful
-        return IsUploadSuccessfull(logfile)
+    # sort the out log files from the most recent to the older ones
+    logfiles = subprocess.check_output('ls -lt {0}'.format(os.path.join(LogDir, 'Upload.*.o*')), shell=True).decode('utf-8').rstrip().split('\n')
+    # keep the log out file names
+    for i in range(len(logfiles)):
+        logfiles[i] = logfiles[i].strip().split()[-1]
+    
+    # set up a boolean to update if most recent out log is found for FileName
+    Found = False
+    
+    # loop over the out log
+    for filepath in logfiles:
+        # extract logname and split to get alias and file name
+        logname = os.path.basename(filepath).split('__') 
+        if alias == logname[0].replace('Upload.', '') and FileName == logname[1][:logname[1].rfind('.o')]:
+            # update boolean and exit
+            Found = True
+            break   
+    
+    # check if most recent out log is found
+    if Found == True:
+        # check that log file exists
+        if os.path.isfile(filepath):
+            # check if upload was successful
+            return IsUploadSuccessfull(filepath)
+        else:
+            return False
     else:
         return False
-
+    
+    
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
     '''
