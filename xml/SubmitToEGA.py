@@ -1558,12 +1558,12 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
                         {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
     elif datatype == 'attributes':
         if Table in Tables and AttributesTable in Tables:
-            cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath, \
+            cur.execute('SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
                         FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box))
     elif datatype == 'projects':
         if Table in Tables and ProjectsTable in Tables:
             cur.execute('SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-                        FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, ProjectsTable, Box))
+                        FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box))
     Data = cur.fetchall()
     conn.close()
     if len(Data) != 0:
@@ -1574,7 +1574,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
             Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
             Required = ['title', 'description', 'genomeId', 'StagePath']
         elif datatype == 'projects':
-            Keys = ['alias, studyId, analysisCenter, Broker, analysisTypeId, experimentTypeId']
+            Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
             Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
             
         for i in range(len(Data)):
@@ -1621,11 +1621,11 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
                     if d['analysisTypeId'] not in AnalysisTypes:
                         Missing = True
                         Error.append(key)
-                # check attributes
-                if key == 'attributes':
+                # check attributes of attributes table
+                if key == 'attributes' and datatype == 'attributes':
                     if d['attributes'] not in ['', 'NULL']:
                         # check format of attributes
-                        attributes = [json.loads(j.replace("'", "\"")) for j in D['attributes'].split(';')]
+                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
                         for k in attributes:
                             # do not allow keys other than tag, unit and value
                             if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
@@ -1641,7 +1641,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
                  # record error message and update status ready --> dead
                  Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
             elif Missing == False:
-                Error == 'None'
+                Error = 'None'
             assert d['alias'] not in D
             D[d['alias']] = Error
     return D
@@ -1669,48 +1669,48 @@ def CheckTableInformation(CredentialFile, DataBase, Table, ProjectsTable, Attrib
         for i in Data:
             K[i[0]] = []
     
-    # get error messages for the different tables. create dicts {alias" error}
-    D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'analyses')
-    E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'attributes')
-    F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'projects')
+        # get error messages for the different tables. create dicts {alias" error}
+        D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'analyses')
+        E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'attributes')
+        F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, 'projects')
 
-    # merge dicts
-    for alias in K:
-        if alias in D:
-            K[alias].append(D[alias])
-        else:
-            K[alias].append('In {0} table, no information'.format(Table))
-        if alias in E:
-            K[alias].append(E[alias])
-        else:
-            K[alias].append('In {0} table, no information'.format(AttributesTable))
-        if alias in F:
-            K[alias].append(F[alias])
-        else:
-            K[alias].append('In {0} table, no information'.format(ProjectsTable))
-            
-    # connect to database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()      
-    # update status and record errorMessage
-    if len(K) != 0:
+        # merge dicts
         for alias in K:
-            # check if error message
-            if len(list(set(K[alias]))) == 1:
-                if list(set(K[alias]))[0] == 'None':
-                    # record error message, update status ready --> valid
-                    cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
-                    conn.commit()
-            elif len(list(set(K[alias]))) == 0:
-                Error = ['In {0} table, no information'.format(Table), 'In {0} table, no information'.format(AttributesTable), 'In {0} table, no information'.format(ProjectsTable)]
-                # record error message, update status ready --> valid
-                cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(Error), alias, Box))
-                conn.commit()
+            if alias in D:
+                K[alias].append(D[alias])
             else:
-                # record errorMessage and keep status ready --> ready
-                cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(K[alias]), alias, Box))
-                conn.commit()
-    conn.close()
+                K[alias].append('In {0} table, no information'.format(Table))
+            if alias in E:
+                K[alias].append(E[alias])
+            else:
+                K[alias].append('In {0} table, no information'.format(AttributesTable))
+            if alias in F:
+                K[alias].append(F[alias])
+            else:
+                K[alias].append('In {0} table, no information'.format(ProjectsTable))
+            
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()      
+        # update status and record errorMessage
+        if len(K) != 0:
+            for alias in K:
+                # check if error message
+                if len(list(set(K[alias]))) == 1:
+                    if list(set(K[alias]))[0] == 'None':
+                        # record error message, update status ready --> valid
+                        cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
+                        conn.commit()
+                elif len(list(set(K[alias]))) == 0:
+                    Error = ['In {0} table, no information'.format(Table), 'In {0} table, no information'.format(AttributesTable), 'In {0} table, no information'.format(ProjectsTable)]
+                    # record error message, update status ready --> valid
+                    cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(Error), alias, Box))
+                    conn.commit()
+                else:
+                    # record errorMessage and keep status ready --> ready
+                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(K[alias]), alias, Box))
+                    conn.commit()
+        conn.close()
 
   
             
@@ -2037,10 +2037,10 @@ def SubmitAnalyses(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        #CheckTableInformation(args.credential, args.database, args.table, args.projects, args.attributes, args.box)
+        CheckTableInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## set up working directory, add to analyses table and update status valid --> start
-        #AddWorkingDirectory(args.credential, args.database, args.table, args.box)
+        #AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
@@ -2055,7 +2055,7 @@ def SubmitAnalyses(args):
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
         
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
