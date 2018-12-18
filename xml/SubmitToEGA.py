@@ -1267,6 +1267,44 @@ def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
     return Aliases
 
 
+# use this function to check the success of the upload
+def IsUploadSuccessfull(LogFile):
+    '''
+    (str) --> bool
+    Read the log of the upload script and return True if 3 lines with 'Completed'
+    are in the log (ie. successfull upload of 2 md5sums and 1 .gpg), and return
+    False otherwise
+    Pre-condition: this log output is for aspera upload    
+    '''
+    
+    infile = open(LogFile)
+    content = infile.read()
+    infile.close()
+    
+    # 3 'Completed' if successful upload (2 md5sums and 1 encrypted are uploaded together) 
+    if content.count('Completed') == 3:
+        return True
+    else:
+        return False
+
+# use this function to check the success of the upload
+def CheckUploadSuccess(LogDir):
+    '''
+    (str) --> bool
+    Take the directory where logs of the upload script are saved, retrieve the
+    most recent out log and return True if all files are uploaded (ie no error)
+    or False if errors are found
+    '''
+
+    # extract the most recent out log file
+    logfile = subprocess.check_output('ls -lt {0}'.format(os.path.join(LogDir, 'Upload.*.o*')), shell=True).decode('utf-8').rstrip().split('\n')[0].strip().split()[-1]
+    # check ythat log file exists
+    if os.path.isfile(logfile):
+        # check if upload was successful
+        return IsUploadSuccessfull(logfile)
+    else:
+        return False
+
 # use this function to check that files were successfully uploaded and update status uploading -> uploaded
 def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
     '''
