@@ -735,24 +735,22 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
     (file, str, str, str, str, str) -> tuple
     Take the full path to file, the name of the output file, the path to the
     keys used during encryption, the directory where encrypted and cheksums are saved, 
-    the queue and memory allocated to run the jobs and return the exit code 
-    specifying if the jobs were launched successfully or not and the job name
+    the queue and memory allocated to run the jobs and return the exit codes 
+    specifying if the jobs were launched successfully or not and the job names
     '''
 
-    # command to do a checksum and encryption
-    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
-    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0}; \
-    md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
-
+    MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
+    MyCmd2 = 'gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0}'
+    MyCmd3 = 'md5sum {0}.gpg | cut -f1 -d \' \' > {0}.gpg.md5'
 
     # check that FileName is valid
-    if os.path.isfile(filePath) ==False:
-        print('cannot encrypt {0}, not a valid file'.format(filePath))
+    if os.path.isfile(filePath) == False:
+        # return error that will be caught if file doesn't exist
+        return [-1], [-1] 
     else:
         # check if OutDir exist
         if os.path.isdir(OutDir) == False:
             os.makedirs(OutDir)
-        
         # make a directory to save the scripts
         qsubdir = os.path.join(OutDir, 'qsubs')
         if os.path.isdir(qsubdir) == False:
@@ -761,23 +759,36 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
         logDir = os.path.join(qsubdir, 'log')
         if os.path.isdir(logDir) == False:
             os.mkdir(logDir)
-        assert os.path.isdir(logDir)
         
         # get name of output file
         OutFile = os.path.join(OutDir, fileName)
-        # put command in shell script
-        BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
-        newfile = open(BashScript, 'w')
-        newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
-        newfile.close()
-        # launch qsub directly and return exit code
-        JobName = 'Encrypt.{0}'.format(alias + '__' + fileName)
-        QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
-        job = subprocess.call(QsubCmd, shell=True)
-        return job, JobName
-
-
+        # put commands in shell script
+        BashScript1 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_original.sh')
+        BashScript2 = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
+        BashScript3 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_encrypted.sh')
+        with open(BashScript1, 'w') as newfile:
+            newfile.write(MyCmd1.format(filePath, OutFile) + '\n')
+        with open(BashScript2, 'w') as newfile:
+            newfile.write(MyCmd2.format(filePath, OutFile, KeyRing) + '\n')
+        with open(BashScript3, 'w') as newfile:
+            newfile.write(MyCmd3.format(OutFile) + '\n')
         
+        # launch qsub directly, collect job names and exit codes
+        JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileName)
+        QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
+        job1 = subprocess.call(QsubCmd1, shell=True)
+                
+        JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileName)
+        QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
+        job2 = subprocess.call(QsubCmd2, shell=True)
+        
+        JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileName)
+        QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
+        job3 = subprocess.call(QsubCmd3, shell=True)
+        
+        return [job1, job2, job3], [JobName1, JobName2, JobName3]
+
+
 # use this function to encrypt files and update status to encrypting
 def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace):
     '''
@@ -813,7 +824,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                     assert alias not in D
                     # get working directory
                     WorkingDir = GetWorkingDirectory(i[2])
-                    # create working directory iof doesn't exist
+                    # create working directory if doesn't exist
                     if os.path.isdir(WorkingDir) == False:
                         os.makedirs(WorkingDir)
                     assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
@@ -831,8 +842,8 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         fileName = D[alias]['files'][file]['fileName']
                         # encrypt and run md5sums on original and encrypted files
                         j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
-                        JobCodes.append(j)
-                        JobNames.append(k)
+                        JobCodes.extend(j)
+                        JobNames.extend(k)
                     # check if encription was launched successfully
                     if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
                         # store the job names
