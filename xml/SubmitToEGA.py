@@ -750,43 +750,44 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
     else:
         # check if OutDir exist
         if os.path.isdir(OutDir) == False:
-            os.makedirs(OutDir)
-        # make a directory to save the scripts
-        qsubdir = os.path.join(OutDir, 'qsubs')
-        if os.path.isdir(qsubdir) == False:
-            os.mkdir(qsubdir)
-        # create a log dir
-        logDir = os.path.join(qsubdir, 'log')
-        if os.path.isdir(logDir) == False:
-            os.mkdir(logDir)
+            return [-1], [-1] 
+        else:
+            # make a directory to save the scripts
+            qsubdir = os.path.join(OutDir, 'qsubs')
+            if os.path.isdir(qsubdir) == False:
+                os.mkdir(qsubdir)
+            # create a log dir
+            logDir = os.path.join(qsubdir, 'log')
+            if os.path.isdir(logDir) == False:
+                os.mkdir(logDir)
         
-        # get name of output file
-        OutFile = os.path.join(OutDir, fileName)
-        # put commands in shell script
-        BashScript1 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_original.sh')
-        BashScript2 = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
-        BashScript3 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_encrypted.sh')
-        with open(BashScript1, 'w') as newfile:
-            newfile.write(MyCmd1.format(filePath, OutFile) + '\n')
-        with open(BashScript2, 'w') as newfile:
-            newfile.write(MyCmd2.format(filePath, OutFile, KeyRing) + '\n')
-        with open(BashScript3, 'w') as newfile:
-            newfile.write(MyCmd3.format(OutFile) + '\n')
+            # get name of output file
+            OutFile = os.path.join(OutDir, fileName)
+            # put commands in shell script
+            BashScript1 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_original.sh')
+            BashScript2 = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
+            BashScript3 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_encrypted.sh')
+            with open(BashScript1, 'w') as newfile:
+                newfile.write(MyCmd1.format(filePath, OutFile) + '\n')
+            with open(BashScript2, 'w') as newfile:
+                newfile.write(MyCmd2.format(filePath, OutFile, KeyRing) + '\n')
+            with open(BashScript3, 'w') as newfile:
+                newfile.write(MyCmd3.format(OutFile) + '\n')
         
-        # launch qsub directly, collect job names and exit codes
-        JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileName)
-        QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
-        job1 = subprocess.call(QsubCmd1, shell=True)
+            # launch qsub directly, collect job names and exit codes
+            JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileName)
+            QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
+            job1 = subprocess.call(QsubCmd1, shell=True)
                 
-        JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileName)
-        QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
-        job2 = subprocess.call(QsubCmd2, shell=True)
+            JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileName)
+            QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
+            job2 = subprocess.call(QsubCmd2, shell=True)
         
-        JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileName)
-        QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
-        job3 = subprocess.call(QsubCmd3, shell=True)
+            JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileName)
+            QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
+            job3 = subprocess.call(QsubCmd3, shell=True)
         
-        return [job1, job2, job3], [JobName1, JobName2, JobName3]
+            return [job1, job2, job3], [JobName1, JobName2, JobName3]
 
 
 # use this function to encrypt files and update status to encrypting
