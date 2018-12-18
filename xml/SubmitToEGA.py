@@ -1349,7 +1349,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
         # close connection
@@ -1358,33 +1358,40 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
         if len(Data) != 0:
             # check that some files are in uploading mode
             for i in Data:
-                # create a dict {alias: {'files':files, 'FileDirectory':filedirectory}}
-                D = {}
                 alias = i[0]
-                assert alias not in D
                 # convert single quotes to double quotes for str -> json conversion
-                files = i[1].replace("'", "\"")
-                D[alias] = {'files': json.loads(files), 'StagePath': i[3], 'jobName': i[2]}
-                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
+                files = json.loads(i[1].replace("'", "\""))
+                WorkingDirectory = GetWorkingDirectory(i[3])
+                StagePath = i[4]
+                JobNames = i[2]
                 # set up boolean to be updated if uploading is not complete
                 Uploaded = True
-
+                
                 # loop over files for that alias
-                for filePath in D[alias]['files']:
+                for filePath in files:
                     # check if the jobs used for uploading any files for this alias are running
-                    for JobName in D[alias]['jobName'].split(';'):
+                    for JobName in JobNames.split(';'):
                         if CheckRunningJob(JobName) == True:
                             Uploaded = False
+                # get the log directory
+                LogDir = os.path.join(WorkingDirectory, 'qsubs/log')
+                # check the out logs for each file
+                for filePath in files:
+                    # get filename
+                    filename = os.path.basename(filePath)
+                    # check if errors are found in log
+                    if CheckUploadSuccess(LogDir, alias, filename) == False:
+                        Uploaded = False
                 
                 # check if files are uploaded on the server
-                for filePath in D[alias]['files']:
+                for filePath in files:
                     # get filename
                     fileName = os.path.basename(filePath)
-                    assert fileName + '.gpg' == D[alias]['files'][filePath]['encryptedName']
-                    encryptedFile = D[alias]['files'][filePath]['encryptedName']
+                    assert fileName + '.gpg' == files[filePath]['encryptedName']
+                    encryptedFile = files[filePath]['encryptedName']
                     originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
                     for j in [encryptedFile, encryptedMd5, originalMd5]:
-                        if j not in FilesBox[D[alias]['StagePath']]:
+                        if j not in FilesBox[StagePath]:
                             Uploaded = False
                 # check if all files for that alias have been uploaded
                 if Uploaded == True:
