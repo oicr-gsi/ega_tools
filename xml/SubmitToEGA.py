@@ -1046,7 +1046,7 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, Max):
     '''
     (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -1073,7 +1073,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
         conn.close()
         
         if len(Data) != 0:
-            for i in Data:
+            for i in Data[: Max]:
                 # create dict {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
                 D = {}
                 alias = i[0]
@@ -2215,7 +2215,7 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
-    AnalysisSubmission.add_argument('--Max', dest='max', default=10, help='Maximum number of files to be uploaded at once. Default 50')
+    AnalysisSubmission.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
