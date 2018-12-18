@@ -14,6 +14,7 @@ import pymysql
 import os
 import argparse
 import requests
+import uuid
 
 
 # resource for jaon formatting and api submission
@@ -127,17 +128,13 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
             # loop over alias
             for i in Data:
                 alias = i[0]
-                # create working directory
-                
-                ### continue here command to generate uuid
-                
-                Suffix = 'xxxxx'             
-                
-                # record suffix in table, create working directory in file system
-                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Suffix, alias, Box))  
+                # create working directory with random unique identifier
+                UID = str(uuid.uuid4())             
+                # record identifier in table, create working directory in file system
+                cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, UID, alias, Box))  
                 conn.commit()
                 # create working directories
-                WorkingDir = GetWorkingDirectory(Suffix, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+                WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
                 os.makedirs(WorkingDir)
         conn.close()
         
