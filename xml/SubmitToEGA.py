@@ -1574,7 +1574,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
             Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
             Required = ['title', 'description', 'genomeId', 'StagePath']
         elif datatype == 'projects':
-            Keys = ['alias, studyId, analysisCenter, Broker, analysisTypeId, experimentTypeId']
+            Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
             Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
             
         for i in range(len(Data)):
@@ -1582,7 +1582,6 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
             Missing = False
             # create a dict with all information
             d = {Keys[j]: Data[i][j] for j in range(len(Keys))}
-            
             # create an error message
             Error = []
             # check if information is valid
