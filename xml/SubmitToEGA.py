@@ -1582,6 +1582,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
             Missing = False
             # create a dict with all information
             d = {Keys[j]: Data[i][j] for j in range(len(Keys))}
+            
             # create an error message
             Error = []
             # check if information is valid
@@ -1621,11 +1622,11 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
                     if d['analysisTypeId'] not in AnalysisTypes:
                         Missing = True
                         Error.append(key)
-                # check attributes
-                if key == 'attributes':
+                # check attributes of attributes table
+                if key == 'attributes' and datatype == 'attributes':
                     if d['attributes'] not in ['', 'NULL']:
                         # check format of attributes
-                        attributes = [json.loads(j.replace("'", "\"")) for j in D['attributes'].split(';')]
+                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
                         for k in attributes:
                             # do not allow keys other than tag, unit and value
                             if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
@@ -2037,10 +2038,10 @@ def SubmitAnalyses(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        #CheckTableInformation(args.credential, args.database, args.table, args.projects, args.attributes, args.box)
+        CheckTableInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## set up working directory, add to analyses table and update status valid --> start
-        #AddWorkingDirectory(args.credential, args.database, args.table, args.box)
+        #AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
         #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
@@ -2055,7 +2056,7 @@ def SubmitAnalyses(args):
         #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
         
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
