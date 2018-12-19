@@ -160,7 +160,7 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
                     conn.commit()
                 else:
                     # no error, update Status valid --> start
-                    cur.execute('UPDATE {0} SET {0}.Status=\"start\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))  
+                    cur.execute('UPDATE {0} SET {0}.Status=\"start\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))  
                     conn.commit()
         conn.close()            
         
@@ -676,7 +676,7 @@ def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Pro
                 else:
                     # add json back in table and update status
                     alias = D['alias']
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
                     conn.commit()
     conn.close()
     
@@ -720,7 +720,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
                 # update status start --> encrypt if no error
                 if Samples[alias][1] == '':
                     # update sample accessions and status start --> encrypt
-                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
                     conn.commit()
                 else:
                     # record error message and keep status start --> start
@@ -735,49 +735,61 @@ def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
     (file, str, str, str, str, str) -> tuple
     Take the full path to file, the name of the output file, the path to the
     keys used during encryption, the directory where encrypted and cheksums are saved, 
-    the queue and memory allocated to run the jobs and return the exit code 
-    specifying if the jobs were launched successfully or not and the job name
+    the queue and memory allocated to run the jobs and return the exit codes 
+    specifying if the jobs were launched successfully or not and the job names
     '''
 
-    # command to do a checksum and encryption
-    MyCmd = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5; \
-    gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0} && \
-    md5sum {1}.gpg | cut -f1 -d \' \' > {1}.gpg.md5'
-
+    MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
+    MyCmd2 = 'gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0}'
+    MyCmd3 = 'md5sum {0}.gpg | cut -f1 -d \' \' > {0}.gpg.md5'
 
     # check that FileName is valid
-    if os.path.isfile(filePath) ==False:
-        print('cannot encrypt {0}, not a valid file'.format(filePath))
+    if os.path.isfile(filePath) == False:
+        # return error that will be caught if file doesn't exist
+        return [-1], [-1] 
     else:
         # check if OutDir exist
         if os.path.isdir(OutDir) == False:
-            os.makedirs(OutDir)
+            return [-1], [-1] 
+        else:
+            # make a directory to save the scripts
+            qsubdir = os.path.join(OutDir, 'qsubs')
+            if os.path.isdir(qsubdir) == False:
+                os.mkdir(qsubdir)
+            # create a log dir
+            logDir = os.path.join(qsubdir, 'log')
+            if os.path.isdir(logDir) == False:
+                os.mkdir(logDir)
         
-        # make a directory to save the scripts
-        qsubdir = os.path.join(OutDir, 'qsubs')
-        if os.path.isdir(qsubdir) == False:
-            os.mkdir(qsubdir)
-        # create a log dir
-        logDir = os.path.join(qsubdir, 'log')
-        if os.path.isdir(logDir) == False:
-            os.mkdir(logDir)
-        assert os.path.isdir(logDir)
+            # get name of output file
+            OutFile = os.path.join(OutDir, fileName)
+            # put commands in shell script
+            BashScript1 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_original.sh')
+            BashScript2 = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
+            BashScript3 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_encrypted.sh')
+            with open(BashScript1, 'w') as newfile:
+                newfile.write(MyCmd1.format(filePath, OutFile) + '\n')
+            with open(BashScript2, 'w') as newfile:
+                newfile.write(MyCmd2.format(filePath, OutFile, KeyRing) + '\n')
+            with open(BashScript3, 'w') as newfile:
+                newfile.write(MyCmd3.format(OutFile) + '\n')
         
-        # get name of output file
-        OutFile = os.path.join(OutDir, fileName)
-        # put command in shell script
-        BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
-        newfile = open(BashScript, 'w')
-        newfile.write(MyCmd.format(filePath, OutFile, KeyRing) + '\n')
-        newfile.close()
-        # launch qsub directly and return exit code
-        JobName = 'Encrypt.{0}'.format(alias + '__' + fileName)
-        QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
-        job = subprocess.call(QsubCmd, shell=True)
-        return job, JobName
+            # launch qsub directly, collect job names and exit codes
+            JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileName)
+            QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
+            job1 = subprocess.call(QsubCmd1, shell=True)
+                
+            JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileName)
+            QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
+            job2 = subprocess.call(QsubCmd2, shell=True)
+        
+            JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileName)
+            QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
+            job3 = subprocess.call(QsubCmd3, shell=True)
+        
+            return [job1, job2, job3], [JobName1, JobName2, JobName3]
 
 
-        
 # use this function to encrypt files and update status to encrypting
 def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace):
     '''
@@ -790,7 +802,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
     
     # create a list of aliases for encryption 
     Aliases = SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace)
-    
+           
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
@@ -805,34 +817,28 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
         # check that some files are in encrypt mode
         if len(Data) != 0:
             for i in Data:
-                # create a dict for each alias {alias: {'files':files, 'FileDirectory':filedirectory}} 
-                D = {}
                 alias = i[0]
                 # encrypt only files of aliases that were pre-selected
                 if alias in Aliases:
-                    assert alias not in D
                     # get working directory
-                    WorkingDir = GetWorkingDirectory(i[2], WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
-                    # create working directory iof doesn't exist
+                    WorkingDir = GetWorkingDirectory(i[2])
+                    # create working directory if doesn't exist
                     if os.path.isdir(WorkingDir) == False:
                         os.makedirs(WorkingDir)
                     assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                     # convert single quotes to double quotes for str -> json conversion
-                    files = i[1].replace("'", "\"")
-                    D[i[0]] = {'files': json.loads(files), 'FileDirectory': WorkingDir}
-                    
-                    assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
+                    files = json.loads(i[1].replace("'", "\""))
                     # store the job names and exit codes for that alias
                     JobCodes, JobNames = [], []
                     # loop over files for that alias
-                    for file in D[alias]['files']:
+                    for file in files:
                         # get the filePath and fileName
-                        filePath = D[alias]['files'][file]['filePath']
-                        fileName = D[alias]['files'][file]['fileName']
+                        filePath = files[file]['filePath']
+                        fileName = files[file]['fileName']
                         # encrypt and run md5sums on original and encrypted files
-                        j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, D[alias]['FileDirectory'], Queue, Mem)
-                        JobCodes.append(j)
-                        JobNames.append(k)
+                        j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, WorkingDir, Queue, Mem)
+                        JobCodes.extend(j)
+                        JobNames.extend(k)
                     # check if encription was launched successfully
                     if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
                         # store the job names
@@ -840,7 +846,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         # encryption and md5sums jobs launched succcessfully, update status -> encrypting
                         conn = EstablishConnection(CredentialFile, DataBase)
                         cur = conn.cursor()
-                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.JobNames=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
+                        cur.execute('UPDATE {0} SET {0}.Status=\"encrypting\", {0}.JobNames=\"{1}\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, JobNames, alias, Box))
                         conn.commit()
                         conn.close()
                     else:
@@ -904,66 +910,61 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         # check that some files are in encrypting mode
         if len(Data) != 0:
             for i in Data:
-                # create a dict {alias: {'files':files, 'jobName': jobs, 'FileDirectory':filedirectory}}
-                D = {}
                 alias = i[0]
-                assert alias not in D
                 # get the working directory for that alias
                 WorkingDir = GetWorkingDirectory(i[3])
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
-                files = i[1].replace("'", "\"")
-                D[alias] = {'files': json.loads(files), 'FileDirectory': WorkingDir, 'jobName': i[2]}
-                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
+                files = json.loads(i[1].replace("'", "\""))
+                # get the job names
+                jobNames = i[2]
                 # create a dict to store the updated file info
                 Files = {}
-                # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
-                Encrypted = True
-                # loop over files for that alias
-                for file in D[alias]['files']:
-                    # check if the jobs used for encrypting any files for this alias are running
-                    for JobName in D[alias]['jobName'].split(';'):
-                        if CheckRunningJob(JobName) == True:
-                            Encrypted = False
-                    # get the fileName
-                    fileName = D[alias]['files'][file]['fileName']
-                    fileTypeId = D[alias]['files'][file]['fileTypeId']
-                    # check that encryoted and md5sum files do exist
-                    originalMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.md5')
-                    encryptedMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg.md5')
-                    encryptedFile = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg')
-                    if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
-                        # get the name of the encrypted file
-                        encryptedName = fileName + '.gpg'
-                        # get the md5sums
-                        encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
-                        originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
-                        if encryptedMd5 != '' and originalMd5 != '':
-                            # capture md5sums, build updated dict
-                            Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
-                        else:
-                            # update boolean
-                            Encrypted = False
-                    else:
-                        # update boollean
-                        Encrypted = False
                 
-                # check if md5sums and encrypted files is available for all files
-                if Encrypted == True:
-                    # update file info and status only if all files do exist and md5sums can be extracted
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
-                    conn.commit()
-                    conn.close()
-                elif Encrypted == False:
-                    # reset status encrypting -- > encrypt, record error message
-                    Error = 'Encryption or md5sum did not complete'
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                    conn.close()
+                # check that all jobs are done running                 
+                StillRunning = [CheckRunningJob(JobName) for JobName in jobNames.split(';')]
+                if True not in StillRunning:
+                    # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
+                    Encrypted = True
+                    for file in files:
+                        # get the fileName
+                        fileName = files[file]['fileName']
+                        fileTypeId = files[file]['fileTypeId']
+                        # check that encryoted and md5sum files do exist
+                        originalMd5File = os.path.join(WorkingDir, fileName + '.md5')
+                        encryptedMd5File = os.path.join(WorkingDir, fileName + '.gpg.md5')
+                        encryptedFile = os.path.join(WorkingDir, fileName + '.gpg')
+                        if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
+                            # get the name of the encrypted file
+                            encryptedName = fileName + '.gpg'
+                            # get the md5sums
+                            encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
+                            originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
+                            if encryptedMd5 != '' and originalMd5 != '':
+                                # capture md5sums, build updated dict
+                                Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
+                            else:
+                                # update boolean
+                                Encrypted = False
+                        else:
+                            # update boollean
+                            Encrypted = False
+                
+                    # check if md5sums and encrypted files is available for all files
+                    if Encrypted == True:
+                        # update file info and status only if all files do exist and md5sums can be extracted
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
+                        conn.commit()
+                        conn.close()
+                    elif Encrypted == False:
+                        # reset status encrypting -- > encrypt, record error message
+                        Error = 'Encryption or md5sum did not complete'
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                        conn.commit()
+                        conn.close()
                     
 
 # use this script to launch qsubs to encrypt the files and do a checksum
@@ -1034,7 +1035,7 @@ def UploadAliasFiles(D, filePath, StagePath, FileDir, CredentialFile, Box, Queue
     
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, Max):
     '''
     (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -1061,7 +1062,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
         conn.close()
         
         if len(Data) != 0:
-            for i in Data:
+            for i in Data[: int(Max)]:
                 # create dict {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
                 D = {}
                 alias = i[0]
@@ -1093,7 +1094,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
                     JobNames = ';'.join(JobNames)
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.JobNames=\"{1}\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
+                    cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.JobNames=\"{1}\", {0}.errorMessages=\"None\"  WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, JobNames, alias, Box))
                     conn.commit()
                     conn.close()
                 else:
@@ -1253,7 +1254,7 @@ def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
     # add file size for all aliases with encrypting status
     for alias in Encrypting:
         FileSize += Encrypting[alias]
-       
+        
     # record aliases for encryption
     Aliases = []
     for alias in Encrypt:
@@ -1360,54 +1361,49 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box):
                 files = json.loads(i[1].replace("'", "\""))
                 WorkingDirectory = GetWorkingDirectory(i[3])
                 StagePath = i[4]
-                JobNames = i[2]
+                jobNames = i[2]
                 # set up boolean to be updated if uploading is not complete
                 Uploaded = True
-                
-                # loop over files for that alias
-                for filePath in files:
-                    # check if the jobs used for uploading any files for this alias are running
-                    for JobName in JobNames.split(';'):
-                        if CheckRunningJob(JobName) == True:
+                # Check that jobs are not running
+                StillRunning = [CheckRunningJob(JobName) for JobName in jobNames.split(';')]
+                if True not in StillRunning:
+                    # get the log directory
+                    LogDir = os.path.join(WorkingDirectory, 'qsubs/log')
+                    # check the out logs for each file
+                    for filePath in files:
+                        # get filename
+                        filename = os.path.basename(filePath)
+                        # check if errors are found in log
+                        if CheckUploadSuccess(LogDir, alias, filename) == False:
                             Uploaded = False
-                # get the log directory
-                LogDir = os.path.join(WorkingDirectory, 'qsubs/log')
-                # check the out logs for each file
-                for filePath in files:
-                    # get filename
-                    filename = os.path.basename(filePath)
-                    # check if errors are found in log
-                    if CheckUploadSuccess(LogDir, alias, filename) == False:
-                        Uploaded = False
                 
-                # check if files are uploaded on the server
-                for filePath in files:
-                    # get filename
-                    fileName = os.path.basename(filePath)
-                    assert fileName + '.gpg' == files[filePath]['encryptedName']
-                    encryptedFile = files[filePath]['encryptedName']
-                    originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
-                    for j in [encryptedFile, encryptedMd5, originalMd5]:
-                        if j not in FilesBox[StagePath]:
-                            Uploaded = False
-                # check if all files for that alias have been uploaded
-                if Uploaded == True:
-                    # connect to database, updatestatus and close connection
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
-                    conn.commit()                                
-                    conn.close()              
-                elif Uploaded == False:
-                    # reset status uploading --> upload, record error message
-                    Error = 'Upload failed'
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
-                    conn.commit()                                
-                    conn.close()
-                    
-    
+                    # check if files are uploaded on the server
+                    for filePath in files:
+                        # get filename
+                        fileName = os.path.basename(filePath)
+                        assert fileName + '.gpg' == files[filePath]['encryptedName']
+                        encryptedFile = files[filePath]['encryptedName']
+                        originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                        for j in [encryptedFile, encryptedMd5, originalMd5]:
+                            if j not in FilesBox[StagePath]:
+                                Uploaded = False
+                    # check if all files for that alias have been uploaded
+                    if Uploaded == True:
+                        # connect to database, update status and close connection
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                        conn.commit()                                
+                        conn.close()              
+                    elif Uploaded == False:
+                        # reset status uploading --> upload, record error message
+                        Error = 'Upload failed'
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                        conn.commit()                                
+                        conn.close()
+                   
 # use this function to format the error Messages prior saving into db table
 def CleanUpError(errorMessages):
     '''
@@ -1434,46 +1430,39 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, AttributesTable, Box):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
     '''
-    (str, str, str, str) -> None
+    (str, str, str, str, str, str, bool) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
     files corresponding to the given Alias and Box in Table and delete them
     '''
     
-    # connect to database
-    conn = EstablishConnection(CredentialFile, Database)
-    cur = conn.cursor()
-    # get the directory, files for all alias with SUBMITTED status
-    cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    # build a dict {alias: {filedir: val, files: val}
-    Data = cur.fetchall()
-    conn.close()
-    if len(Data) != 0:
-        Submitted = {}
-        for i in Data:
-            alias, files = i[0], json.loads(str(i[1]).replace("'", "\""))
-            # get the working directory for that alias
-            WorkingDir = GetWorkingDirectory(CredentialFile, Database, Table, ProjectsTable, AttributesTable, alias, Box)
-            assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-            Submitted[alias] = {'FileDir': WorkingDir, 'files': files}
-        # loop over alias, make a list of all files under this alias
-        for alias in Submitted:
-            files = Submitted[alias]['files']
-            FileDirectory = Submitted[alias]['FileDir']
-            files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
-            for i in files:
-                assert i[-4:] == '.gpg'
-                a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i:
-                    # remove encrypted file
-                    os.system('rm {0}'.format(i))
-                if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a:
-                    # remove md5sum
-                    os.system('rm {0}'.format(a))
-                if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b:
-                    # remove md5sum
-                    os.system('rm {0}'.format(b))
+    if Remove == True:
+        # connect to database
+        conn = EstablishConnection(CredentialFile, Database)
+        cur = conn.cursor()
+        # get the directory, files for all alias with SUBMITTED status
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        Data = cur.fetchall()
+        conn.close()
+        if len(Data) != 0:
+            for i in Data:
+                alias, files = i[0], json.loads(str(i[1]).replace("'", "\""))
+                # get the working directory for that alias
+                WorkingDir = GetWorkingDirectory(i[2])
+                files = [os.path.join(WorkingDir, files[i]['encryptedName']) for i in files]
+                for i in files:
+                    assert i[-4:] == '.gpg'
+                    a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
+                    if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i and '.gpg' in i:
+                        # remove encrypted file
+                        os.system('rm {0}'.format(i))
+                    if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a and '.md5' in a:
+                        # remove md5sum
+                        os.system('rm {0}'.format(a))
+                    if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b and '.md5' in b:
+                        # remove md5sum
+                        os.system('rm {0}'.format(b))
 
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -2100,7 +2089,7 @@ def SubmitAnalyses(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        CheckTableInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
+        #CheckTableInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## set up working directory, add to analyses table and update status valid --> start
         #AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
@@ -2115,10 +2104,10 @@ def SubmitAnalyses(args):
         #CheckEncryption(args.credential, args.subdb, args.table, args.box)
         
         ## upload files and change the status upload -> uploading 
-        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.max, args.queue, args.memory, args.uploadmode)
-        
+        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
+                
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
@@ -2127,10 +2116,8 @@ def SubmitAnalyses(args):
         #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        #if args.remove == True:
-        #    RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
-
-
+        #RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+        
     
 if __name__ == '__main__':
 
@@ -2203,9 +2190,111 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     AnalysisSubmission.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     AnalysisSubmission.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
-    AnalysisSubmission.add_argument('--Max', dest='max', default=10, help='Maximum number of files to be uploaded at once. Default 50')
+    AnalysisSubmission.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
+
+#####################################
+
+#    # check table information. change status ready --> valid if no error or keep status ready --> ready and record errorMessage
+#    CheckInfoParser = subparsers.add_parser('CheckInfo', help ='Check Table information')
+#    CheckInfoParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    CheckInfoParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    CheckInfoParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    CheckInfoParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    CheckInfoParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
+#    CheckInfoParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    CheckInfoParser.set_defaults(func=CheckTableInformation)
+#
+#    # set up working directory, add to analyses table and update status valid --> start       
+#    AddWorkingDirParser = subparsers.add_parser('AddWorkingDirectories', help ='Create working directories')
+#    AddWorkingDirParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    AddWorkingDirParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    AddWorkingDirParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    AddWorkingDirParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    AddWorkingDirParser.set_defaults(func=AddWorkingDirectory)
+#
+#    # add sample accessions and change status start -> encrypt       
+#    AddSampleIdsParser = subparsers.add_parser('AddSampleIds', help ='Add sample accessions to Analyses Table')
+#    AddSampleIdsParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    AddSampleIdsParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
+#    AddSampleIdsParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    AddSampleIdsParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    AddSampleIdsParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    AddSampleIdsParser.set_defaults(func=AddSampleAccessions)
+#
+#    # encrypt new files only if diskspace is available. update status encrypt --> encrypting       
+#    EncryptionParser = subparsers.add_parser('Encryption', help ='Encrypt files and run md5sum')
+#    EncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    EncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    EncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    EncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    EncryptionParser.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
+#    EncryptionParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+#    EncryptionParser.add_argument('-m', '--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
+#    EncryptionParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
+#    EncryptionParser.set_defaults(func=EncryptFiles)
+#
+#    # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload       
+#    CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help ='Check if encryption is done')
+#    CheckEncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    CheckEncryptionParser.set_defaults(func=CheckEncryption)
+#
+#    # upload files and change the status upload -> uploading       
+#    UploadParser = subparsers.add_parser('Upload', help ='Upload files to staging server')
+#    UploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    UploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    UploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    UploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    UploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    UploadParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+#    UploadParser.add_argument('-m', '--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
+#    UploadParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
+#    UploadParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
+#    UploadParser.set_defaults(func=UploadAnalysesObjects)
+#
+#    # check that files have been successfully uploaded, update status uploading -> uploaded       
+#    CheckUploadParser = subparsers.add_parser('CheckUpload', help ='Check that files have been uploaded')
+#    CheckUploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    CheckUploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    CheckUploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    CheckUploadParser.set_defaults(func=CheckUploadFiles)
+#
+#    # form json for analyses in uploaded mode, add to table and update status uploaded -> submit       
+#    AddJsonParser = subparsers.add_parser('AddAnalysesJson', help ='Add json to Analyses table')
+#    AddJsonParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    AddJsonParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    AddJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    AddJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    AddJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
+#    AddJsonParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    AddJsonParser.set_defaults(func=AddAnalysisJsonToTable)
+#
+#    # submit analyses to EGA and update status submit -> SUBMITTED      
+#    RegisterParser = subparsers.add_parser('Register', help ='Register objects to EGA')
+#    RegisterParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    RegisterParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    RegisterParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    RegisterParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    RegisterParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='Object to register', required=True)
+#    RegisterParser.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
+#    RegisterParser.set_defaults(func=RegisterObjects)
+#
+#    # remove files for aliases with SUBMITTED status       
+#    RemoveFilesParser = subparsers.add_parser('RemoveFiles', help ='Remove files after submission')
+#    RemoveFilesParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    RemoveFilesParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    RemoveFilesParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    RemoveFilesParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    RemoveFilesParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
+#    RemoveFilesParser.set_defaults(func=RemoveFilesAfterSubmission)
+
+############################################
 
     # get arguments from the command line
     args = parser.parse_args()
