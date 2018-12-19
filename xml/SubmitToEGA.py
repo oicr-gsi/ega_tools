@@ -1440,7 +1440,7 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, AttributesTable, Box, Remove):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
     '''
     (str, str, str, str, str, str, bool) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
@@ -1452,33 +1452,25 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, ProjectsTable, A
         conn = EstablishConnection(CredentialFile, Database)
         cur = conn.cursor()
         # get the directory, files for all alias with SUBMITTED status
-        cur.execute('SELECT {0}.alias, {0}.files FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        # build a dict {alias: {filedir: val, files: val}
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         if len(Data) != 0:
-            Submitted = {}
             for i in Data:
                 alias, files = i[0], json.loads(str(i[1]).replace("'", "\""))
                 # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(CredentialFile, Database, Table, ProjectsTable, AttributesTable, alias, Box)
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-                Submitted[alias] = {'FileDir': WorkingDir, 'files': files}
-            # loop over alias, make a list of all files under this alias
-            for alias in Submitted:
-                files = Submitted[alias]['files']
-                FileDirectory = Submitted[alias]['FileDir']
-                files = [os.path.join(FileDirectory, files[i]['encryptedName']) for i in files]
+                WorkingDir = GetWorkingDirectory(i[2])
+                files = [os.path.join(WorkingDir, files[i]['encryptedName']) for i in files]
                 for i in files:
                     assert i[-4:] == '.gpg'
                     a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                    if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i:
+                    if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i and '.gpg' in i:
                         # remove encrypted file
                         os.system('rm {0}'.format(i))
-                    if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a:
+                    if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a and '.md5' in a:
                         # remove md5sum
                         os.system('rm {0}'.format(a))
-                    if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b:
+                    if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b and '.md5' in b:
                         # remove md5sum
                         os.system('rm {0}'.format(b))
 
@@ -2134,7 +2126,7 @@ def SubmitAnalyses(args):
         #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
         ## remove files with submitted status
-        RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.remove)
+        #RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box, args.remove)
 
 
     
