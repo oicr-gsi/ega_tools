@@ -802,7 +802,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
     
     # create a list of aliases for encryption 
     Aliases = SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace)
-    
+           
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
@@ -910,66 +910,61 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         # check that some files are in encrypting mode
         if len(Data) != 0:
             for i in Data:
-                # create a dict {alias: {'files':files, 'jobName': jobs, 'FileDirectory':filedirectory}}
-                D = {}
                 alias = i[0]
-                assert alias not in D
                 # get the working directory for that alias
                 WorkingDir = GetWorkingDirectory(i[3])
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                 # convert single quotes to double quotes for str -> json conversion
-                files = i[1].replace("'", "\"")
-                D[alias] = {'files': json.loads(files), 'FileDirectory': WorkingDir, 'jobName': i[2]}
-                assert len(list(D.keys())) == 1 and alias == list(D.keys())[0]
+                files = json.loads(i[1].replace("'", "\""))
+                # get the job names
+                jobNames = i[2]
                 # create a dict to store the updated file info
                 Files = {}
-                # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
-                Encrypted = True
-                # loop over files for that alias
-                for file in D[alias]['files']:
-                    # check if the jobs used for encrypting any files for this alias are running
-                    for JobName in D[alias]['jobName'].split(';'):
-                        if CheckRunningJob(JobName) == True:
-                            Encrypted = False
-                    # get the fileName
-                    fileName = D[alias]['files'][file]['fileName']
-                    fileTypeId = D[alias]['files'][file]['fileTypeId']
-                    # check that encryoted and md5sum files do exist
-                    originalMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.md5')
-                    encryptedMd5File = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg.md5')
-                    encryptedFile = os.path.join(D[alias]['FileDirectory'], fileName + '.gpg')
-                    if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
-                        # get the name of the encrypted file
-                        encryptedName = fileName + '.gpg'
-                        # get the md5sums
-                        encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
-                        originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
-                        if encryptedMd5 != '' and originalMd5 != '':
-                            # capture md5sums, build updated dict
-                            Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
-                        else:
-                            # update boolean
-                            Encrypted = False
-                    else:
-                        # update boollean
-                        Encrypted = False
                 
-                # check if md5sums and encrypted files is available for all files
-                if Encrypted == True:
-                    # update file info and status only if all files do exist and md5sums can be extracted
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
-                    conn.commit()
-                    conn.close()
-                elif Encrypted == False:
-                    # reset status encrypting -- > encrypt, record error message
-                    Error = 'Encryption or md5sum did not complete'
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                    conn.close()
+                # check that all jobs are done running                 
+                StillRunning = [CheckRunningJob(JobName) for JobName in jobNames.split(';')]
+                if True not in StillRunning:
+                    # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
+                    Encrypted = True
+                    for file in files:
+                        # get the fileName
+                        fileName = files[file]['fileName']
+                        fileTypeId = files[file]['fileTypeId']
+                        # check that encryoted and md5sum files do exist
+                        originalMd5File = os.path.join(WorkingDir, fileName + '.md5')
+                        encryptedMd5File = os.path.join(WorkingDir, fileName + '.gpg.md5')
+                        encryptedFile = os.path.join(WorkingDir, fileName + '.gpg')
+                        if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
+                            # get the name of the encrypted file
+                            encryptedName = fileName + '.gpg'
+                            # get the md5sums
+                            encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
+                            originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
+                            if encryptedMd5 != '' and originalMd5 != '':
+                                # capture md5sums, build updated dict
+                                Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
+                            else:
+                                # update boolean
+                                Encrypted = False
+                        else:
+                            # update boollean
+                            Encrypted = False
+                
+                    # check if md5sums and encrypted files is available for all files
+                    if Encrypted == True:
+                        # update file info and status only if all files do exist and md5sums can be extracted
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
+                        conn.commit()
+                        conn.close()
+                    elif Encrypted == False:
+                        # reset status encrypting -- > encrypt, record error message
+                        Error = 'Encryption or md5sum did not complete'
+                        conn = EstablishConnection(CredentialFile, DataBase)
+                        cur = conn.cursor()
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                        conn.commit()
+                        conn.close()
                     
 
 # use this script to launch qsubs to encrypt the files and do a checksum
@@ -2102,10 +2097,10 @@ def SubmitAnalyses(args):
         #CheckTableInformation(args.credential, args.subdb, args.table, args.projects, args.attributes, args.box)
         
         ## set up working directory, add to analyses table and update status valid --> start
-        AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
+        #AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
-        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
+        #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
         #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
@@ -2114,7 +2109,7 @@ def SubmitAnalyses(args):
         CheckEncryption(args.credential, args.subdb, args.table, args.box)
         
         ## upload files and change the status upload -> uploading 
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
+        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
@@ -2206,106 +2201,103 @@ if __name__ == '__main__':
 
 #####################################
 
-    # check table information. change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-    CheckInfoParser = subparsers.add_parser('CheckInfo', help ='Check Table information')
-    CheckInfoParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    CheckInfoParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    CheckInfoParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    CheckInfoParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
-    CheckInfoParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
-    CheckInfoParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    CheckInfoParser.set_defaults(func=CheckTableInformation)
-
-    # set up working directory, add to analyses table and update status valid --> start       
-    AddWorkingDirParser = subparsers.add_parser('AddWorkingDirectories', help ='Create working directories')
-    AddWorkingDirParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AddWorkingDirParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    AddWorkingDirParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    AddWorkingDirParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    AddWorkingDirParser.set_defaults(func=AddWorkingDirectory)
-
-    # add sample accessions and change status start -> encrypt       
-    AddSampleIdsParser = subparsers.add_parser('AddSampleIds', help ='Add sample accessions to Analyses Table')
-    AddSampleIdsParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AddSampleIdsParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
-    AddSampleIdsParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    AddSampleIdsParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    AddSampleIdsParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    AddSampleIdsParser.set_defaults(func=AddSampleAccessions)
-
-    # encrypt new files only if diskspace is available. update status encrypt --> encrypting       
-    EncryptionParser = subparsers.add_parser('Encryption', help ='Encrypt files and run md5sum')
-    EncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    EncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    EncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    EncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    EncryptionParser.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
-    EncryptionParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
-    EncryptionParser.add_argument('-m', '--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
-    EncryptionParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
-    EncryptionParser.set_defaults(func=EncryptFiles)
-
-    # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload       
-    CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help ='Check if encryption is done')
-    CheckEncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    CheckEncryptionParser.set_defaults(func=CheckEncryption)
-
-    # upload files and change the status upload -> uploading       
-    UploadParser = subparsers.add_parser('Upload', help ='Upload files to staging server')
-    UploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    UploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    UploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    UploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
-    UploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    UploadParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
-    UploadParser.add_argument('-m', '--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
-    UploadParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
-    UploadParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
-    UploadParser.set_defaults(func=UploadAnalysesObjects)
-
-    # check that files have been successfully uploaded, update status uploading -> uploaded       
-    CheckUploadParser = subparsers.add_parser('CheckUpload', help ='Check that files have been uploaded')
-    CheckUploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    CheckUploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
-    CheckUploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    CheckUploadParser.set_defaults(func=CheckUploadFiles)
-
-    # form json for analyses in uploaded mode, add to table and update status uploaded -> submit       
-    AddJsonParser = subparsers.add_parser('AddAnalysesJson', help ='Add json to Analyses table')
-    AddJsonParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    AddJsonParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    AddJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    AddJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
-    AddJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
-    AddJsonParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    AddJsonParser.set_defaults(func=AddAnalysisJsonToTable)
-
-    # submit analyses to EGA and update status submit -> SUBMITTED      
-    RegisterParser = subparsers.add_parser('Register', help ='Register objects to EGA')
-    RegisterParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    RegisterParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    RegisterParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    RegisterParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    RegisterParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='Object to register', required=True)
-    RegisterParser.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
-    RegisterParser.set_defaults(func=RegisterObjects)
-
-    # remove files for aliases with SUBMITTED status       
-    RemoveFilesParser = subparsers.add_parser('RemoveFiles', help ='Remove files after submission')
-    RemoveFilesParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    RemoveFilesParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    RemoveFilesParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
-    RemoveFilesParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
-    RemoveFilesParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
-    RemoveFilesParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    RemoveFilesParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
-    RemoveFilesParser.set_defaults(func=RemoveFilesAfterSubmission)
-
+#    # check table information. change status ready --> valid if no error or keep status ready --> ready and record errorMessage
+#    CheckInfoParser = subparsers.add_parser('CheckInfo', help ='Check Table information')
+#    CheckInfoParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    CheckInfoParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    CheckInfoParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    CheckInfoParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    CheckInfoParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
+#    CheckInfoParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    CheckInfoParser.set_defaults(func=CheckTableInformation)
+#
+#    # set up working directory, add to analyses table and update status valid --> start       
+#    AddWorkingDirParser = subparsers.add_parser('AddWorkingDirectories', help ='Create working directories')
+#    AddWorkingDirParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    AddWorkingDirParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    AddWorkingDirParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    AddWorkingDirParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    AddWorkingDirParser.set_defaults(func=AddWorkingDirectory)
+#
+#    # add sample accessions and change status start -> encrypt       
+#    AddSampleIdsParser = subparsers.add_parser('AddSampleIds', help ='Add sample accessions to Analyses Table')
+#    AddSampleIdsParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    AddSampleIdsParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
+#    AddSampleIdsParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    AddSampleIdsParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    AddSampleIdsParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    AddSampleIdsParser.set_defaults(func=AddSampleAccessions)
+#
+#    # encrypt new files only if diskspace is available. update status encrypt --> encrypting       
+#    EncryptionParser = subparsers.add_parser('Encryption', help ='Encrypt files and run md5sum')
+#    EncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    EncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    EncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    EncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    EncryptionParser.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
+#    EncryptionParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+#    EncryptionParser.add_argument('-m', '--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
+#    EncryptionParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
+#    EncryptionParser.set_defaults(func=EncryptFiles)
+#
+#    # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload       
+#    CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help ='Check if encryption is done')
+#    CheckEncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    CheckEncryptionParser.set_defaults(func=CheckEncryption)
+#
+#    # upload files and change the status upload -> uploading       
+#    UploadParser = subparsers.add_parser('Upload', help ='Upload files to staging server')
+#    UploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    UploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    UploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    UploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    UploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    UploadParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+#    UploadParser.add_argument('-m', '--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
+#    UploadParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
+#    UploadParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
+#    UploadParser.set_defaults(func=UploadAnalysesObjects)
+#
+#    # check that files have been successfully uploaded, update status uploading -> uploaded       
+#    CheckUploadParser = subparsers.add_parser('CheckUpload', help ='Check that files have been uploaded')
+#    CheckUploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    CheckUploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    CheckUploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    CheckUploadParser.set_defaults(func=CheckUploadFiles)
+#
+#    # form json for analyses in uploaded mode, add to table and update status uploaded -> submit       
+#    AddJsonParser = subparsers.add_parser('AddAnalysesJson', help ='Add json to Analyses table')
+#    AddJsonParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    AddJsonParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    AddJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    AddJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+#    AddJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
+#    AddJsonParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    AddJsonParser.set_defaults(func=AddAnalysisJsonToTable)
+#
+#    # submit analyses to EGA and update status submit -> SUBMITTED      
+#    RegisterParser = subparsers.add_parser('Register', help ='Register objects to EGA')
+#    RegisterParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    RegisterParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    RegisterParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    RegisterParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    RegisterParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='Object to register', required=True)
+#    RegisterParser.add_argument('-p', '--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
+#    RegisterParser.set_defaults(func=RegisterObjects)
+#
+#    # remove files for aliases with SUBMITTED status       
+#    RemoveFilesParser = subparsers.add_parser('RemoveFiles', help ='Remove files after submission')
+#    RemoveFilesParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+#    RemoveFilesParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+#    RemoveFilesParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+#    RemoveFilesParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+#    RemoveFilesParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
+#    RemoveFilesParser.set_defaults(func=RemoveFilesAfterSubmission)
 
 ############################################
 
