@@ -1442,7 +1442,7 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
         conn = EstablishConnection(CredentialFile, Database)
         cur = conn.cursor()
         # get the directory, files for all alias with SUBMITTED status
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.status=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.status=\"uploaded\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         conn.close()
         if len(Data) != 0:
@@ -2104,10 +2104,10 @@ def SubmitAnalyses(args):
         #CheckEncryption(args.credential, args.subdb, args.table, args.box)
         
         ## upload files and change the status upload -> uploading 
-        #UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
                 
         ## check that files have been successfully uploaded, update status uploading -> uploaded
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
+        #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
