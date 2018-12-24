@@ -1042,7 +1042,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
     and upload files of aliases with upload status using specified
     Queue, Memory and UploadMode and update status to uploading. 
     '''
-       
+    
     # check that Analysis table exists
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
@@ -1061,8 +1061,14 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
         # close connection
         conn.close()
         
+        # count the number of files being uploaded
+        Uploading = int(subprocess.check_output('qstat | grep Upload | wc -l', shell=True).decode('utf-8').rstrip())        
+        # upload new files up to Max
+        Maximum = int(Max) - Uploading
+        Data = Data[: Maximum]
+        
         if len(Data) != 0:
-            for i in Data[: int(Max)]:
+            for i in Data:
                 # create dict {alias: {'files':files, 'StagePath':stagepath, 'FileDirectory':filedirectory}}
                 D = {}
                 alias = i[0]
@@ -1231,6 +1237,7 @@ def CountFileUsage(CredentialFile, DataBase, Table, Box, Status):
                     filesize.append(GetFileSize(files[j]['filePath']))
                 D[i[0]] = sum(filesize)
     return D            
+
 
 # use this function to select alias to encrypt based on disk usage
 def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
@@ -2109,14 +2116,15 @@ def SubmitAnalyses(args):
         ## check that files have been successfully uploaded, update status uploading -> uploaded
         #CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box)
         
+        ## remove files with uploaded status
+        #RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+               
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
         #AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box)
         
         ## submit analyses with submit status                
         #RegisterObjects(args.credential, args.subdb, args.table, args.box, 'analyses', args.portal)
 
-        ## remove files with submitted status
-        #RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
         
     
 if __name__ == '__main__':
