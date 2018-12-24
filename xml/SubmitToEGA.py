@@ -412,7 +412,7 @@ def FormatSampleJson(D):
 
 
 # use this function to print a dict the enumerations from EGA to std output
-def GrabEgaEnums(URL):
+def GrabEgaEnums(args):
     '''
     (str) -> dict
     Take the URL for a given enumeration and return and dict of tag: value pairs
@@ -421,14 +421,14 @@ def GrabEgaEnums(URL):
     # create a dict to store the enumeration info {value: tag}
     Enum = {}
     # connect to the api, retrieve the information for the given enumeration
-    response = requests.get(URL)
+    response = requests.get(args.url)
     # check response code
     if response.status_code == requests.codes.ok:
         # loop over dict in list
         for i in response.json()['response']['result']:
             assert i['value'] not in Enum
             Enum[i['value']] = i['tag']
-    return Enum
+    print(Enum)
 
 # use this function to format the analysis json
 def FormatAnalysisJson(D):
@@ -1603,7 +1603,20 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
     Tables = ListTables(CredentialFile, DataBase)
 
     # get the enumerations
-    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
+    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
+             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
+             'https://ega-archive.org/submission-api/v1/enums/analysis_types']
+    MyPython = '/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6'
+    MyScript = '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'
+    
+    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
+        
+    
+    ##### continue here
+    
+    
+    
+    GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
     ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
     AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
 
@@ -2202,7 +2215,22 @@ if __name__ == '__main__':
     AnalysisSubmission.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     AnalysisSubmission.set_defaults(func=SubmitAnalyses)
 
+
+   
+
+    
+
+
+
 #####################################
+
+
+    # collect enumerations from EGA
+    CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
+    CollectEnumParser.add_argument('--URL', dest='url', choices = ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
+                                                                   'https://ega-archive.org/submission-api/v1/enums/experiment_types',
+                                                                   'https://ega-archive.org/submission-api/v1/enums/analysis_types'], help='URL with enumerations', required=True)
+    CollectEnumParser.set_defaults(func=GrabEgaEnums)
 
 #    # check table information. change status ready --> valid if no error or keep status ready --> ready and record errorMessage
 #    CheckInfoParser = subparsers.add_parser('CheckInfo', help ='Check Table information')
