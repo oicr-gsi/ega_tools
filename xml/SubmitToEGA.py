@@ -411,25 +411,18 @@ def FormatSampleJson(D):
     return J                
 
 
-# use this function to print a dict the enumerations from EGA to std output
-def GrabEgaEnums(args):
+# use this function to list enumerations
+def ListEnumerations(URLs, MyPython='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
     '''
-    (str) -> dict
-    Take the URL for a given enumeration and return and dict of tag: value pairs
+    (list, str, str) -> list
+    Take a list of URLs for various enumerations, the path to the python program,
+    and the path to the python script and return a list of dictionaries, one for each enumeration
     '''
     
-    # create a dict to store the enumeration info {value: tag}
-    Enum = {}
-    # connect to the api, retrieve the information for the given enumeration
-    response = requests.get(args.url)
-    # check response code
-    if response.status_code == requests.codes.ok:
-        # loop over dict in list
-        for i in response.json()['response']['result']:
-            assert i['value'] not in Enum
-            Enum[i['value']] = i['tag']
-    print(Enum)
-
+    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
+    return Enums
+    
+    
 # use this function to format the analysis json
 def FormatAnalysisJson(D):
     '''
@@ -440,10 +433,11 @@ def FormatAnalysisJson(D):
     '''
     
     # get the enumerations
-    ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
-    AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
-    FileTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
-    
+    URLs = ['https://ega-archive.org/submission-api/v1/enums/experiment_types',
+            'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+            'https://ega-archive.org/submission-api/v1/enums/analysis_file_types']
+    ExperimentTypes, AnalysisTypes, FileTypes = ListEnumerations(URLs)
+        
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
     
@@ -1606,19 +1600,8 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable,
     URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
              'https://ega-archive.org/submission-api/v1/enums/experiment_types',
              'https://ega-archive.org/submission-api/v1/enums/analysis_types']
-    MyPython = '/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6'
-    MyScript = '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'
-    
-    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
-        
-    
-    ##### continue here
-    
-    
-    
-    GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_file_types')
-    ExperimentTypes = GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/experiment_types')
-    AnalysisTypes =  GrabEgaEnums('https://ega-archive.org/submission-api/v1/enums/analysis_types')
+    Enums = ListEnumerations(URLs)
+    FileTypes, ExperimentTypes, AnalysisTypes =  Enums
 
     # connect to db
     conn = EstablishConnection(CredentialFile, DataBase)
@@ -1785,7 +1768,26 @@ def CheckTableInformation(CredentialFile, DataBase, Table, ProjectsTable, Attrib
         conn.close()
 
   
-            
+# use this function to print a dict the enumerations from EGA to std output
+def GrabEgaEnums(args):
+    '''
+    (str) -> dict
+    Take the URL for a given enumeration and return and dict of tag: value pairs
+    '''
+    
+    # create a dict to store the enumeration info {value: tag}
+    Enum = {}
+    # connect to the api, retrieve the information for the given enumeration
+    response = requests.get(args.url)
+    # check response code
+    if response.status_code == requests.codes.ok:
+        # loop over dict in list
+        for i in response.json()['response']['result']:
+            assert i['value'] not in Enum
+            Enum[i['value']] = i['tag']
+    print(Enum)    
+    
+    
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
