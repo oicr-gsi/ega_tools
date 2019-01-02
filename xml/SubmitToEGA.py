@@ -1250,18 +1250,16 @@ def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
     # get file size of all files under each alias with encrypting status
     Encrypting = CountFileUsage(CredentialFile, DataBase, Table, Box, 'encrypting')
     
-    # set the file size at the current usage
-    FileSize = used
-    # add file size for all aliases with encrypting status
+    # substract file size for all aliases with encrypting status from available size
     for alias in Encrypting:
-        FileSize += Encrypting[alias]
+        available -= Encrypting[alias]
         
     # record aliases for encryption
     Aliases = []
     for alias in Encrypt:
-        # do not encrypt if the new files result is < 15Tb of disk availability 
-        if available - (FileSize + Encrypt[alias]) > DiskSpace:
-            FileSize += Encrypt[alias]
+        # do not encrypt if the new files result is < DiskSpace of disk availability 
+        if available - Encrypt[alias] > DiskSpace:
+            available -= Encrypt[alias]
             Aliases.append(alias)
     return Aliases
 
