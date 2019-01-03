@@ -724,64 +724,98 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(alias, filePath, fileName, KeyRing, OutDir, Queue, Mem):
+def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
     '''
-    (file, str, str, str, str, str) -> tuple
-    Take the full path to file, the name of the output file, the path to the
-    keys used during encryption, the directory where encrypted and cheksums are saved, 
-    the queue and memory allocated to run the jobs and return the exit codes 
-    specifying if the jobs were launched successfully or not and the job names
+    (file, str, str, str, str, list, list, str, str, str, int, str) -> tuple
+    Take the file with credential to connect to db, a given alias for Box in Table,
+    lists with file paths and names, the path to the encryption keys, the directory
+    where encrypted and cheksums are saved, the queue and memory allocated to run
+    the jobs and return the exit codes specifying if the jobs were launched
+    successfully or not and the job names
     '''
 
     MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
     MyCmd2 = 'gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0}'
     MyCmd3 = 'md5sum {0}.gpg | cut -f1 -d \' \' > {0}.gpg.md5'
-
-    # check that FileName is valid
-    if os.path.isfile(filePath) == False:
-        # return error that will be caught if file doesn't exist
-        return [-1], [-1] 
+    
+    # check that lists of file paths and names have the same number of entries
+    if len(filePaths) != len(fileNames):
+        return [-1], [-1]
     else:
-        # check if OutDir exist
-        if os.path.isdir(OutDir) == False:
-            return [-1], [-1] 
-        else:
-            # make a directory to save the scripts
-            qsubdir = os.path.join(OutDir, 'qsubs')
-            if os.path.isdir(qsubdir) == False:
-                os.mkdir(qsubdir)
-            # create a log dir
-            logDir = os.path.join(qsubdir, 'log')
-            if os.path.isdir(logDir) == False:
-                os.mkdir(logDir)
+        # make a list to store the job names and job exit codes
+        JobExits, JobNames = [], []
+        # loop over files for that alias      
+        for i in range(len(filePaths)):
+            # check that FileName is valid
+            if os.path.isfile(filePaths) == False:
+                # return error that will be caught if file doesn't exist
+                return [-1], [-1] 
+            else:
+                # check if OutDir exist
+                if os.path.isdir(OutDir) == False:
+                    return [-1], [-1] 
+                else:
+                    # make a directory to save the scripts
+                    qsubdir = os.path.join(OutDir, 'qsubs')
+                    if os.path.isdir(qsubdir) == False:
+                        os.mkdir(qsubdir)
+                    # create a log dir
+                    logDir = os.path.join(qsubdir, 'log')
+                    if os.path.isdir(logDir) == False:
+                        os.mkdir(logDir)
         
-            # get name of output file
-            OutFile = os.path.join(OutDir, fileName)
-            # put commands in shell script
-            BashScript1 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_original.sh')
-            BashScript2 = os.path.join(qsubdir, alias + '_' + fileName + '_encrypt.sh')
-            BashScript3 = os.path.join(qsubdir, alias + '_' + fileName + '_md5sum_encrypted.sh')
-            with open(BashScript1, 'w') as newfile:
-                newfile.write(MyCmd1.format(filePath, OutFile) + '\n')
-            with open(BashScript2, 'w') as newfile:
-                newfile.write(MyCmd2.format(filePath, OutFile, KeyRing) + '\n')
-            with open(BashScript3, 'w') as newfile:
-                newfile.write(MyCmd3.format(OutFile) + '\n')
+                    # get name of output file
+                    OutFile = os.path.join(OutDir, fileNames[i])
+                    # put commands in shell script
+                    BashScript1 = os.path.join(qsubdir, alias + '_' + fileNames[i] + '_md5sum_original.sh')
+                    BashScript2 = os.path.join(qsubdir, alias + '_' + fileNames[i] + '_encrypt.sh')
+                    BashScript3 = os.path.join(qsubdir, alias + '_' + fileNames[i] + '_md5sum_encrypted.sh')
+            
+                    with open(BashScript1, 'w') as newfile:
+                        newfile.write(MyCmd1.format(filePaths[i], OutFile) + '\n')
+                    with open(BashScript2, 'w') as newfile:
+                        newfile.write(MyCmd2.format(filePaths[i], OutFile, KeyRing) + '\n')
+                    with open(BashScript3, 'w') as newfile:
+                        newfile.write(MyCmd3.format(OutFile) + '\n')
         
-            # launch qsub directly, collect job names and exit codes
-            JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileName)
-            QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
-            job1 = subprocess.call(QsubCmd1, shell=True)
+                    # launch qsub directly, collect job names and exit codes
+                    JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileNames[i])
+                    # check if 1st file in list
+                    if i == 0:
+                        QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
+                    else:
+                        # launch job when previous job is done
+                        QsubCmd1 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName1, logDir, BashScript1)
+                    job1 = subprocess.call(QsubCmd1, shell=True)
+                                   
+                    JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileNames[i])
+                    QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
+                    job2 = subprocess.call(QsubCmd2, shell=True)
+                            
+                    JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileNames[i])
+                    QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
+                    job3 = subprocess.call(QsubCmd3, shell=True)
+                            
+                    # store job names and exit codes
+                    JobExits.extend([job1, job2, job3])
+                    JobNames.extend([JobName1, JobName2, JobName3])
+        
+        # launch check encryption job
+        MyCmd = 'python3.6 {0} IsEncryptionDone -c {1} -s {2} -t {3} -b {4} -a {5}'
+        # put commands in shell script
+        BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
+        with open(BashScript, 'w') as newfile:
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias) + '\n')
                 
-            JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileName)
-            QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
-            job2 = subprocess.call(QsubCmd2, shell=True)
+        # launch qsub directly, collect job names and exit codes
+        JobName = 'CheckEncryption.{0}'.format(alias)
+        # launch job when previous job is done
+        QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
+        job = subprocess.call(QsubCmd, shell=True)
+        # store the exit code (but not the job name)
+        JobExits.append(job)          
         
-            JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileName)
-            QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
-            job3 = subprocess.call(QsubCmd3, shell=True)
-        
-            return [job1, job2, job3], [JobName1, JobName2, JobName3]
+        return JobExits, JobNames
 
 
 # use this function to encrypt files and update status to encrypting
@@ -822,17 +856,15 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                     assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
                     # convert single quotes to double quotes for str -> json conversion
                     files = json.loads(i[1].replace("'", "\""))
-                    # store the job names and exit codes for that alias
-                    JobCodes, JobNames = [], []
+                    # create parallel lists of file paths and names
+                    filePaths, fileNames = [] , [] 
                     # loop over files for that alias
                     for file in files:
                         # get the filePath and fileName
-                        filePath = files[file]['filePath']
-                        fileName = files[file]['fileName']
-                        # encrypt and run md5sums on original and encrypted files
-                        j, k = EncryptAndChecksum(alias, filePath, fileName, KeyRing, WorkingDir, Queue, Mem)
-                        JobCodes.extend(j)
-                        JobNames.extend(k)
+                        filePaths.append(files[file]['filePath'])
+                        fileNames.append(files[file]['fileName'])
+                    # encrypt and run md5sums on original and encrypted files and check encryption status
+                    JobCodes, JobNames = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem)
                     # check if encription was launched successfully
                     if len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0:
                         # store the job names
@@ -881,13 +913,13 @@ def CheckRunningJob(JobName):
     return JobName in JobDetails
 
                 
-# use this function to check that encryption is done
-def CheckEncryption(CredentialFile, DataBase, Table, Box):
+# use this function to check that encryption is done for a given alias
+def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias):
     '''
-    (file, str, str, str, str, str) -> None
-    Take the file with DataBase credentials, the tables in this db used to pull
-    information to extract the working directory and files in encrypting status
-    and update status to upload and files with md5sums when encrypting is done
+    (file, str, str, str, str) -> None
+    Take the file with DataBase credentials, extract information from Table
+    regarding Alias with encrypting Status and update status to upload and
+    files with md5sums when encrypting is done
     '''        
         
     # check that table exists
@@ -898,10 +930,10 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box):
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # pull alias and files and encryption job names for status = encrypting
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.JobNames, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\" AND {0}.alias=\"{2}\"'.format(Table, Box, Alias))
         Data = cur.fetchall()
         conn.close()
-        # check that some files are in encrypting mode
+        # check that files are in encrypting mode for this Alias
         if len(Data) != 0:
             for i in Data:
                 alias = i[0]
@@ -2097,6 +2129,18 @@ def SubmitSamples(args):
         RegisterObjects(args.credential, args.database, args.table, args.box, 'samples', args.portal)
 
 
+# use this function to check encryption
+def IsEncryptionDone(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and update status to upload if encryption
+    is done for a given alias or reset status to encrypt
+    '''
+       
+    # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
+    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias)
+    
+
 # use this function to submit Analyses objects
 def FormAnalysesJson(args):
     '''
@@ -2120,10 +2164,8 @@ def FormAnalysesJson(args):
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
+        ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
-        
-        ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-        CheckEncryption(args.credential, args.subdb, args.table, args.box)
         
         ## upload files and change the status upload -> uploading 
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
@@ -2236,6 +2278,15 @@ if __name__ == '__main__':
     FormAnalysesJsonParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     FormAnalysesJsonParser.set_defaults(func=FormAnalysesJson)
 
+    # check encryption
+    CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help='Check that encryption is done for a given alias')
+    CheckEncryptionParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+    CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
+    CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
+    
     # register analyses to EGA       
     RegisterAnalysesParser = subparsers.add_parser('RegisterAnalyses', help ='Submit Analyses json to EGA')
     RegisterAnalysesParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
@@ -2246,6 +2297,7 @@ if __name__ == '__main__':
     RegisterAnalysesParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     RegisterAnalysesParser.set_defaults(func=SubmitMetadata)
    
+       
     # get arguments from the command line
     args = parser.parse_args()
     # pass the args to the default function
