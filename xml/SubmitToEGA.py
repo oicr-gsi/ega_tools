@@ -796,7 +796,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
     
     # create a list of aliases for encryption 
     Aliases = SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace)
-           
+    
     # check if Table exist
     Tables = ListTables(CredentialFile, DataBase)
     if Table in Tables:
@@ -1059,6 +1059,8 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
         Uploading = int(subprocess.check_output('qstat | grep Upload | wc -l', shell=True).decode('utf-8').rstrip())        
         # upload new files up to Max
         Maximum = int(Max) - Uploading
+        if Maximum < 0:
+            Maximum = 0
         Data = Data[: Maximum]
         
         if len(Data) != 0:
