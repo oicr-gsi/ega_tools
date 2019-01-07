@@ -22,7 +22,7 @@ import uuid
 #https://ega-archive.org/submission/programmatic_submissions/submitting-metadata
 
 
-
+## functions common to multiple objects
 
 # use this function to extract credentials from file
 def ExtractCredentials(CredentialFile):
@@ -93,7 +93,6 @@ def ListTables(CredentialFile, DataBase):
     return Tables
 
 
-
 # use this function to to generate a working directory to save the encrypted and md5sums 
 def GetWorkingDirectory(S, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
     '''
@@ -103,7 +102,7 @@ def GetWorkingDirectory(S, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submission
     '''
     
     return os.path.join(WorkingDir, S)
-    
+
 
 # use this function to add a working directory for each alias
 def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
@@ -163,96 +162,49 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
                     cur.execute('UPDATE {0} SET {0}.Status=\"start\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))  
                     conn.commit()
         conn.close()            
-        
-
-# use this function to parse the input sample table
-def ParseSampleInputTable(Table):
-    '''
-    (file) -> list
-    Take a tab-delimited file and return a list of dictionaries, each dictionary
-    storing the information for a uniqe sample
-    Preconditions: Required fields must be present or returned list is empty,
-    and missing entries are not permitted (e.g. can be '', NA)
-    '''
-    
-    # create list of dicts to store the object info {alias: {attribute: key}}
-    L = []
-    
-    infile = open(Table)
-    # get file header
-    Header = infile.readline().rstrip().split('\t')
-    # check that required fields are present
-    L = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
-         "region", "phenotype", "subjectId", "anonymizedName", "biosampleId",
-         "sampleAge", "sampleDetail"]
-    Missing = [i for i in L if i not in Header]
-    
-    if len(Missing) != 0:
-        print('These required fields are missing: {0}'.format(', '.join(Missing)))
-    else:
-        # required fields are present, read the content of the file
-        Content = infile.read().rstrip().split('\n')
-        for S in Content:
-            S = list(map(lambda x: x.strip(), S.split('\t')))
-            # missing values are not permitted
-            if len(Header) != len(S):
-                print('missing values are not permitted. Empty strings and NA are allowed')
-            else:
-                # create a dict to store the key: value pairs
-                D = {}
-                # get the alias name
-                alias = S[Header.index('alias')]
-                D[alias] = {}
-                for i in range(len(S)):
-                    assert Header[i] not in D[alias]
-                    D[alias][Header[i]] = S[i]    
-                L.append(D)    
-    infile.close()
-    return L        
 
 
-# use this function to parse the attributes sample table
-def ParseSampleAttributesTable(Table):
+# use this function convert data into data to be instered in a database table
+def FormatData(L):
     '''
-    (file) -> dict
-    Take a tab-delimited file and return a dictionary storing sample attributes
-    Preconditions: Required fields must be present or returned list is empty,
-    and missing entries are not permitted (e.g. can be '', NA)
+    (list) -> tuple
+    Take a list of data and return a tuple to be inserted in a database table 
     '''
     
-    infile = open(Table)
-    Content = infile.read().rstrip().split('\n')
-    infile.close()
-    # create a dict {key: value}
-    D = {}
-    # check that required fields are present
-    Expected = ['alias', 'title', 'description']
-    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
-    Missing = [i for i in Expected if i not in Fields]
-    if len(Missing) != 0:
-        print('These required fields are missing: {0}'.format(', '.join(Missing)))
-    else:
-        for S in Content:
-            S = list(map(lambda x: x.strip(), S.split(':')))
-            if S[0] != 'attributes':
-                assert len(S) == 2
-                D[S[0]] = S[1]
-            else:
-                assert len(S) == 3
-                if 'attributes' not in D:
-                    D['attributes'] = {}
-                if S[1] not in D['attributes']:
-                    D['attributes'][S[1]] = {}    
-                if S[0] == 'attributes':
-                    if 'tag' not in D['attributes'][S[1]]:
-                        D['attributes'][S[1]]['tag'] = S[1]
-                    else:
-                        assert D['attributes'][S[1]]['tag'] == S[1]
-                    D['attributes'][S[1]]['value'] = S[2]
-    infile.close()
-    return D
-            
-            
+    # create a tuple of strings data values
+    Values = []
+    # loop over data 
+    for i in range(len(L)):
+        if L[i] == '' or L[i] == None or L[i] == 'NA':
+            Values.append('NULL')
+        else:
+            Values.append(str(L[i]))
+    return tuple(Values)
+
+
+# use this function to list enumerations
+def ListEnumerations(URLs, MyScript, MyPython='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6'):
+    '''
+    (list, str, str) -> list
+    Take a list of URLs for various enumerations, the path to the python program,
+    and the path to the python script and return a list of dictionaries, one for each enumeration
+    '''
+    
+    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
+    return Enums
+
+
+
+
+
+
+########################### analyses ##################################
+
+
+
+
+## functions specific to Analyses objects
+    
 # use this function to parse the input analysis table
 def ParseAnalysisInputTable(Table):
     '''
@@ -381,79 +333,6 @@ def ParseAnalysesAccessoryTables(Table, TableType):
     return D
 
 
-# use this function convert data into data to be instered in a database table
-def FormatData(L):
-    '''
-    (list) -> tuple
-    Take a list of data and return a tuple to be inserted in a database table 
-    '''
-    
-    # create a tuple of strings data values
-    Values = []
-    # loop over data 
-    for i in range(len(L)):
-        if L[i] == '' or L[i] == None or L[i] == 'NA':
-            Values.append('NULL')
-        else:
-            Values.append(str(L[i]))
-    return tuple(Values)
-
-
-# use this function to format the sample json
-def FormatSampleJson(D):
-    '''
-    (dict) -> dict
-    Take a dictionary with information for a sample object and return a dictionary
-    with the expected format or dictionary with the alias only if required fields are missing
-    Precondition: strings in D have double-quotes
-    '''
-    
-    # create a dict to be strored as a json. note: strings should have double quotes
-    J = {}
-    
-    JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
-                "organismPart", "cellLine", "region", "phenotype", "subjectId",
-                "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
-    for field in D:
-        if field in JsonKeys:
-            if D[field] == 'NULL':
-                # some fields are required, return empty dict if field is emoty
-                if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
-                    # erase dict and add alias
-                    J = {}
-                    J["alias"] = D["alias"]
-                    # return dict with alias only if required fields are missing
-                    return J
-                else:
-                    J[field] = ""
-            else:
-                if field == 'attributes':
-                    J[field] = []
-                    attributes = D[field]
-                    # convert string to dict
-                    if ';' in attributes:
-                        attributes = attributes.split(';')
-                        for i in range(len(attributes)):
-                            J[field].append(json.loads(attributes[i]))
-                    else:
-                        J[field].append(json.loads(attributes))
-                else:
-                    J[field] = D[field]
-    return J                
-
-
-# use this function to list enumerations
-def ListEnumerations(URLs, MyScript, MyPython='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6'):
-    '''
-    (list, str, str) -> list
-    Take a list of URLs for various enumerations, the path to the python program,
-    and the path to the python script and return a list of dictionaries, one for each enumeration
-    '''
-    
-    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
-    return Enums
-    
-    
 # use this function to format the analysis json
 def FormatAnalysisJson(D, MyScript):
     '''
@@ -559,95 +438,8 @@ def FormatAnalysisJson(D, MyScript):
                     J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
     return J                
 
-# use this function to extract ega accessions from metadata database
-def ExtractAccessions(CredentialFile, DataBase, Box, Table):
-    '''
-    (file, str, str, str) -> dict
-    Take a file with credentials to connect to DataBase and return a dictionary
-    with alias: accessions registered in Box for the given object/Table
-    '''
-    
-    # connect to metadata database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    # pull down analysis alias and egaId from metadata db, alias should be unique
-    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(Table, Box)) 
-    # create a dict {alias: accession}
-    # some PCSI aliases are not unique, 1 sample is chosen arbitrarily
-    Registered = {}
-    for i in cur:
-        Registered[i[0]] = i[1]
-    conn.close()
-    return Registered
 
-# use this function to check that root is not given as a parameter for stagepath
-def RejectRoot(S):
-    '''
-    (str) -> str
-    Take the string name of the staging server on EGA and return this or raise
-    a value error if the name is the root
-    '''
 
-    if S == '/':
-        raise ValueError('The root is not allowed for the staging server')
-    return S
-
-# use this function to form jsons and store to submission db
-def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
-    '''
-    (file, str, str, str) -> None
-    Take the file with credentials to connect to DataBase and update the Table
-    for Object with json and new status if json is formed correctly
-    '''
-    
-    
-    # check if Sample table exists
-    Tables = ListTables(CredentialFile, DataBase)
-
-    # connect to the database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    
-    if Table in Tables:
-        ## form json, add to table and update status -> submit
-        # pull data for objects with ready Status for sample and uploaded Status for analyses
-        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-
-        # get column headers
-        Header = [i[0] for i in cur.description]
-        # extract all information 
-        Data = cur.fetchall()
-        # check that samples are in ready mode
-        if len(Data) != 0:
-            # create a list of dicts storing the object info
-            L = []
-            for i in Data:
-                D = {}
-                assert len(i) == len(Header)
-                for j in range(len(i)):
-                    D[Header[j]] = i[j]
-                L.append(D)
-            # create object-formatted jsons from each dict 
-            Jsons = [FormatSampleJson(D) for D in L]
-            # add json back to table and update status
-            for D in Jsons:
-                # check if json is correctly formed (ie. required fields are present)
-                if len(D) == 1:
-                    print('cannot form json for {0}, required field(s) missing'.format(D['alias']))
-                else:
-                    # add json back in table and update status
-                    alias = D['alias']
-                    # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
-                    conn.commit()
-                    # update status to submit
-                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
-                    conn.commit()
-    else:
-        print('Table {0} does not exist')
-    conn.close()
-
-    
 # use this function to form jsons and store to submission db
 def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, MyScript):
     '''
@@ -704,7 +496,29 @@ def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Pro
                     cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
                     conn.commit()
     conn.close()
+
+
+# use this function to extract ega accessions from metadata database
+def ExtractAccessions(CredentialFile, DataBase, Box, Table):
+    '''
+    (file, str, str, str) -> dict
+    Take a file with credentials to connect to DataBase and return a dictionary
+    with alias: accessions registered in Box for the given object/Table
+    '''
     
+    # connect to metadata database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    # pull down analysis alias and egaId from metadata db, alias should be unique
+    cur.execute('SELECT {0}.alias, {0}.egaAccessionId from {0} WHERE {0}.egaBox=\"{1}\"'.format(Table, Box)) 
+    # create a dict {alias: accession}
+    # some PCSI aliases are not unique, 1 sample is chosen arbitrarily
+    Registered = {}
+    for i in cur:
+        Registered[i[0]] = i[1]
+    conn.close()
+    return Registered
+
 
 # use this function to add sample accessions to Analysis Table in the submission database
 def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Table):
@@ -849,6 +663,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         return JobExits
 
 
+
 # use this function to encrypt files and update status to encrypting
 def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace):
     '''
@@ -988,6 +803,250 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias):
                     cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
                     conn.commit()
                     conn.close()
+
+
+
+#####################  samples ###################################################################################
+
+
+
+
+
+
+
+
+
+## functions specific to Samples objects
+
+# use this function to parse the input sample table
+def ParseSampleInputTable(Table):
+    '''
+    (file) -> list
+    Take a tab-delimited file and return a list of dictionaries, each dictionary
+    storing the information for a uniqe sample
+    Preconditions: Required fields must be present or returned list is empty,
+    and missing entries are not permitted (e.g. can be '', NA)
+    '''
+    
+    # create list of dicts to store the object info {alias: {attribute: key}}
+    L = []
+    
+    infile = open(Table)
+    # get file header
+    Header = infile.readline().rstrip().split('\t')
+    # check that required fields are present
+    L = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
+         "region", "phenotype", "subjectId", "anonymizedName", "biosampleId",
+         "sampleAge", "sampleDetail"]
+    Missing = [i for i in L if i not in Header]
+    
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        # required fields are present, read the content of the file
+        Content = infile.read().rstrip().split('\n')
+        for S in Content:
+            S = list(map(lambda x: x.strip(), S.split('\t')))
+            # missing values are not permitted
+            if len(Header) != len(S):
+                print('missing values are not permitted. Empty strings and NA are allowed')
+            else:
+                # create a dict to store the key: value pairs
+                D = {}
+                # get the alias name
+                alias = S[Header.index('alias')]
+                D[alias] = {}
+                for i in range(len(S)):
+                    assert Header[i] not in D[alias]
+                    D[alias][Header[i]] = S[i]    
+                L.append(D)    
+    infile.close()
+    return L        
+
+
+# use this function to parse the attributes sample table
+def ParseSampleAttributesTable(Table):
+    '''
+    (file) -> dict
+    Take a tab-delimited file and return a dictionary storing sample attributes
+    Preconditions: Required fields must be present or returned list is empty,
+    and missing entries are not permitted (e.g. can be '', NA)
+    '''
+    
+    infile = open(Table)
+    Content = infile.read().rstrip().split('\n')
+    infile.close()
+    # create a dict {key: value}
+    D = {}
+    # check that required fields are present
+    Expected = ['alias', 'title', 'description']
+    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
+    Missing = [i for i in Expected if i not in Fields]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        for S in Content:
+            S = list(map(lambda x: x.strip(), S.split(':')))
+            if S[0] != 'attributes':
+                assert len(S) == 2
+                D[S[0]] = S[1]
+            else:
+                assert len(S) == 3
+                if 'attributes' not in D:
+                    D['attributes'] = {}
+                if S[1] not in D['attributes']:
+                    D['attributes'][S[1]] = {}    
+                if S[0] == 'attributes':
+                    if 'tag' not in D['attributes'][S[1]]:
+                        D['attributes'][S[1]]['tag'] = S[1]
+                    else:
+                        assert D['attributes'][S[1]]['tag'] == S[1]
+                    D['attributes'][S[1]]['value'] = S[2]
+    infile.close()
+    return D
+ 
+
+# use this function to format the sample json
+def FormatSampleJson(D):
+    '''
+    (dict) -> dict
+    Take a dictionary with information for a sample object and return a dictionary
+    with the expected format or dictionary with the alias only if required fields are missing
+    Precondition: strings in D have double-quotes
+    '''
+    
+    # create a dict to be strored as a json. note: strings should have double quotes
+    J = {}
+    
+    JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
+                "organismPart", "cellLine", "region", "phenotype", "subjectId",
+                "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+    for field in D:
+        if field in JsonKeys:
+            if D[field] == 'NULL':
+                # some fields are required, return empty dict if field is emoty
+                if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
+                    # erase dict and add alias
+                    J = {}
+                    J["alias"] = D["alias"]
+                    # return dict with alias only if required fields are missing
+                    return J
+                else:
+                    J[field] = ""
+            else:
+                if field == 'attributes':
+                    J[field] = []
+                    attributes = D[field]
+                    # convert string to dict
+                    if ';' in attributes:
+                        attributes = attributes.split(';')
+                        for i in range(len(attributes)):
+                            J[field].append(json.loads(attributes[i]))
+                    else:
+                        J[field].append(json.loads(attributes))
+                else:
+                    J[field] = D[field]
+    return J                
+
+
+# use this function to form jsons and store to submission db
+def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
+    '''
+    (file, str, str, str) -> None
+    Take the file with credentials to connect to DataBase and update the Table
+    for Object with json and new status if json is formed correctly
+    '''
+    
+    
+    # check if Sample table exists
+    Tables = ListTables(CredentialFile, DataBase)
+
+    # connect to the database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    
+    if Table in Tables:
+        ## form json, add to table and update status -> submit
+        # pull data for objects with ready Status for sample and uploaded Status for analyses
+        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+
+        # get column headers
+        Header = [i[0] for i in cur.description]
+        # extract all information 
+        Data = cur.fetchall()
+        # check that samples are in ready mode
+        if len(Data) != 0:
+            # create a list of dicts storing the object info
+            L = []
+            for i in Data:
+                D = {}
+                assert len(i) == len(Header)
+                for j in range(len(i)):
+                    D[Header[j]] = i[j]
+                L.append(D)
+            # create object-formatted jsons from each dict 
+            Jsons = [FormatSampleJson(D) for D in L]
+            # add json back to table and update status
+            for D in Jsons:
+                # check if json is correctly formed (ie. required fields are present)
+                if len(D) == 1:
+                    print('cannot form json for {0}, required field(s) missing'.format(D['alias']))
+                else:
+                    # add json back in table and update status
+                    alias = D['alias']
+                    # string need to be in double quote
+                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
+                    conn.commit()
+                    # update status to submit
+                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+                    conn.commit()
+    else:
+        print('Table {0} does not exist')
+    conn.close()
+
+
+
+
+
+
+
+
+
+
+
+############################# end of samples ######################################################################           
+            
+
+
+
+
+
+
+
+    
+    
+
+
+# use this function to check that root is not given as a parameter for stagepath
+def RejectRoot(S):
+    '''
+    (str) -> str
+    Take the string name of the staging server on EGA and return this or raise
+    a value error if the name is the root
+    '''
+
+    if S == '/':
+        raise ValueError('The root is not allowed for the staging server')
+    return S
+
+
+    
+    
+
+
+
+
+
                     
 
 # use this script to launch qsubs to encrypt the files and do a checksum
