@@ -1019,34 +1019,6 @@ def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
 
 
 
-
-
-
-
-    
-    
-
-
-# use this function to check that root is not given as a parameter for stagepath
-def RejectRoot(S):
-    '''
-    (str) -> str
-    Take the string name of the staging server on EGA and return this or raise
-    a value error if the name is the root
-    '''
-
-    if S == '/':
-        raise ValueError('The root is not allowed for the staging server')
-    return S
-
-
-    
-    
-
-
-
-
-
                     
 
 # use this script to launch qsubs to encrypt the files and do a checksum
