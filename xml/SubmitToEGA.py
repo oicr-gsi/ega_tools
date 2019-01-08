@@ -1817,7 +1817,7 @@ def AddSampleInfo(args):
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
 
     # parse input table
-    Data = ParseSampleInputTable(args.table)
+    Data = ParseSampleInputTable(args.input)
     
     # create table if table doesn't exist
     Tables = ListTables(args.credential, args.subdb)
@@ -1897,7 +1897,7 @@ def AddSampleAttributes(args):
     '''
     
     # parse attribues table
-    D = ParseSampleAttributesTable(args.table)
+    D = ParseSampleAttributesTable(args.input)
     
     # create a list of tables
     Tables = ListTables(args.credential, args.subdb)
