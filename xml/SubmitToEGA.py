@@ -332,6 +332,446 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
     return Registered
 
 
+# use this function to check information in Tables    
+def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
+    '''
+    (str, str, str, str, str, str, str, str, dict) -> dict
+    Extract information from DataBase Table, AttributesTable and also from ProjectsTable
+    if Object is analyses using credentials in file, check if information is valid and return a dict
+    with error message for each alias in Table
+    '''
+
+    # create a dictionary {alias: error}
+    D = {}
+
+    # get the enumerations
+    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
+             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
+             'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+             'https://ega-archive.org/submission-api/v1/enums/case_control',
+             'https://ega-archive.org/submission-api/v1/enums/genders']
+    
+    Enums = ListEnumerations(URLs, MyScript)
+    FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
+
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()      
+    # get required information
+    if Object == 'analyses':
+        if datatype == 'analyses':
+            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
+            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        elif datatype == 'attributes':
+            Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
+            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+        elif datatype == 'projects':
+            if datatype in KeyWordParams:
+                ProjectsTable = KeyWordParams[datatype]
+            else:
+                ProjectsTable = 'Empty'
+            Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
+            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box)
+    elif Object == 'samples':
+        if datatype == 'samples':
+            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
+            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        elif datatype == 'attributes':
+            Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
+            {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+        
+    # extract data 
+    try:
+        cur.execute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
+    conn.close()
+    
+    # check info
+    if len(Data) != 0:
+        if Object == 'analyses':
+            if datatype == 'analyses':
+                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+            elif datatype == 'attributes':
+                Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
+                Required = ['title', 'description', 'genomeId', 'StagePath']
+            elif datatype == 'projects':
+                Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+                Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+        elif Object == 'samples':
+            if datatype == 'samples':
+                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+            elif datatype == 'attributes':
+                Keys = ['alias', 'title', 'description', 'attributes']
+                Required = ['title', 'description']
+            
+        for i in range(len(Data)):
+            # set up boolean. update if missing values
+            Missing = False
+            # create a dict with all information
+            d = {Keys[j]: Data[i][j] for j in range(len(Keys))}
+            # create an error message
+            Error = []
+            # check if information is valid
+            for key in Keys:
+                if key in Required:
+                    if d[key] in ['', 'NULL', None]:
+                        Missing = True
+                        Error.append(key)
+                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
+                if key == 'egaBox':
+                    if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
+                        Missing = True
+                        Error.append(key)
+                # check files
+                if key == 'files':
+                    files = json.loads(d['files'].replace("'", "\""))
+                    for filePath in files:
+                        # check if file is valid
+                        if os.path.isfile(filePath) == False:
+                            Missing = True
+                            Error.append('files')
+                        # check validity of file type
+                        if files[filePath]['fileTypeId'].lower() not in FileTypes:
+                            Missing = True
+                            Error.append('fileTypeId')
+                # check study Id
+                if key == 'studyId':
+                    if 'EGAS' not in d[key]:
+                        Missing = True
+                        Error.append(key)
+                # check enumerations
+                if key == 'experimentTypeId':
+                    if d['experimentTypeId'] not in ExperimentTypes:
+                        Missing = True
+                        Error.append(key)
+                if key == 'analysisTypeId':
+                    if d['analysisTypeId'] not in AnalysisTypes:
+                        Missing = True
+                        Error.append(key)
+                if key == 'caseOrControlId':
+                    if d['caseOrControlId'] not in CaseControl:
+                        Missing = True
+                        Error.append(key)
+                if key == 'genderId':
+                    if d['genderId'] not in Genders:
+                        Missing = True
+                        Error.append(key)
+                # check attributes of attributes table
+                if key == 'attributes' and datatype == 'attributes':
+                    if d['attributes'] not in ['', 'NULL', None]:
+                        # check format of attributes
+                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
+                        for k in attributes:
+                            # do not allow keys other than tag, unit and value
+                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
+                                Missing = True
+                                Error.append(key)
+                            # tag and value are required keys
+                            if 'tag' not in k.keys() and 'value' not in k.keys():
+                                Missing = True
+                                Error.append(key)
+
+            # check if object has missing/non-valid information
+            if Missing == True:
+                 # record error message and update status ready --> dead
+                 Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
+            elif Missing == False:
+                Error = 'None'
+            assert d['alias'] not in D
+            D[d['alias']] = Error
+    return D
+
+
+
+# use this function to check that all information for Analyses objects is available before encrypting files     
+def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Object, Box, MyScript, **KeyWordParams):
+    '''
+    (str, str, str, str, str, str, str, dict) -> None
+    Extract information from DataBase Table, AttributesTable and ProjectsTable if Object is analyses
+    using credentials in file and update status to "valid" if all information is correct
+    or keep status to "ready" if incorrect or missing
+    '''
+
+    # create dict {alias: [errors]}
+    K = {}
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()      
+    cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+    Data = cur.fetchall()
+    conn.close()
+    if len(Data) != 0:
+        for i in Data:
+            K[i[0]] = []
+    
+        # get error messages for the different tables. create dicts {alias" error}
+        D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'analyses', Object, MyScript)
+        E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'attributes', Object, MyScript)
+        if Object == 'analyses':
+            F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'projects', Object, MyScript, **KeyWordParams)
+        
+        # record error messages
+        for alias in K:
+            if alias in D:
+                K[alias].append(D[alias])
+            else:
+                K[alias].append('In {0} table, no information'.format(Table))
+            if alias in E:
+                K[alias].append(E[alias])
+            else:
+                K[alias].append('In {0} table, no information'.format(AttributesTable))
+            if Object == 'analyses':
+                if 'projects' in KeyWordParams:
+                    ProjectsTable = KeyWordParams['projects']
+                else:
+                    ProjectsTable = 'xxx'
+                if alias in F:
+                    K[alias].append(F[alias])
+                else:
+                    K[alias].append('In {0} table, no information'.format(ProjectsTable))
+            
+        # connect to database
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()      
+        # update status and record errorMessage
+        if len(K) != 0:
+            for alias in K:
+                # check if error message
+                if len(list(set(K[alias]))) == 1:
+                    if list(set(K[alias]))[0] == 'None':
+                        # record error message, update status ready --> valid
+                        cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
+                        conn.commit()
+                elif len(list(set(K[alias]))) == 0:
+                    Error = 'No information'
+                    # record error message, keep status ready --> ready
+                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                    conn.commit()
+                else:
+                    # record errorMessage and keep status ready --> ready
+                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(K[alias]), alias, Box))
+                    conn.commit()
+        conn.close()
+
+
+# use this function to format the analysis json
+def FormatJson(D, Object, MyScript):
+    '''
+    (dict, str, str) -> dict
+    Take a dictionary with information for an object, the path to the script to fetch 
+    the EGA enumerations, and return a dictionary with the expected format or
+    a dictionary with the alias only if required fields are missing
+    Precondition: strings in D have double-quotes
+    '''
+    
+    # get the enumerations
+    URLs = ['https://ega-archive.org/submission-api/v1/enums/experiment_types',
+            'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+            'https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
+            'https://ega-archive.org/submission-api/v1/enums/case_control',
+             'https://ega-archive.org/submission-api/v1/enums/genders']
+             
+    ExperimentTypes, AnalysisTypes, FileTypes, CaseControl, Genders = ListEnumerations(URLs, MyScript)
+        
+    # create a dict to be strored as a json. note: strings should have double quotes
+    J = {}
+    
+    if Object == 'analyses':
+        JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
+                    "analysisCenter", "analysisDate", "analysisTypeId", "files",
+                    "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+        Required = ["alias", "title", "description", "studyId", "analysisCenter",
+                    "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]
+    elif Object == 'samples':
+        JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
+                    "organismPart", "cellLine", "region", "phenotype", "subjectId",
+                    "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+        Required = ["alias", "title", "description", "caseOrControlId", "genderId", "phenotype"] 
+
+    # loop over required json keys
+    for field in JsonKeys:
+        if field in D:
+            if D[field] in ['NULL', '', None]:
+                # some fields are required, return empty dict if field is empty
+                if field in Required:
+                    # erase dict and add alias
+                    J = {}
+                    J["alias"] = D["alias"]
+                    # return dict with alias only if required fields are missing
+                    return J
+                # other fields can be missing, either as empty list or string
+                else:
+                    # chromosomeReferences is hard-coded as empty list
+                    if field == "chromosomeReferences" or field == "attributes":
+                        J[field] = []
+                    else:
+                        J[field] = ""
+            else:
+                if field == 'files':
+                    assert D[field] != 'NULL'
+                    J[field] = []
+                    # convert string to dict
+                    files = D[field].replace("'", "\"")
+                    files = json.loads(files)
+                    # loop over file name
+                    for filePath in files:
+                        # create a dict to store file info
+                        # check that fileTypeId is valid
+                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
+                            # cannot obtain fileTypeId. erase dict and add alias
+                            J = {}
+                            J["alias"] = D["alias"]
+                            # return dict with alias only if required fields are missing
+                            return J
+                        else:
+                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
+                        # create dict with file info, add path to file names
+                        d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
+                             "checksum": files[filePath]['checksum'],
+                             "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
+                             "fileTypeId": fileTypeId}
+                        J[field].append(d)
+                elif field == 'attributes':
+                    # ensure strings are double-quoted
+                    attributes = D[field].replace("'", "\"")
+                    # convert string to dict
+                    # loop over all attributes
+                    attributes = attributes.split(';')
+                    J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
+                elif field == "experimentTypeId":
+                    # check that experimentTypeId is valid
+                    if D[field] not in ExperimentTypes:
+                        # cannot obtain experimentTypeId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = [ExperimentTypes[D[field]]]
+                elif field == "analysisTypeId":
+                    # check that analysisTypeId is valid
+                    if D[field] not in AnalysisTypes:
+                        # cannot obtain analysisTypeId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = AnalysisTypes[D[field]]
+                elif field == "caseOrControlId":
+                    # check that caseOrControlId is valid:
+                    if D[field] not in CaseControl:
+                        # cannot obtain caseOrControlId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = CaseControl[D[field]]
+                elif field == "genderId":
+                    # check that genderId is valid
+                    if D[field] not in Genders:
+                        # cannot obtain genderId, erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = Genders[D[field]]
+                else:
+                    J[field] = D[field]
+        else:
+            if field == 'sampleReferences':
+                # populate with sample accessions
+                J[field] = []
+                if ':' in D['sampleEgaAccessionsId']:
+                    for accession in D['sampleEgaAccessionsId'].split(':'):
+                        J[field].append({"value": accession.strip(), "label":""})
+                else:
+                    J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
+    return J                
+
+
+
+# use this function to form jsons and store to submission db
+def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object, MyScript, **KeyWordParams):
+    '''
+    (str, str, str, str, str, str, str, str, dict) -> None
+    Form a json for Objects in the given Box and add it to Table by
+    quering required information from the Analysis, and Attributes Tables and also
+    from the Projects table if Object is analyses using the file with credentials
+    to connect to Database update the status if json is formed correctly
+    '''
+    
+    # connect to the database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    
+    if Object == 'analyses':
+        if 'projects' in KeyWordParams:
+            ProjectsTable = KeyWordParams['projects']
+        else:
+            ProjectsTable = 'empty'
+        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
+        {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
+        {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
+        FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
+        AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box)
+    elif Object == 'samples':
+        Cmd = 'SELECT {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.organismPart, \
+        {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.biosampleId, \
+        {0}.sampleAge, {0}.sampleDetail, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} \
+        WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
+     
+    # extract information to for json    
+    try:
+        cur.execute(Cmd)
+        # get column headers
+        Header = [i[0] for i in cur.description]
+        # extract all information 
+        Data = cur.fetchall()
+    except:
+        Data = []
+        
+    # check that object are with appropriate status and/or that information can be extracted
+    if len(Data) != 0:
+        # create a list of dicts storing the object info
+        L = []
+        for i in Data:
+            D = {}
+            assert len(i) == len(Header)
+            for j in range(len(i)):
+                D[Header[j]] = i[j]
+            L.append(D)
+        # create object-formatted jsons from each dict 
+        Jsons = [FormatJson(D, Object, MyScript) for D in L]
+        # add json back to table and update status
+        for D in Jsons:
+            # check if json is correctly formed (ie. required fields are present)
+            if len(D) == 1:
+                Error = 'Cannot form json, required field(s) missing'
+                # add error in table and keep status (uploaded --> uploaded for analyses and valid --> valid for samples)
+                alias = D['alias']
+                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                conn.commit()
+            else:
+                # add json back in table and update status
+                alias = D['alias']
+                cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
+                conn.commit()
+    conn.close()
+
+
+
+
+
+
+
+
 ## functions specific to Analyses objects
     
 # use this function to parse the input analysis table
@@ -460,171 +900,6 @@ def ParseAnalysesAccessoryTables(Table, TableType):
                     D['attributes'][S[1]]['unit'] = S[2]
     infile.close()
     return D
-
-
-# use this function to format the analysis json
-def FormatAnalysisJson(D, MyScript):
-    '''
-    (dict) -> dict
-    Take a dictionary with information for an analysis object and return a dictionary
-    with the expected format or dictionary with the alias only if required fields are missing
-    Precondition: strings in D have double-quotes
-    '''
-    
-    # get the enumerations
-    URLs = ['https://ega-archive.org/submission-api/v1/enums/experiment_types',
-            'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-            'https://ega-archive.org/submission-api/v1/enums/analysis_file_types']
-    ExperimentTypes, AnalysisTypes, FileTypes = ListEnumerations(URLs, MyScript)
-        
-    # create a dict to be strored as a json. note: strings should have double quotes
-    J = {}
-    
-    JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
-                "analysisCenter", "analysisDate", "analysisTypeId", "files",
-                "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-    # loop over required json keys
-    for field in JsonKeys:
-        if field in D:
-            if D[field] == 'NULL':
-                # some fields are required, return empty dict if field is empty
-                if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                             "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]:
-                    # erase dict and add alias
-                    J = {}
-                    J["alias"] = D["alias"]
-                    # return dict with alias only if required fields are missing
-                    return J
-                # other fields can be missing, either as empty list or string
-                else:
-                    # chromosomeReferences is hard-coded as empty list
-                    if field == "chromosomeReferences" or field == "attributes":
-                        J[field] = []
-                    else:
-                        J[field] = ""
-            else:
-                if field == 'files':
-                    assert D[field] != 'NULL'
-                    J[field] = []
-                    # convert string to dict
-                    files = D[field].replace("'", "\"")
-                    files = json.loads(files)
-                    # loop over file name
-                    for filePath in files:
-                        # create a dict to store file info
-                        # check that fileTypeId is valid
-                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
-                            # cannot obtain fileTypeId. erase dict and add alias
-                            J = {}
-                            J["alias"] = D["alias"]
-                            # return dict with alias only if required fields are missing
-                            return J
-                        else:
-                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
-                        # create dict with file info, add path to file names
-                        d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
-                             "checksum": files[filePath]['checksum'],
-                             "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
-                             "fileTypeId": fileTypeId}
-                        J[field].append(d)
-                elif field == 'attributes':
-                    # ensure strings are double-quoted
-                    attributes = D[field].replace("'", "\"")
-                    # convert string to dict
-                    # loop over all attributes
-                    attributes = attributes.split(';')
-                    J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
-                elif field == "experimentTypeId":
-                    # check that experimentTypeId is valid
-                    if D[field] not in ExperimentTypes:
-                        # cannot obtain experimentTypeId. erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = [ExperimentTypes[D[field]]]
-                elif field == "analysisTypeId":
-                    # check that analysisTypeId is valid
-                    if D[field] not in AnalysisTypes:
-                        # cannot obtain analysisTypeId. erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = AnalysisTypes[D[field]]
-                else:
-                    J[field] = D[field]
-        else:
-            if field == 'sampleReferences':
-                # populate with sample accessions
-                J[field] = []
-                if ':' in D['sampleEgaAccessionsId']:
-                    for accession in D['sampleEgaAccessionsId'].split(':'):
-                        J[field].append({"value": accession.strip(), "label":""})
-                else:
-                    J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
-    return J                
-
-
-
-# use this function to form jsons and store to submission db
-def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, MyScript):
-    '''
-    (str, str, str, str, str, str) -> None
-    Form a json for Analyses Objects in the given Box and add it to Table by
-    quering required information from the Analysis, Projects and Attributes Tables 
-    using the file with credentials to connect to Database update the analysis
-    status if json is formed correctly
-    '''
-    
-    # check if Sample table exists
-    Tables = ListTables(CredentialFile, DataBase)
-
-    # connect to the database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    
-    if Table in Tables and AttributesTable in Tables and ProjectsTable in Tables:
-        ## form json, add to table and update status -> submit
-        cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
-                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
-                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId  \
-                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
-                    AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
-
-        # get column headers
-        Header = [i[0] for i in cur.description]
-        # extract all information 
-        Data = cur.fetchall()
-        # check that samples are in ready mode
-        if len(Data) != 0:
-            # create a list of dicts storing the object info
-            L = []
-            for i in Data:
-                D = {}
-                assert len(i) == len(Header)
-                for j in range(len(i)):
-                    D[Header[j]] = i[j]
-                L.append(D)
-            # create object-formatted jsons from each dict 
-            Jsons = [FormatAnalysisJson(D, MyScript) for D in L]
-            # add json back to table and update status
-            for D in Jsons:
-                # check if json is correctly formed (ie. required fields are present)
-                if len(D) == 1:
-                    Error = 'Cannot form json, required field(s) missing'
-                    # add error in table and keep status uploaded --> uploaded
-                    alias = D['alias']
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                else:
-                    # add json back in table and update status
-                    alias = D['alias']
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
-                    conn.commit()
-    conn.close()
 
 
 # use this function to add sample accessions to Analysis Table in the submission database
@@ -1421,232 +1696,6 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
                         os.system('rm {0}'.format(b))
 
 
-# use this function to check information in Tables    
-def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
-    '''
-    (str, str, str, str. str, str) -> dict
-    Extract information from DataBase Table, AttributesTable and ProjectsTable
-    using credentials in file, check if information is valid and return a dict
-    with error message for each alias in Table
-    '''
-
-    # create a dictionary {alias: error}
-    D = {}
-
-    # get the enumerations
-    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-             'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-             'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders']
-    
-    Enums = ListEnumerations(URLs, MyScript)
-    FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
-
-    # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()      
-    # get required information
-    if Object == 'analyses':
-        if datatype == 'analyses':
-            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
-            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
-            Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        elif datatype == 'projects':
-            if datatype in KeyWordParams:
-                ProjectsTable = KeyWordParams[datatype]
-            else:
-                ProjectsTable = 'Empty'
-            Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box)
-    elif Object == 'samples':
-        if datatype == 'samples':
-            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
-            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
-            Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
-            {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        
-    # extract data 
-    try:
-        cur.execute(Cmd)
-        Data = cur.fetchall()
-    except:
-        Data = []
-    conn.close()
-    
-    # check info
-    if len(Data) != 0:
-        if Object == 'analyses':
-            if datatype == 'analyses':
-                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-            elif datatype == 'attributes':
-                Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
-                Required = ['title', 'description', 'genomeId', 'StagePath']
-            elif datatype == 'projects':
-                Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-                Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-        elif Object == 'samples':
-            if datatype == 'samples':
-                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-            elif datatype == 'attributes':
-                Keys = ['alias', 'title', 'description', 'attributes']
-                Required = ['title', 'description']
-            
-        for i in range(len(Data)):
-            # set up boolean. update if missing values
-            Missing = False
-            # create a dict with all information
-            d = {Keys[j]: Data[i][j] for j in range(len(Keys))}
-            # create an error message
-            Error = []
-            # check if information is valid
-            for key in Keys:
-                if key in Required:
-                    if d[key] in ['', 'NULL', None]:
-                        Missing = True
-                        Error.append(key)
-                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
-                if key == 'egaBox':
-                    if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
-                        Missing = True
-                        Error.append(key)
-                # check files
-                if key == 'files':
-                    files = json.loads(d['files'].replace("'", "\""))
-                    for filePath in files:
-                        # check if file is valid
-                        if os.path.isfile(filePath) == False:
-                            Missing = True
-                            Error.append('files')
-                        # check validity of file type
-                        if files[filePath]['fileTypeId'].lower() not in FileTypes:
-                            Missing = True
-                            Error.append('fileTypeId')
-                # check study Id
-                if key == 'studyId':
-                    if 'EGAS' not in d[key]:
-                        Missing = True
-                        Error.append(key)
-                # check enumerations
-                if key == 'experimentTypeId':
-                    if d['experimentTypeId'] not in ExperimentTypes:
-                        Missing = True
-                        Error.append(key)
-                if key == 'analysisTypeId':
-                    if d['analysisTypeId'] not in AnalysisTypes:
-                        Missing = True
-                        Error.append(key)
-                if key == 'caseOrControlId':
-                    if d['caseOrControlId'] not in CaseControl:
-                        Missing = True
-                        Error.append(key)
-                if key == 'genderId':
-                    if d['genderId'] not in Genders:
-                        Missing = True
-                        Error.append(key)
-                # check attributes of attributes table
-                if key == 'attributes' and datatype == 'attributes':
-                    if d['attributes'] not in ['', 'NULL', None]:
-                        # check format of attributes
-                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
-                        for k in attributes:
-                            # do not allow keys other than tag, unit and value
-                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
-                                Missing = True
-                                Error.append(key)
-                            # tag and value are required keys
-                            if 'tag' not in k.keys() and 'value' not in k.keys():
-                                Missing = True
-                                Error.append(key)
-
-            # check if object has missing/non-valid information
-            if Missing == True:
-                 # record error message and update status ready --> dead
-                 Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
-            elif Missing == False:
-                Error = 'None'
-            assert d['alias'] not in D
-            D[d['alias']] = Error
-    return D
-
-
-
-# use this function to check that all information for Analyses objects is available before encrypting files     
-def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Object, Box, MyScript, **KeyWordParams):
-    '''
-    (str, str, str, str, str, str) -> None
-    Extract information from DataBase Table, ProjectsTable and AttributesTable
-    using credentials in file and update status to "valid" if all information is correct
-    or keep status to "ready" if incorrect or missing
-    '''
-
-    # create dict {alias: [errors]}
-    K = {}
-    # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()      
-    cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    Data = cur.fetchall()
-    conn.close()
-    if len(Data) != 0:
-        for i in Data:
-            K[i[0]] = []
-    
-        # get error messages for the different tables. create dicts {alias" error}
-        D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'analyses', Object, MyScript)
-        E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'attributes', Object, MyScript)
-        if Object == 'analyses':
-            F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'projects', Object, MyScript, **KeyWordParams)
-        
-        # record error messages
-        for alias in K:
-            if alias in D:
-                K[alias].append(D[alias])
-            else:
-                K[alias].append('In {0} table, no information'.format(Table))
-            if alias in E:
-                K[alias].append(E[alias])
-            else:
-                K[alias].append('In {0} table, no information'.format(AttributesTable))
-            if Object == 'analyses':
-                if 'projects' in KeyWordParams:
-                    ProjectsTable = KeyWordParams['projects']
-                else:
-                    ProjectsTable = 'xxx'
-                if alias in F:
-                    K[alias].append(F[alias])
-                else:
-                    K[alias].append('In {0} table, no information'.format(ProjectsTable))
-            
-        # connect to database
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()      
-        # update status and record errorMessage
-        if len(K) != 0:
-            for alias in K:
-                # check if error message
-                if len(list(set(K[alias]))) == 1:
-                    if list(set(K[alias]))[0] == 'None':
-                        # record error message, update status ready --> valid
-                        cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
-                        conn.commit()
-                elif len(list(set(K[alias]))) == 0:
-                    Error = 'No information'
-                    # record error message, keep status ready --> ready
-                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                else:
-                    # record errorMessage and keep status ready --> ready
-                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(K[alias]), alias, Box))
-                    conn.commit()
-        conn.close()
-
-
 ## functions specific to Samples objects
 
 # use this function to parse the input sample table
@@ -1736,109 +1785,6 @@ def ParseSampleAttributesTable(Table):
     infile.close()
     return D
  
-
-
-
-
-
-
-# use this function to format the sample json
-def FormatSampleJson(D):
-    '''
-    (dict) -> dict
-    Take a dictionary with information for a sample object and return a dictionary
-    with the expected format or dictionary with the alias only if required fields are missing
-    Precondition: strings in D have double-quotes
-    '''
-    
-    # create a dict to be strored as a json. note: strings should have double quotes
-    J = {}
-    
-    JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
-                "organismPart", "cellLine", "region", "phenotype", "subjectId",
-                "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
-    for field in D:
-        if field in JsonKeys:
-            if D[field] == 'NULL':
-                # some fields are required, return empty dict if field is emoty
-                if field in ["alias", "title", "description", "genderId", "phenotype", "subjectId"]:
-                    # erase dict and add alias
-                    J = {}
-                    J["alias"] = D["alias"]
-                    # return dict with alias only if required fields are missing
-                    return J
-                else:
-                    J[field] = ""
-            else:
-                if field == 'attributes':
-                    J[field] = []
-                    attributes = D[field]
-                    # convert string to dict
-                    if ';' in attributes:
-                        attributes = attributes.split(';')
-                        for i in range(len(attributes)):
-                            J[field].append(json.loads(attributes[i]))
-                    else:
-                        J[field].append(json.loads(attributes))
-                else:
-                    J[field] = D[field]
-    return J                
-
-
-# use this function to form jsons and store to submission db
-def AddSampleJsonToTable(CredentialFile, DataBase, Table, Box):
-    '''
-    (file, str, str, str) -> None
-    Take the file with credentials to connect to DataBase and update the Table
-    for Object with json and new status if json is formed correctly
-    '''
-    
-    
-    # check if Sample table exists
-    Tables = ListTables(CredentialFile, DataBase)
-
-    # connect to the database
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()
-    
-    if Table in Tables:
-        ## form json, add to table and update status -> submit
-        # pull data for objects with ready Status for sample and uploaded Status for analyses
-        cur.execute('SELECT * FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-
-        # get column headers
-        Header = [i[0] for i in cur.description]
-        # extract all information 
-        Data = cur.fetchall()
-        # check that samples are in ready mode
-        if len(Data) != 0:
-            # create a list of dicts storing the object info
-            L = []
-            for i in Data:
-                D = {}
-                assert len(i) == len(Header)
-                for j in range(len(i)):
-                    D[Header[j]] = i[j]
-                L.append(D)
-            # create object-formatted jsons from each dict 
-            Jsons = [FormatSampleJson(D) for D in L]
-            # add json back to table and update status
-            for D in Jsons:
-                # check if json is correctly formed (ie. required fields are present)
-                if len(D) == 1:
-                    print('cannot form json for {0}, required field(s) missing'.format(D['alias']))
-                else:
-                    # add json back in table and update status
-                    alias = D['alias']
-                    # string need to be in double quote
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
-                    conn.commit()
-                    # update status to submit
-                    cur.execute('UPDATE {0} SET {0}.Status=\"submit\" WHERE {0}.alias="\{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
-                    conn.commit()
-    else:
-        print('Table {0} does not exist')
-    conn.close()
 
 
 ## functions to run script    
@@ -2205,32 +2151,6 @@ def AddAnalysesInfo(args):
     conn.close()            
 
 
-
-# use this function to submit Sample objects
-def SubmitSamples(args):
-    
-    '''
-    (list) -> None
-    Take a list of command line arguments and submit samples to EGA following
-    sequential steps that depend on the sample status mode
-    '''
-   
-    # workflow for submitting samples:
-    # add sample info to sample table -> set status to ready
-    # form json for samples in ready mode and store in table -> set status to submit
-   
-      
-    # check if Sample table exists
-    Tables = ListTables(args.credential, args.database)
-    
-    if args.table in Tables:
-        
-        ## form json for samples in ready mode, add to table and update status -> submit
-        AddSampleJsonToTable(args.credential, args.database, args.table, args.box)
-        ## submit samples with submit status                
-        RegisterObjects(args.credential, args.database, args.table, args.box, 'samples', args.portal)
-
-
 # use this function to check encryption
 def IsEncryptionDone(args):
     '''
@@ -2287,8 +2207,8 @@ def FormAnalysesJson(args):
         RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box, args.myscript)
-        
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, projects = args.projects)
+
  
 
 # use this function to form json for Samples objects
@@ -2306,34 +2226,10 @@ def FormSamplesJson(args):
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
         CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'samples', args.box, args.myscript)
         
-        ## form json for samples in valid status add to table and update status valid -> submit
+        ## form json for samples in valid status add to table
+        # update status valid -> submit if no error of keep status --> valid and record errorMessage
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'samples', args.myscript)
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-###############        
-        
-        
-        
-        
-
-
-
-
-
        
 # use this function to submit object metadata 
 def SubmitMetadata(args):
