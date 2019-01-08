@@ -766,12 +766,6 @@ def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object
     conn.close()
 
 
-
-
-
-
-
-
 ## functions specific to Analyses objects
     
 # use this function to parse the input analysis table
@@ -1896,7 +1890,7 @@ def AddSampleInfo(args):
 
 
 # use this function to add data to SampleAttributes table
-def AdSampleAttributes(args):
+def AddSampleAttributes(args):
     '''
     Take a list of command line arguments and add attributes information
     to the SamplesAttributes Table of the EGASUBsub database if alias not already present
@@ -1913,13 +1907,13 @@ def AdSampleAttributes(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "title", "description"]
+        Fields = ["alias", "title", "description", "attributes"]
         
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
-            if Fields[i] == 'description':
-                Columns.append(Fields[i] + ' TEXT NULL')
+            if Fields[i] == 'attributes':
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL')
             elif Fields[i] == "alias":
                 Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
             else:
