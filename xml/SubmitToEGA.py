@@ -335,9 +335,9 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
 # use this function to check information in Tables    
 def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
     '''
-    (str, str, str, str. str, str) -> dict
-    Extract information from DataBase Table, AttributesTable and ProjectsTable
-    using credentials in file, check if information is valid and return a dict
+    (str, str, str, str, str, str, str, str, dict) -> dict
+    Extract information from DataBase Table, AttributesTable and also from ProjectsTable
+    if Object is analyses using credentials in file, check if information is valid and return a dict
     with error message for each alias in Table
     '''
 
@@ -490,8 +490,8 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype,
 # use this function to check that all information for Analyses objects is available before encrypting files     
 def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Object, Box, MyScript, **KeyWordParams):
     '''
-    (str, str, str, str, str, str) -> None
-    Extract information from DataBase Table, ProjectsTable and AttributesTable
+    (str, str, str, str, str, str, str, dict) -> None
+    Extract information from DataBase Table, AttributesTable and ProjectsTable if Object is analyses
     using credentials in file and update status to "valid" if all information is correct
     or keep status to "ready" if incorrect or missing
     '''
@@ -689,11 +689,12 @@ def ParseAnalysesAccessoryTables(Table, TableType):
 
 
 # use this function to format the analysis json
-def FormatAnalysisJson(D, MyScript):
+def FormatJson(D, Object, MyScript):
     '''
-    (dict) -> dict
-    Take a dictionary with information for an analysis object and return a dictionary
-    with the expected format or dictionary with the alias only if required fields are missing
+    (dict, str, str) -> dict
+    Take a dictionary with information for an object, the path to the script to fetch 
+    the EGA enumerations, and return a dictionary with the expected format or
+    a dictionary with the alias only if required fields are missing
     Precondition: strings in D have double-quotes
     '''
     
@@ -709,16 +710,24 @@ def FormatAnalysisJson(D, MyScript):
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
     
-    JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
-                "analysisCenter", "analysisDate", "analysisTypeId", "files",
-                "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+    if Object == 'analyses':
+        JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
+                    "analysisCenter", "analysisDate", "analysisTypeId", "files",
+                    "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
+        Required = ["alias", "title", "description", "studyId", "analysisCenter",
+                    "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]
+    elif Object == 'samples':
+        JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
+                    "organismPart", "cellLine", "region", "phenotype", "subjectId",
+                    "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+        Required = ["alias", "title", "description", "caseOrControlId", "genderId", "phenotype"] 
+
     # loop over required json keys
     for field in JsonKeys:
         if field in D:
-            if D[field] == 'NULL':
+            if D[field] in ['NULL', '', None]:
                 # some fields are required, return empty dict if field is empty
-                if field in ["alias", "title", "description", "studyId", "analysisCenter",
-                             "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]:
+                if field in Required:
                     # erase dict and add alias
                     J = {}
                     J["alias"] = D["alias"]
@@ -783,6 +792,26 @@ def FormatAnalysisJson(D, MyScript):
                         return J
                     else:
                         J[field] = AnalysisTypes[D[field]]
+                elif field == "caseOrControlId":
+                    # check that caseOrControlId is valid:
+                    if D[field] not in CaseControl:
+                        # cannot obtain caseOrControlId. erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = CaseControl[D[field]]
+                elif field == "genderId":
+                    # check that genderId is valid
+                    if D[field] not in Genders:
+                        # cannot obtain genderId, erase dict and add alias
+                        J = {}
+                        J["alias"] = D["alias"]
+                        # return dict with alias only if required fields are missing
+                        return J
+                    else:
+                        J[field] = Genders[D[field]]
                 else:
                     J[field] = D[field]
         else:
@@ -799,60 +828,71 @@ def FormatAnalysisJson(D, MyScript):
 
 
 # use this function to form jsons and store to submission db
-def AddAnalysisJsonToTable(CredentialFile, DataBase, Table, AttributesTable, ProjectsTable, Box, MyScript):
+def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object, MyScript, **KeyWordParams):
     '''
-    (str, str, str, str, str, str) -> None
-    Form a json for Analyses Objects in the given Box and add it to Table by
-    quering required information from the Analysis, Projects and Attributes Tables 
-    using the file with credentials to connect to Database update the analysis
-    status if json is formed correctly
+    (str, str, str, str, str, str, str, str, dict) -> None
+    Form a json for Objects in the given Box and add it to Table by
+    quering required information from the Analysis, and Attributes Tables and also
+    from the Projects table if Object is analyses using the file with credentials
+    to connect to Database update the status if json is formed correctly
     '''
     
-    # check if Sample table exists
-    Tables = ListTables(CredentialFile, DataBase)
-
     # connect to the database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     
-    if Table in Tables and AttributesTable in Tables and ProjectsTable in Tables:
-        ## form json, add to table and update status -> submit
-        cur.execute('SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
-                    {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
-                    {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId  \
-                    FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
-                    AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box))
-
+    if Object == 'analyses':
+        if 'projects' in KeyWordParams:
+            ProjectsTable = KeyWordParams['projects']
+        else:
+            ProjectsTable = 'empty'
+        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
+        {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
+        {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
+        FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
+        AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box)
+    elif Object == 'samples':
+        Cmd = 'SELECT {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.organismPart, \
+        {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.biosampleId, \
+        {0}.sampleAge, {0}.sampleDetail, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} \
+        WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
+     
+    # extract information to for json    
+    try:
+        cur.execute(Cmd)
         # get column headers
         Header = [i[0] for i in cur.description]
         # extract all information 
         Data = cur.fetchall()
-        # check that samples are in ready mode
-        if len(Data) != 0:
-            # create a list of dicts storing the object info
-            L = []
-            for i in Data:
-                D = {}
-                assert len(i) == len(Header)
-                for j in range(len(i)):
-                    D[Header[j]] = i[j]
-                L.append(D)
-            # create object-formatted jsons from each dict 
-            Jsons = [FormatAnalysisJson(D, MyScript) for D in L]
-            # add json back to table and update status
-            for D in Jsons:
-                # check if json is correctly formed (ie. required fields are present)
-                if len(D) == 1:
-                    Error = 'Cannot form json, required field(s) missing'
-                    # add error in table and keep status uploaded --> uploaded
-                    alias = D['alias']
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                else:
-                    # add json back in table and update status
-                    alias = D['alias']
-                    cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
-                    conn.commit()
+    except:
+        Data = []
+        
+    # check that object are with appropriate status and/or that information can be extracted
+    if len(Data) != 0:
+        # create a list of dicts storing the object info
+        L = []
+        for i in Data:
+            D = {}
+            assert len(i) == len(Header)
+            for j in range(len(i)):
+                D[Header[j]] = i[j]
+            L.append(D)
+        # create object-formatted jsons from each dict 
+        Jsons = [FormatJson(D, Object, MyScript) for D in L]
+        # add json back to table and update status
+        for D in Jsons:
+            # check if json is correctly formed (ie. required fields are present)
+            if len(D) == 1:
+                Error = 'Cannot form json, required field(s) missing'
+                # add error in table and keep status (uploaded --> uploaded for analyses and valid --> valid for samples)
+                alias = D['alias']
+                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                conn.commit()
+            else:
+                # add json back in table and update status
+                alias = D['alias']
+                cur.execute('UPDATE {0} SET {0}.Json=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"submit\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, str(D), alias, Box))
+                conn.commit()
     conn.close()
 
 
@@ -2290,8 +2330,8 @@ def FormAnalysesJson(args):
         RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddAnalysisJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.projects, args.box, args.myscript)
-        
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, projects = args.projects)
+
  
 
 # use this function to form json for Samples objects
@@ -2309,34 +2349,10 @@ def FormSamplesJson(args):
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
         CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'samples', args.box, args.myscript)
         
-        ## form json for samples in valid status add to table and update status valid -> submit
+        ## form json for samples in valid status add to table
+        # update status valid -> submit if no error of keep status --> valid and record errorMessage
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'samples', args.myscript)
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-###############        
-        
-        
-        
-        
-
-
-
-
-
        
 # use this function to submit object metadata 
 def SubmitMetadata(args):
