@@ -1911,6 +1911,78 @@ def AddSampleInfo(args):
     conn.close()            
 
 
+
+# use this function to add data to SampleAttributes table
+def AdSampleAttributes(args):
+    '''
+    Take a list of command line arguments and add attributes information
+    to the SamplesAttributes Table of the EGASUBsub database if alias not already present
+    '''
+    
+    # parse attribues table
+    D = ParseSampleAttributesTable(args.table)
+    
+    # create a list of tables
+    Tables = ListTables(args.credential, args.subdb)
+
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    
+    if args.table not in Tables:
+        Fields = ["alias", "title", "description"]
+        
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'description':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] == "alias":
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)       
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down alias from submission db. alias must be unique
+    cur.execute('SELECT {0}.alias from {0}'.format(args.table))
+    Recorded = [i[0] for i in cur]
+    
+    # record objects only if input table has been provided with required fields
+    RequiredFields = {"alias", "title", "description"}
+    if RequiredFields.intersection(set(D.keys())) == RequiredFields:
+        # get alias
+        if D['alias'] in Recorded:
+            # skip sample, already recorded in submission database
+            print('{0} is already recorded for in {1}'.format(D['alias'], args.table))
+        else:
+            # format attributes if present
+            if 'attributes' in D:
+                # format attributes
+                attributes = [D['attributes'][j] for j in D['attributes']]
+                attributes = ';'.join(list(map(lambda x: str(x), attributes))).replace("'", "\"")
+                D['attributes'] = attributes
+            # list values according to the table column order, use empty string if not present
+            L = [D[field] if field in D else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    conn.close()            
+
+
+
 # use this function to add data to AnalysesAttributes or AnalysesProjects table
 def AddAnalysesAttributesProjects(args):
     '''
