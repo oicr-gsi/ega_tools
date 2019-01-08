@@ -2247,25 +2247,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages submission to EGA')
     subparsers = parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
 
-#    # add samples to Samples Table
-#    AddSamples = subparsers.add_parser('AddSamples', help ='Add sample information')
-#    AddSamples.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-#    AddSamples.add_argument('-t', '--Table', dest='table', default='Samples', help='Samples table. Default is Samples')
-#    AddSamples.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-#    AddSamples.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
-#    AddSamples.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to store object information for submission to EGA. Default is EGASUB')
-#    AddSamples.add_argument('-i', '--Input', dest='input', help='Input table with sample info to load to submission database', required=True)
-#    AddSamples.add_argument('--Species', dest='species', default='Human', help='common species name')
-#    AddSamples.add_argument('--Taxon', dest='taxon', default='9606', help='species ID')    
-#    AddSamples.add_argument('--Name', dest='name', default='Homo sapiens', help='Species scientific name')
-#    AddSamples.add_argument('--SampleTitle', dest='sampleTitle', help='Title associated with submission', required=True)
-#    AddSamples.add_argument('--Center', dest='center', default='OICR_ICGC', help='Center name. Default is OICR_ICGC')
-#    AddSamples.add_argument('--RunCenter', dest='run', default='OICR', help='Run center name. Default is OICR')
-#    AddSamples.add_argument('--Study', dest='study', default='EGAS00001000900', help='Study ID. default is  EGAS00001000900')
-#    AddSamples.add_argument('--StudyTitle', dest='studyTitle', help='Title associated with study', required=True)
-#    AddSamples.add_argument('--Design', dest='design', help='Study design')
-#    AddSamples.add_argument('--Broker', dest='broker', default='EGA', help='Broker name. Default is EGA')
-#    AddSamples.set_defaults(func=AddSampleInfo)
+    # add samples to Samples Table
+    AddSamplesParser = subparsers.add_parser('AddSamples', help ='Add sample information to Samples Table')
+    AddSamplesParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddSamplesParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
+    AddSamplesParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    AddSamplesParser.add_argument('-t', '--Table', dest='table', default='Samples', help='Samples table. Default is Samples')
+    AddSamplesParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    AddSamplesParser.add_argument('-a', '--Attributes', dest='attributes', help='Primary key in the SamplesAttributes table', required=True)
+    AddSamplesParser.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
+    AddSamplesParser.set_defaults(func=AddSampleInfo)
+
+
+    # add sample attributes to SamplesAttributes Table
+    AddSamplesAttributesParser = subparsers.add_parser('AddSamplesAttributes', help ='Add sample attributes information to SamplesAttributes Table')
+    AddSamplesAttributesParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddSamplesAttributesParser.add_argument('-t', '--Table', dest='table', default='SamplesAttributes', help='SamplesAttributes table. Default is SamplesAttributes')
+    AddSamplesAttributesParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    AddSamplesAttributesParser.add_argument('-i', '--Input', dest='input', help='Input table with analysis info to load to submission database', required=True)
+    AddSamplesAttributesParser.set_defaults(func=AddSampleAttributes)
 
     # add analyses to Analyses Table
     AddAnalysesParser = subparsers.add_parser('AddAnalyses', help ='Add analysis information to Analyses Table')
