@@ -333,7 +333,7 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
 
 
 # use this function to check information in Tables    
-def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
+def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, str, dict) -> dict
     Extract information from DataBase Table, AttributesTable and also from ProjectsTable
@@ -355,7 +355,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype,
     FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
 
     # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
+    conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()      
     # get required information
     if Object == 'analyses':
@@ -421,6 +421,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype,
                     if d[key] in ['', 'NULL', None]:
                         Missing = True
                         Error.append(key)
+                
                 # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
                 if key == 'egaBox':
                     if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
@@ -1022,11 +1023,11 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
                     JobNames.extend([JobName1, JobName2, JobName3])
         
         # launch check encryption job
-        MyCmd = 'module load python-gsi/3.6.4; python3.6 {0} IsEncryptionDone -c {1} -s {2} -t {3} -b {4} -a {5}'
+        MyCmd = 'module load python-gsi/3.6.4; python3.6 {0} IsEncryptionDone -c {1} -s {2} -t {3} -b {4} -a {5} -j {6}'
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
-            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias) + '\n')
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
                 
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
@@ -1104,82 +1105,120 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
                         conn.commit()
                         conn.close()
-                        
-
-# use this function to check that encryption is done for a given alias
-def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias):
+ 
+# use this function to check the job exit status
+def GetJobExitStatus(JobName):
     '''
-    (file, str, str, str, str) -> None
+    (str) -> str
+    Take a job name and return the exit code of that job after it finished running
+    ('0' indicates a normal, error-free run and '1' or another value inicates an error)
+    '''
+
+    # get information about JobName
+    i =  subprocess.check_output('qacct -j {0}'.format(JobName), shell=True).decode('utf-8').rstrip().split('\n')
+    # extract exit status
+    d = {}
+    for j in i:
+        if not j.startswith('='):
+            j = j.split()
+            d[j[0]] = j[1]
+    if 'exit_status' in d:
+        return d['exit_status']
+    else:
+        # return error code
+        return '1'
+        
+# use this function to check that encryption is done for a given alias
+def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
+    '''
+    (file, str, str, str, str, str) -> None
     Take the file with DataBase credentials, extract information from Table
     regarding Alias with encrypting Status and update status to upload and
     files with md5sums when encrypting is done
     '''        
         
-    # check that table exists
-    Tables = ListTables(CredentialFile, DataBase)
+    # make a list of job names
+    JobNames = JobNames.split(';')
     
-    if Table in Tables:
-        # connect to database
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()
-        # pull alias and files and encryption job names for status = encrypting
+    # connect to database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    # pull alias files and working directory for Alias with status = encrypting
+    try:
         cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\" AND {0}.alias=\"{2}\"'.format(Table, Box, Alias))
         Data = cur.fetchall()
+    except:
+        Data = []
+    conn.close()
+    # check that files are in encrypting mode for this Alias
+    if len(Data) != 0:
+        Data = Data[0]
+        alias = Data[0]
+        # get the working directory for that alias
+        WorkingDir = GetWorkingDirectory(Data[2])
+        # convert single quotes to double quotes for str -> json conversion
+        files = json.loads(Data[1].replace("'", "\""))
+        # create a dict to store the updated file info
+        Files = {}
+                
+        # create boolean, update when md5sums and encrypted file not found or if jobs didn't exit properly 
+        Encrypted = True
+        
+        # check the exit status of each encryption and md5sum jobs for that alis
+        for jobName in JobNames:
+            if GetJobExitStatus(jobName) != '0':
+                Encrypted = False
+        
+        # check that files were encrypted and that md5sums were generated
+        for file in files:
+            # get the fileName
+            fileName = files[file]['fileName']
+            fileTypeId = files[file]['fileTypeId']
+            # check that encryoted and md5sum files do exist
+            originalMd5File = os.path.join(WorkingDir, fileName + '.md5')
+            encryptedMd5File = os.path.join(WorkingDir, fileName + '.gpg.md5')
+            encryptedFile = os.path.join(WorkingDir, fileName + '.gpg')
+            if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
+                # get the name of the encrypted file
+                encryptedName = fileName + '.gpg'
+                # get the md5sums
+                encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
+                originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
+                if encryptedMd5 != '' and originalMd5 != '':
+                    # capture md5sums, build updated dict
+                    Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
+                else:
+                    # update boolean
+                    Encrypted = False
+            else:
+                # update boollean
+                Encrypted = False
+                
+        # check if md5sums and encrypted files is available for all files
+        if Encrypted == True:
+            # update file info and status only if all files do exist and md5sums can be extracted
+            conn = EstablishConnection(CredentialFile, DataBase)
+            cur = conn.cursor()
+            cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
+            conn.commit()
+            conn.close()
+        elif Encrypted == False:
+            # reset status encrypting -- > encrypt, record error message
+            Error = 'Encryption or md5sum did not complete'
+            conn = EstablishConnection(CredentialFile, DataBase)
+            cur = conn.cursor()
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+            conn.commit()
+            conn.close()
+    else:
+        # couldn't evaluate encryption, record error and reset to encrypt
+        # reset status encrypting -- > encrypt, record error message
+        Error = 'Could not check encryption'
+        conn = EstablishConnection(CredentialFile, DataBase)
+        cur = conn.cursor()
+        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+        conn.commit()
         conn.close()
-        # check that files are in encrypting mode for this Alias
-        if len(Data) != 0:
-            for i in Data:
-                alias = i[0]
-                # get the working directory for that alias
-                WorkingDir = GetWorkingDirectory(i[2])
-                # convert single quotes to double quotes for str -> json conversion
-                files = json.loads(i[1].replace("'", "\""))
-                # create a dict to store the updated file info
-                Files = {}
-                
-                # create boolean, update when md5sums and encrypted file not found for at least one file under the same alias 
-                Encrypted = True
-                for file in files:
-                    # get the fileName
-                    fileName = files[file]['fileName']
-                    fileTypeId = files[file]['fileTypeId']
-                    # check that encryoted and md5sum files do exist
-                    originalMd5File = os.path.join(WorkingDir, fileName + '.md5')
-                    encryptedMd5File = os.path.join(WorkingDir, fileName + '.gpg.md5')
-                    encryptedFile = os.path.join(WorkingDir, fileName + '.gpg')
-                    if os.path.isfile(originalMd5File) and os.path.isfile(encryptedMd5File) and os.path.isfile(encryptedFile):
-                        # get the name of the encrypted file
-                        encryptedName = fileName + '.gpg'
-                        # get the md5sums
-                        encryptedMd5 = subprocess.check_output('cat {0}'.format(encryptedMd5File), shell = True).decode('utf-8').rstrip()
-                        originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
-                        if encryptedMd5 != '' and originalMd5 != '':
-                            # capture md5sums, build updated dict
-                            Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
-                        else:
-                            # update boolean
-                            Encrypted = False
-                    else:
-                        # update boollean
-                        Encrypted = False
-                
-                # check if md5sums and encrypted files is available for all files
-                if Encrypted == True:
-                    # update file info and status only if all files do exist and md5sums can be extracted
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
-                    conn.commit()
-                    conn.close()
-                elif Encrypted == False:
-                    # reset status encrypting -- > encrypt, record error message
-                    Error = 'Encryption or md5sum did not complete'
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                    conn.close()
-
 
 # use this script to launch qsubs to encrypt the files and do a checksum
 def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
@@ -2153,7 +2192,7 @@ def IsEncryptionDone(args):
     is done for a given alias or reset status to encrypt
     '''
     # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias)
+    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias, args.jobnames)
   
     
 # use this function to check upload    
@@ -2320,6 +2359,7 @@ if __name__ == '__main__':
     CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
+    CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Semicolon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
     # check upload
