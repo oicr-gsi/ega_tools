@@ -948,12 +948,12 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 # use this script to launch qsubs to encrypt the files and do a checksum
 def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
     '''
-    (file, str, str, str, str, list, list, str, str, str, int, str) -> list
+    (file, str, str, str, str, list, list, str, str, str, int, str) -> (list, list)
     Take the file with credential to connect to db, a given alias for Box in Table,
     lists with file paths and names, the path to the encryption keys, the directory
     where encrypted and cheksums are saved, the queue and memory allocated to run
     the jobs and return a list of exit codes specifying if the jobs were launched
-    successfully or not
+    successfully or not and a list of job names
     '''
 
     MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
@@ -962,7 +962,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
     
     # check that lists of file paths and names have the same number of entries
     if len(filePaths) != len(fileNames):
-        return [-1]
+        return [-1], [-1]
     else:
         # make a list to store the job names and job exit codes
         JobExits, JobNames = [], []
@@ -971,11 +971,11 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
             # check that FileName is valid
             if os.path.isfile(filePaths) == False:
                 # return error that will be caught if file doesn't exist
-                return [-1] 
+                return [-1], [-1] 
             else:
                 # check if OutDir exist
                 if os.path.isdir(OutDir) == False:
-                    return [-1] 
+                    return [-1], [-1] 
                 else:
                     # make a directory to save the scripts
                     qsubdir = os.path.join(OutDir, 'qsubs')
@@ -1037,7 +1037,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # store the exit code (but not the job name)
         JobExits.append(job)          
         
-        return JobExits
+        return JobExits, JobNames
 
 
 
@@ -1095,7 +1095,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                     conn.close()
 
                     # encrypt and run md5sums on original and encrypted files and check encryption status
-                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem)
+                    JobCodes, JobNames = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem)
                     # check if encription was launched successfully
                     if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                         # store error message, reset status encrypting --> encrypt
