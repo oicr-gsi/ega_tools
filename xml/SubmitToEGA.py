@@ -333,7 +333,7 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
 
 
 # use this function to check information in Tables    
-def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
+def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, str, dict) -> dict
     Extract information from DataBase Table, AttributesTable and also from ProjectsTable
@@ -355,7 +355,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype,
     FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
 
     # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
+    conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()      
     # get required information
     if Object == 'analyses':
@@ -421,6 +421,7 @@ def IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, datatype,
                     if d[key] in ['', 'NULL', None]:
                         Missing = True
                         Error.append(key)
+                
                 # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
                 if key == 'egaBox':
                     if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
