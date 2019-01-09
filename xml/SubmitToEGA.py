@@ -948,12 +948,12 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 # use this script to launch qsubs to encrypt the files and do a checksum
 def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
     '''
-    (file, str, str, str, str, list, list, str, str, str, int, str) -> (list, list)
+    (file, str, str, str, str, list, list, str, str, str, int, str) -> list
     Take the file with credential to connect to db, a given alias for Box in Table,
     lists with file paths and names, the path to the encryption keys, the directory
     where encrypted and cheksums are saved, the queue and memory allocated to run
     the jobs and return a list of exit codes specifying if the jobs were launched
-    successfully or not and a list of job names
+    successfully or not
     '''
 
     MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
@@ -962,7 +962,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
     
     # check that lists of file paths and names have the same number of entries
     if len(filePaths) != len(fileNames):
-        return [-1], [-1]
+        return [-1]
     else:
         # make a list to store the job names and job exit codes
         JobExits, JobNames = [], []
@@ -971,11 +971,11 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
             # check that FileName is valid
             if os.path.isfile(filePaths) == False:
                 # return error that will be caught if file doesn't exist
-                return [-1], [-1] 
+                return [-1] 
             else:
                 # check if OutDir exist
                 if os.path.isdir(OutDir) == False:
-                    return [-1], [-1] 
+                    return [-1] 
                 else:
                     # make a directory to save the scripts
                     qsubdir = os.path.join(OutDir, 'qsubs')
@@ -1037,7 +1037,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # store the exit code (but not the job name)
         JobExits.append(job)          
         
-        return JobExits, JobNames
+        return JobExits
 
 
 
@@ -1095,7 +1095,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                     conn.close()
 
                     # encrypt and run md5sums on original and encrypted files and check encryption status
-                    JobCodes, JobNames = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem)
+                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem)
                     # check if encription was launched successfully
                     if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                         # store error message, reset status encrypting --> encrypt
@@ -1105,8 +1105,29 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
                         conn.commit()
                         conn.close()
-                        
+ 
+# use this function to check the job exit status
+def GetJobExitStatus(JobName):
+    '''
+    (str) -> str
+    Take a job name and return the exit code of that job after it finished running
+    ('0' indicates a normal, error-free run and '1' or another value inicates an error)
+    '''
 
+    # get information about JobName
+    i =  subprocess.check_output('qacct -j {0}'.format(JobName), shell=True).decode('utf-8').rstrip().split('\n')
+    # extract exit status
+    d = {}
+    for j in i:
+        if not j.startswith('='):
+            j = j.split()
+            d[j[0]] = j[1]
+    if 'exit_status' in d:
+        return d['exit_status']
+    else:
+        # return error code
+        return '1'
+        
 # use this function to check that encryption is done for a given alias
 def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias):
     '''
