@@ -767,6 +767,29 @@ def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object
     conn.close()
 
 
+# use this function to check the job exit status
+def GetJobExitStatus(JobName):
+    '''
+    (str) -> str
+    Take a job name and return the exit code of that job after it finished running
+    ('0' indicates a normal, error-free run and '1' or another value inicates an error)
+    '''
+
+    # get information about JobName
+    i =  subprocess.check_output('qacct -j {0}'.format(JobName), shell=True).decode('utf-8').rstrip().split('\n')
+    # extract exit status
+    d = {}
+    for j in i:
+        if not j.startswith('='):
+            j = j.split()
+            d[j[0]] = j[1]
+    if 'exit_status' in d:
+        return d['exit_status']
+    else:
+        # return error code
+        return '1'
+
+
 ## functions specific to Analyses objects
     
 # use this function to parse the input analysis table
@@ -1106,34 +1129,14 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                         conn.commit()
                         conn.close()
  
-# use this function to check the job exit status
-def GetJobExitStatus(JobName):
-    '''
-    (str) -> str
-    Take a job name and return the exit code of that job after it finished running
-    ('0' indicates a normal, error-free run and '1' or another value inicates an error)
-    '''
-
-    # get information about JobName
-    i =  subprocess.check_output('qacct -j {0}'.format(JobName), shell=True).decode('utf-8').rstrip().split('\n')
-    # extract exit status
-    d = {}
-    for j in i:
-        if not j.startswith('='):
-            j = j.split()
-            d[j[0]] = j[1]
-    if 'exit_status' in d:
-        return d['exit_status']
-    else:
-        # return error code
-        return '1'
         
 # use this function to check that encryption is done for a given alias
 def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
     '''
     (file, str, str, str, str, str) -> None
-    Take the file with DataBase credentials, extract information from Table
-    regarding Alias with encrypting Status and update status to upload and
+    Take the file with DataBase credentials, a semicolon-seprated string of job
+    names used for encryption and md5sum of all files under Alias, extract information
+    from Table regarding Alias with encrypting Status and update status to upload and
     files with md5sums when encrypting is done
     '''        
         
@@ -1295,11 +1298,11 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    Cmd = 'module load python-gsi/3.6.4; python3.6 {0} IsUploadDone -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6}'
+    Cmd = 'module load python-gsi/3.6.4; python3.6 {0} IsUploadDone -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
-        newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable) + '\n')
+        newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ';'.join(JobNames)) + '\n')
                 
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -1505,7 +1508,7 @@ def CountFileUsage(CredentialFile, DataBase, Table, Box, Status):
 # use this function to select alias to encrypt based on disk usage
 def SelectAliasesForEncryption(CredentialFile, DataBase, Table, Box, DiskSpace):
     '''
-    (str, str, str, str) -> list
+    (str, str, str, str, int) -> list
     Connect to submission DataBase with file credentials, extract alias with encrypt
     status and return a list of aliases with files that can be encrypted while 
     keeping DiskSpace (in TB) of free space in scratch
@@ -1556,10 +1559,10 @@ def IsUploadSuccessfull(LogFile):
 # use this function to check the success of the upload
 def CheckUploadSuccess(LogDir, alias, FileName):
     '''
-    (str) --> bool
-    Take the directory where logs of the upload script are saved, retrieve the
-    most recent out log and return True if all files are uploaded (ie no error)
-    or False if errors are found
+    (str, str, str) --> bool
+    Take the directory where logs of the upload script are saved, an alias and 
+    the file name and retrieve the most recent out log and return True if all
+    files are uploaded (ie no error) or False if errors are found
     '''
 
     # sort the out log files from the most recent to the older ones
@@ -1593,10 +1596,11 @@ def CheckUploadSuccess(LogDir, alias, FileName):
     
     
 # use this function to check that files were successfully uploaded for a given alias and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alias):
+def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alias, JobNames):
     '''
-    (str, str, str, str, str, str) -> None
-    Take the file with db credentials, the table names and box for the Database
+    (str, str, str, str, str, str, str) -> None
+    Take the file with db credentials, a semicolon-separated string of job names
+    used for uploading files under Alias, the table names and box for the Database
     and update status of Alias from uploading to uploaded if all the files
     for that alias were successfuly uploaded. 
     '''
@@ -1604,70 +1608,82 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
     # parse credential file to get EGA username and password
     UserName, MyPassword = ParseCredentials(CredentialFile, Box)
         
-    # check that Analysis table exists
-    Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables and AttributesTable in Tables:
+    # make a dict {directory: [files]} for alias with uploading status 
+    FilesBox = ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box)
         
-        # make a dict {directory: [files]} for alias with uploading status 
-        FilesBox = ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box)
+    # connect to database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    try:
+        # extract files for alias in uploading mode for given box
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\" AND {0}.alias=\"{3}\"'.format(Table, AttributesTable, Box, Alias))
+        Data = cur.fetchall()
+    except:
+        Data= []
+    conn.close()
         
-        # connect to database
+    if len(Data) != 0:
+        # check that some files are in uploading mode
+        for i in Data:
+            alias = i[0]
+            # convert single quotes to double quotes for str -> json conversion
+            files = json.loads(i[1].replace("'", "\""))
+            WorkingDirectory = GetWorkingDirectory(i[2])
+            StagePath = i[3]
+            # set up boolean to be updated if uploading is not complete
+            Uploaded = True
+            
+            # get the log directory
+            LogDir = os.path.join(WorkingDirectory, 'qsubs/log')
+            # check the out logs for each file
+            for filePath in files:
+                # get filename
+                filename = os.path.basename(filePath)
+                # check if errors are found in log
+                if CheckUploadSuccess(LogDir, alias, filename) == False:
+                    Uploaded = False
+            
+            # check the exit status of the jobs uploading files
+            for jobName in JobNames.split(';'):
+                if GetJobExitStatus(jobName) != '0':
+                    Uploaded = False
+            
+            # check if files are uploaded on the server
+            for filePath in files:
+                # get filename
+                fileName = os.path.basename(filePath)
+                assert fileName + '.gpg' == files[filePath]['encryptedName']
+                encryptedFile = files[filePath]['encryptedName']
+                originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                for j in [encryptedFile, encryptedMd5, originalMd5]:
+                    if j not in FilesBox[StagePath]:
+                        Uploaded = False
+            # check if all files for that alias have been uploaded
+            if Uploaded == True:
+                # connect to database, update status and close connection
+                conn = EstablishConnection(CredentialFile, DataBase)
+                cur = conn.cursor()
+                cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                conn.commit()                                
+                conn.close()              
+            elif Uploaded == False:
+                # reset status uploading --> upload, record error message
+                Error = 'Upload failed'
+                conn = EstablishConnection(CredentialFile, DataBase)
+                cur = conn.cursor()
+                cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                conn.commit()                                
+                conn.close()
+    else:
+        # reset status uploading --> upload, record error message
+        Error = 'Could not check uploaded files'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\" AND {0}.alias=\"{3}\"'.format(Table, AttributesTable, Box, Alias))
-        # check that Alias are in uploading mode
-        Data = cur.fetchall()
-        # close connection
+        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+        conn.commit()                                
         conn.close()
+
         
-        if len(Data) != 0:
-            # check that some files are in uploading mode
-            for i in Data:
-                alias = i[0]
-                # convert single quotes to double quotes for str -> json conversion
-                files = json.loads(i[1].replace("'", "\""))
-                WorkingDirectory = GetWorkingDirectory(i[2])
-                StagePath = i[3]
-                # set up boolean to be updated if uploading is not complete
-                Uploaded = True
-                
-                # get the log directory
-                LogDir = os.path.join(WorkingDirectory, 'qsubs/log')
-                # check the out logs for each file
-                for filePath in files:
-                    # get filename
-                    filename = os.path.basename(filePath)
-                    # check if errors are found in log
-                    if CheckUploadSuccess(LogDir, alias, filename) == False:
-                        Uploaded = False
-                # check if files are uploaded on the server
-                for filePath in files:
-                    # get filename
-                    fileName = os.path.basename(filePath)
-                    assert fileName + '.gpg' == files[filePath]['encryptedName']
-                    encryptedFile = files[filePath]['encryptedName']
-                    originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
-                    for j in [encryptedFile, encryptedMd5, originalMd5]:
-                        if j not in FilesBox[StagePath]:
-                            Uploaded = False
-                # check if all files for that alias have been uploaded
-                if Uploaded == True:
-                    # connect to database, update status and close connection
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
-                    conn.commit()                                
-                    conn.close()              
-                elif Uploaded == False:
-                    # reset status uploading --> upload, record error message
-                    Error = 'Upload failed'
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
-                    conn.commit()                                
-                    conn.close()
-                   
 # use this function to format the error Messages prior saving into db table
 def CleanUpError(errorMessages):
     '''
@@ -2203,7 +2219,7 @@ def IsUploadDone(args):
     is done for a given alias or reset status to upload
     '''
     # check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-    CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box, args.alias)
+    CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box, args.alias, args.jobnames)
     
 
 # use this function to form json for Analyses objects
@@ -2369,6 +2385,7 @@ if __name__ == '__main__':
     CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     CheckUploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
+    CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Semicolon-separated string of job names used for uploading all files under a given alias', required=True)
     CheckUploadParser.add_argument('--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     CheckUploadParser.set_defaults(func=IsUploadDone)
     
