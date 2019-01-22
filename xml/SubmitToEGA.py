@@ -899,11 +899,6 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
             j = tree.findall('.//FILE')
             for i in range(len(j)):
                 filename = j[i].attrib['filename']
-                # check if .gpg is extension
-                # .gpg is present when files are immediately registered
-                # but .gpg is removed subsenquently from the file name
-                if filename[-4:] != '.gpg':
-                    filename = filename + '.gpg'
                 md5unc = j[i].attrib['unencrypted_checksum']
                 md5enc = j[i].attrib['checksum']
                 Files[filename] = [md5unc, md5enc, alias, accession]
@@ -932,6 +927,7 @@ def CrossReferenceFileInfo(FileSize, RegisteredFiles, Box):
             name = filename
         # check if file is registered
         # file may or may not have .gpg extension in RegisteredFiles
+        # .gpg present upon registration but subsenquently removed from file name
         if name in RegisteredFiles:
             D[filename] = [filename, FileName, str(FileSize[filename])]
             D[filename].extend([RegisteredFiles[name][-2], RegisteredFiles[name][-1]])
