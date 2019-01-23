@@ -908,7 +908,7 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
     return Files 
 
 # use this function to get file size and metadata for all files on the staging server in a dpecific box box
-def CrossReferenceFileInfo(FileSize, RegisteredFiles, Box):
+def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
     '''
     (dict, dict, str) - > dict
     Take a dictionary of with file size for all files on the staging server of a
