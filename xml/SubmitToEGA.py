@@ -888,7 +888,7 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
         Data = []
     conn.close()
    
-    # create a dict {filepath: [md5unc, md5enc, accession, alias]}    
+    # create a dict {filepath: [[md5unc, md5enc, accession, alias]]}    
     Files = {}   
     if len(Data)!= 0:
         for i in Data:
@@ -901,7 +901,10 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
                 filename = j[i].attrib['filename']
                 md5unc = j[i].attrib['unencrypted_checksum']
                 md5enc = j[i].attrib['checksum']
-                Files[filename] = [md5unc, md5enc, alias, accession]
+                if filename in Files:
+                    Files[filename].append([md5unc, md5enc, alias, accession])
+                else:
+                    Files[filename] = [[md5unc, md5enc, alias, accession]]
     return Files 
 
 # use this function to get file size and metadata for all files on the staging server in a dpecific box box
@@ -925,20 +928,28 @@ def CrossReferenceFileInfo(FileSize, RegisteredFiles, Box):
             name = filename[:-4]
         else:
             name = filename
+        # add filename, size and initialize empty lists to store alias and accessions
+        if filename not in D:
+            D[filename] = [filename, FileName, str(FileSize[filename]), [], []]
         # check if file is registered
         # file may or may not have .gpg extension in RegisteredFiles
         # .gpg present upon registration but subsenquently removed from file name
+        # add aliases and acessions
         if name in RegisteredFiles:
-            D[filename] = [filename, FileName, str(FileSize[filename])]
-            D[filename].extend([RegisteredFiles[name][-2], RegisteredFiles[name][-1]])
+            for i in range(len(RegisteredFiles[name])):
+                D[filename][3].append(RegisteredFiles[name][i][-2])
+                D[filename][4].append(RegisteredFiles[name][i][-1])
         elif name[-4:] == '.gpg' and name[:-4] in RegisteredFiles:
-            D[filename] = [filename, FileName, str(FileSize[filename])]
-            D[filename].extend([RegisteredFiles[name[:-4]][-2], RegisteredFiles[name[-4:]][-1]])
-        elif name[-4:] != '.gpg' and name + '.gpg' in RegisteredFiles:    
-            D[filename] = [filename, FileName, str(FileSize[filename])]
-            D[filename].extend([RegisteredFiles[name + '.gpg'][-2], RegisteredFiles[name + '.gpg'][-1]])
+            for i in range(len(RegisteredFiles[name[:-4]])):
+                D[filename][3].append(RegisteredFiles[name[:-4]][i][-2])
+                D[filename][4].append(RegisteredFiles[name[-4:]][i][-1])
+        elif name[-4:] != '.gpg' and name + '.gpg' in RegisteredFiles:
+            for i in range(len(RegisteredFiles[name + '.gpg'])):
+                D[filename][3].append(RegisteredFiles[name + '.gpg'][i][-2])
+                D[filename][4].append(RegisteredFiles[name + '.gpg'][i][-1])
         else:
-            D[filename] = [filename, FileName, str(FileSize[filename]), '', '']
+            D[filename][3].append('')
+            D[filename][4].append('')
         # add box
         D[filename].append(Box)
     return D
