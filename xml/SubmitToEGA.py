@@ -942,7 +942,7 @@ def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
         elif name[-4:] == '.gpg' and name[:-4] in RegisteredFiles:
             for i in range(len(RegisteredFiles[name[:-4]])):
                 D[filename][3].append(RegisteredFiles[name[:-4]][i][-2])
-                D[filename][4].append(RegisteredFiles[name[-4:]][i][-1])
+                D[filename][4].append(RegisteredFiles[name[:-4]][i][-1])
         elif name[-4:] != '.gpg' and name + '.gpg' in RegisteredFiles:
             for i in range(len(RegisteredFiles[name + '.gpg'])):
                 D[filename][3].append(RegisteredFiles[name + '.gpg'][i][-2])
@@ -978,63 +978,73 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
         # Extract md5sums and accessions from the metadata database
         RegisteredAnalyses = [LinkFilesWithAlias(CredentialFile, MetDataBase, AnalysesTable, box) for box in Boxes]
         RegisteredRuns = [LinkFilesWithAlias(CredentialFile, MetDataBase, RunsTable, box) for box in Boxes]
+        # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
+        DataAnalyses, DataRuns = [], []
+        for i in range(len(Boxes)):
+            DataAnalyses.append([MergeFileInfoStagingServer(D, RegisteredAnalyses[i], Boxes[i]) for D in FileSize[i]])
+            DataRuns.append([MergeFileInfoStagingServer(D, RegisteredRuns[i], Boxes[i]) for D in FileSize[i]])
+            
         
+        print(len(DataAnalyses), len(DataRuns))
+        for i in range(len(DataAnalyses)):
+            print('Analyses', i, len(DataAnalyses[i]))
+            for D in DataAnalyses[i]:
+                print(len(D))
         
-        
-        # 4) Cross-reference dictionaries, add alias and egaAcessionId
-        
-        
-        Data = CrossReferenceFileInfo(FileSize, RegisteredFiles, Boxes)
+        for i in range(len(DataRuns)):
+            print('Runs', i, len(DataAnalyses[i]))
+            for D in DataRuns[i]:
+                print(len(D))
         
         
         print('cross-referenced data')
 
-        # connect to submission database
-        conn = EstablishConnection(CredentialFile, SubDataBase)
-        cur = conn.cursor()
-  
-        # Fields = ["file", "fileSize", "md5Unc", "md5enc", "alias", "egaAccessionId", "egaBox"]
-        
-        Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
-                
-        
-        
-        
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == 'egaBox':
-                Columns.append(Fields[i] + ' TEXT NULL')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL,')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
-
-        # create a string with column headers
-        ColumnNames = ', '.join(Fields)
-
-
-        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(StagingServerTable), 'CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns)]
-        for i in SqlCommand:
-            cur.execute(i)
-            conn.commit()
-
-        print('created StagingServer table')
-
-
-        # loop over data in boxes
-        for i in range(len(Data)):
-            print('inserting data into StagingServer for data on {0}'.format(Boxes[i]))
-                
-            # loop over dict in each box
-            for D in Data[i]:
-                # list values according to the table column order
-                for filename in D:
-                    # convert data to strings, converting missing values to NULL
-                    Values =  FormatData(D[filename])
-                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
-                    conn.commit()
-    conn.close()            
+#        # connect to submission database
+#        conn = EstablishConnection(CredentialFile, SubDataBase)
+#        cur = conn.cursor()
+#  
+#        # Fields = ["file", "fileSize", "md5Unc", "md5enc", "alias", "egaAccessionId", "egaBox"]
+#        
+#        Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
+#                
+#        
+#        
+#        
+#        # format colums with datatype
+#        Columns = []
+#        for i in range(len(Fields)):
+#            if Fields[i] == 'egaBox':
+#                Columns.append(Fields[i] + ' TEXT NULL')
+#            else:
+#                Columns.append(Fields[i] + ' TEXT NULL,')
+#        # convert list to string    
+#        Columns = ' '.join(Columns)        
+#
+#        # create a string with column headers
+#        ColumnNames = ', '.join(Fields)
+#
+#
+#        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(StagingServerTable), 'CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns)]
+#        for i in SqlCommand:
+#            cur.execute(i)
+#            conn.commit()
+#
+#        print('created StagingServer table')
+#
+#
+#        # loop over data in boxes
+#        for i in range(len(Data)):
+#            print('inserting data into StagingServer for data on {0}'.format(Boxes[i]))
+#                
+#            # loop over dict in each box
+#            for D in Data[i]:
+#                # list values according to the table column order
+#                for filename in D:
+#                    # convert data to strings, converting missing values to NULL
+#                    Values =  FormatData(D[filename])
+#                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
+#                    conn.commit()
+#    conn.close()            
 
 
 
