@@ -1045,29 +1045,24 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
         conn.close()            
 
 
-
 # use this function to add information to Footprint table
 def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintTable):
     '''
-    
-    
+    (str, str, str, str) -> None
+    Use credentials to connect to SubDatabase, extract file information from StagingServerTable
+    and collapse it per directory in each staging server in FootPrintTable
     '''
-    
-    #
     
     # connect to submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
-    
-    Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
-    
-       
     try:
         cur.execute('SELECT * FROM {0}'.format(StagingServerTable))
         Data = cur.fetchall()
     except:
         Data = []
-    
+    conn.close()
+        
     Size = {}
     if len(Data) != 0:
         for i in Data:
@@ -1094,7 +1089,6 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
             else:
                  Size[box][directory][3] += 1
                  Size[box][directory][6] += filesize
-                            
         
         # compute size for all files per box
         for i in Data:
@@ -1108,23 +1102,13 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
             # correct directory value
             Size[box]['All'][0] = 'All'
         
-        
-        
-        
         # connect to submission database
         conn = EstablishConnection(CredentialFile, SubDataBase)
         cur = conn.cursor()
   
         Fields = ["egaBox", "location", "AllFiles", "Registered", "NotRegistered", "Size", "SizeRegistered", "SizeNotRegistered"]
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == "SizeNotRegistered":
-                Columns.append(Fields[i] + ' TEXT NULL')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL,')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
+        # format colums with datatype - convert to string
+        Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
         # create a string with column headers
         ColumnNames = ', '.join(Fields)
 
@@ -1132,14 +1116,9 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
         for i in SqlCommand:
             cur.execute(i)
             conn.commit()
-
-        print('created FootPrintTable table')
-
-        
+               
         # loop over data in boxes
         for box in Size:
-            print('inserting data into FootPrintTable for data on {0}'.format(box))
-                
             # loop over directory in each box
             for directory in Size[box]:
                 # add box to list of data
@@ -1153,23 +1132,6 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
     conn.close()            
                 
         
-#AddFileInfoStagingServer('.EGA_metData', 'EGA', 'EGASUB', 'Analyses', 'StagingServer', ega_box_12='ega-box-12', ega_box_137='ega-box-137')
-#AddFootprintData('.EGA_metData', 'EGASUB', 'StagingServer', 'FootPrint')
-
-
-#AddFileInfoStagingServer('.EGA_metData', 'EGA', 'EGASUB', 'Runs', 'StagingServer', ega_box_12='ega-box-12', ega_box_137='ega-box-137')
-#AddFootprintData('.EGA_metData', 'EGASUB', 'StagingServer', 'FootPrint')
-
-
-
-
-
-
-
-
-
-
-
 
 ##########################################
 
