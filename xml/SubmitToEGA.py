@@ -889,7 +889,7 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
     conn.close()
    
     # create a dict {filepath: [[md5unc, md5enc, accession, alias]]}    
-    Files = {}   
+    Files = {}  
     if len(Data)!= 0:
         for i in Data:
             # parse the xml, extract filenames and md5sums
@@ -907,7 +907,8 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
                     Files[filename] = [[md5unc, md5enc, alias, accession]]
     return Files 
 
-# use this function to get file size and metadata for all files on the staging server in a dpecific box box
+
+# use this function to get file size and metadata for all files on the staging server in a Specific box box
 def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
     '''
     (dict, dict, str) - > dict
@@ -948,25 +949,24 @@ def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
                 D[filename][3].append(RegisteredFiles[name + '.gpg'][i][-2])
                 D[filename][4].append(RegisteredFiles[name + '.gpg'][i][-1])
         else:
-            D[filename][3].append('')
-            D[filename][4].append('')
+            D[filename][3].append('NULL')
+            D[filename][4].append('NULL')
         # add box
         D[filename].append(Box)
     return D
 
 
-
-# use this function to list files on staging server in database
+# use this function to add file from the staging server into database
 def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesTable, RunsTable, StagingServerTable, **Box):
     '''
-    
-    
+    (str, str, str, str, str, str, dict) -> None
+    Add file info including size and accession IDs for files on the staging server
+    of each Box in StagingServerTable of SubDataBase using credentials to connect to each database
     '''
     
-    try:
-        Boxes = [Box['ega_box_12'], Box['ega_box_137']]
-    except:
-        Boxes = []
+    # make a list of ega boxes
+    Boxes = [Box[i] for i in Box]
+    
 
     if len(Boxes) != 0:
         # list all directories on the staging server for each box
@@ -978,73 +978,71 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
         # Extract md5sums and accessions from the metadata database
         RegisteredAnalyses = [LinkFilesWithAlias(CredentialFile, MetDataBase, AnalysesTable, box) for box in Boxes]
         RegisteredRuns = [LinkFilesWithAlias(CredentialFile, MetDataBase, RunsTable, box) for box in Boxes]
+        
+        # merge registered files for each box
+        Registered = []    
+        for i in range(len(RegisteredAnalyses)):
+            D = {}
+            for filename in RegisteredAnalyses[i]:
+                D[filename] = RegisteredAnalyses[i][filename]
+                if filename in RegisteredRuns[i]:
+                    D[filename].append(RegisteredRuns[i][filename])
+            for filename in RegisteredRuns[i]:
+                if filename not in D:
+                    D[filename] = RegisteredRuns[i][filename]
+            Registered.append(D)    
+                
         # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
-        DataAnalyses, DataRuns = [], []
+        Data = []
         for i in range(len(Boxes)):
-            DataAnalyses.append([MergeFileInfoStagingServer(D, RegisteredAnalyses[i], Boxes[i]) for D in FileSize[i]])
-            DataRuns.append([MergeFileInfoStagingServer(D, RegisteredRuns[i], Boxes[i]) for D in FileSize[i]])
-            
-        
-        print(len(DataAnalyses), len(DataRuns))
-        for i in range(len(DataAnalyses)):
-            print('Analyses', i, len(DataAnalyses[i]))
-            for D in DataAnalyses[i]:
-                print(len(D))
-        
-        for i in range(len(DataRuns)):
-            print('Runs', i, len(DataAnalyses[i]))
-            for D in DataRuns[i]:
-                print(len(D))
-        
-        
-        print('cross-referenced data')
+            Data.append([MergeFileInfoStagingServer(D, Registered[i], Boxes[i]) for D in FileSize[i]])
+                
+        # convert lists to string
+        for i in range(len(Data)):
+            for j in range(len(Data[i])):
+                for filename in Data[i][j]:
+                    # check if multiple aliases and accessions exist for that file
+                    if len(Data[i][j][filename][3]) > 1:
+                        Data[i][j][filename][3] = ';'.join(Data[i][j][filename][3])
+                    else:
+                        Data[i][j][filename][3] = Data[i][j][filename][3][0]
+                    if len(Data[i][j][filename][4]) > 1:
+                        Data[i][j][filename][4]= ';'.join(Data[i][j][filename][4])
+                    else:
+                        Data[i][j][filename][4] = Data[i][j][filename][4][0]
+                
+        # connect to submission database
+        conn = EstablishConnection(CredentialFile, SubDataBase)
+        cur = conn.cursor()
+  
+        Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
+                
+        # format colums with datatype
+        Columns = [Fields[i] + ' TEXT NULL,' for i in range(len(Fields))]
+        Columns[-1] = Columns[-1].replace(',', '')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
 
-#        # connect to submission database
-#        conn = EstablishConnection(CredentialFile, SubDataBase)
-#        cur = conn.cursor()
-#  
-#        # Fields = ["file", "fileSize", "md5Unc", "md5enc", "alias", "egaAccessionId", "egaBox"]
-#        
-#        Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
-#                
-#        
-#        
-#        
-#        # format colums with datatype
-#        Columns = []
-#        for i in range(len(Fields)):
-#            if Fields[i] == 'egaBox':
-#                Columns.append(Fields[i] + ' TEXT NULL')
-#            else:
-#                Columns.append(Fields[i] + ' TEXT NULL,')
-#        # convert list to string    
-#        Columns = ' '.join(Columns)        
-#
-#        # create a string with column headers
-#        ColumnNames = ', '.join(Fields)
-#
-#
-#        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(StagingServerTable), 'CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns)]
-#        for i in SqlCommand:
-#            cur.execute(i)
-#            conn.commit()
-#
-#        print('created StagingServer table')
-#
-#
-#        # loop over data in boxes
-#        for i in range(len(Data)):
-#            print('inserting data into StagingServer for data on {0}'.format(Boxes[i]))
-#                
-#            # loop over dict in each box
-#            for D in Data[i]:
-#                # list values according to the table column order
-#                for filename in D:
-#                    # convert data to strings, converting missing values to NULL
-#                    Values =  FormatData(D[filename])
-#                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
-#                    conn.commit()
-#    conn.close()            
+        # create a string with column headers
+        ColumnNames = ', '.join(Fields)
+
+        # create new table each time
+        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(StagingServerTable), 'CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns)]
+        for i in SqlCommand:
+            cur.execute(i)
+            conn.commit()
+        
+        # loop over data in boxes
+        for i in range(len(Data)):
+            # loop over dicts
+            for j in range(len(Data[i])):
+                # list values according to the table column order
+                for filename in Data[i][j]:
+                    # convert data to strings, converting missing values to NULL
+                    Values =  FormatData(Data[i][j][filename])
+                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
+                    conn.commit()
+        conn.close()            
 
 
 
