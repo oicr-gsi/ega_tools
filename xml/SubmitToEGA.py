@@ -2752,7 +2752,6 @@ if __name__ == '__main__':
     # list files on the staging servers
     StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers')
     StagingServerParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
-    StagingServerParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
     StagingServerParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the submission database. Default is EGASUB')
     StagingServerParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database used to collect EGA metadata. Default is EGA')
     StagingServerParser.add_argument('-b', '--Box', dest='box', nargs='*', help='Boxes where samples will be registered. One more boxes are required', required=True)
