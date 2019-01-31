@@ -2629,7 +2629,22 @@ def SubmitMetadata(args):
         ## submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
 
-        
+    
+# use this function to list files on the staging servers
+def FileInfoStagingServer(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and populate tables with file info
+    including size and accessions Ids of files on the staging servers of available boxes
+    '''
+
+    # add file info from each box
+    for i in args.box:
+        AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, i)
+    # add data into footprint table
+    AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable)
+    
+    
     
 if __name__ == '__main__':
 
@@ -2734,7 +2749,19 @@ if __name__ == '__main__':
     RegisterAnalysesParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     RegisterAnalysesParser.set_defaults(func=SubmitMetadata)
    
-       
+    # list files on the staging servers
+    StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers')
+    StagingServerParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    StagingServerParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
+    StagingServerParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the submission database. Default is EGASUB')
+    StagingServerParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database used to collect EGA metadata. Default is EGA')
+    StagingServerParser.add_argument('-b', '--Box', dest='box', nargs='*', help='Boxes where samples will be registered. One more boxes are required', required=True)
+    StagingServerParser.add_argument('--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
+    StagingServerParser.add_argument('--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
+    StagingServerParser.add_argument('--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
+    StagingServerParser.add_argument('--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
+    StagingServerParser.set_defaults(func=FileInfoStagingServer)
+   
     # get arguments from the command line
     args = parser.parse_args()
     # pass the args to the default function
