@@ -1659,24 +1659,24 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
     Queue, Memory and UploadMode and update status to uploading. 
     '''
     
-    # check that Analysis table exists
-    Tables = ListTables(CredentialFile, DataBase)
-    if Table in Tables:
-        
-        # parse the crdential file, get username and password for given box
-        UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+    # parse the crdential file, get username and password for given box
+    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
                        
-        # connect to database
-        conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()
+    # connect to database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    
+    try:
         # extract files for alias in upload mode for given box
         cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box))
-        
         # check that some alias are in upload mode
         Data = cur.fetchall()
-        # close connection
-        conn.close()
+    except:
+        Data = []
+    # close connection
+    conn.close()
         
+    if len(Data) != 0:
         # count the number of files being uploaded
         Uploading = int(subprocess.check_output('qstat | grep Upload | wc -l', shell=True).decode('utf-8').rstrip())        
         # upload new files up to Max
@@ -1685,34 +1685,32 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
             Maximum = 0
         Data = Data[: Maximum]
         
-        if len(Data) != 0:
-            for i in Data:
-                alias = i[0]
-                # get the file information, working directory and stagepath for that alias
-                files = json.loads(i[1].replace("'", "\""))
-                WorkingDir = GetWorkingDirectory(i[2])
-                assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
-                StagePath  = i[3]
+        for i in Data:
+            alias = i[0]
+            # get the file information, working directory and stagepath for that alias
+            files = json.loads(i[1].replace("'", "\""))
+            WorkingDir = GetWorkingDirectory(i[2])
+            assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+            StagePath  = i[3]
                 
-                # update status -> uploading
+            # update status -> uploading
+            conn = EstablishConnection(CredentialFile, DataBase)
+            cur = conn.cursor()
+            cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"None\"  WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+            conn.commit()
+            conn.close()
+                
+            # upload files
+            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
+            # check if upload launched properly for all files under that alias
+            if not(len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
+                # record error message, reset status same uploading --> upload
+                Error = 'Could not launch upload jobs'
                 conn = EstablishConnection(CredentialFile, DataBase)
                 cur = conn.cursor()
-                cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"None\"  WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+                cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
                 conn.commit()
                 conn.close()
-                
-                # get the files, check that the files are in the directory,
-                # create stage directory if doesn't exist and upload
-                JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
-                # check if upload launched properly for all files under that alias
-                if not(len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
-                    # record error message, reset status same uploading --> upload
-                    Error = 'Could not launch upload jobs'
-                    conn = EstablishConnection(CredentialFile, DataBase)
-                    cur = conn.cursor()
-                    cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                    conn.close()
                     
                     
 # use this function to print a dictionary of directory
