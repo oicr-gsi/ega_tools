@@ -931,7 +931,7 @@ def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
             name = filename
         # add filename, size and initialize empty lists to store alias and accessions
         if filename not in D:
-            D[filename] = [filename, FileName, str(FileSize[filename]), [], []]
+            D[filename] = [filename, FileName, str(FileSize[filename]), [], [], Box]
         # check if file is registered
         # file may or may not have .gpg extension in RegisteredFiles
         # .gpg present upon registration but subsenquently removed from file name
@@ -951,8 +951,16 @@ def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
         else:
             D[filename][3].append('NULL')
             D[filename][4].append('NULL')
-        # add box
-        D[filename].append(Box)
+        # convert lists to strings
+        # check if multiple aliases and accessions exist for that file
+        if len(D[filename][3]) > 1:
+            D[filename][3] = ';'.join(D[filename][3])
+        else:
+            D[filename][3] = D[filename][3][0]
+        if len(D[filename][4]) > 1:
+            D[filename][4]= ';'.join(D[filename][4])
+        else:
+            D[filename][4] = D[filename][4][0]
     return D
 
 
@@ -985,19 +993,6 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
     # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
     Data = [MergeFileInfoStagingServer(D, Registered, Box) for D in FileSize]
                 
-    # convert lists to string
-    for i in range(len(Data)):
-        for filename in Data[i]:
-            # check if multiple aliases and accessions exist for that file
-            if len(Data[i][filename][3]) > 1:
-                Data[i][filename][3] = ';'.join(Data[i][filename][3])
-            else:
-                Data[i][filename][3] = Data[i][filename][3][0]
-            if len(Data[i][filename][4]) > 1:
-                Data[i][filename][4]= ';'.join(Data[i][filename][4])
-            else:
-                Data[i][filename][4] = Data[i][filename][4][0]
-    
     # create table if it doesn't exist
     
 
