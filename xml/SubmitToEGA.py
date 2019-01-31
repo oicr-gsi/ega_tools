@@ -791,7 +791,6 @@ def GetJobExitStatus(JobName):
         # return error code
         return '1'
 
-#############################################
 
 # use this function to grab all sub-directories of a given directory on the staging server
 def GetSubDirectories(UserName, PassWord, Directory):
@@ -889,7 +888,7 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
     conn.close()
    
     # create a dict {filepath: [[md5unc, md5enc, accession, alias]]}    
-    Files = {}   
+    Files = {}  
     if len(Data)!= 0:
         for i in Data:
             # parse the xml, extract filenames and md5sums
@@ -907,8 +906,9 @@ def LinkFilesWithAlias(CredentialFile, Database, Table, Box):
                     Files[filename] = [[md5unc, md5enc, alias, accession]]
     return Files 
 
-# use this function to get file size and metadata for all files on the staging server in a dpecific box box
-def CrossReferenceFileInfo(FileSize, RegisteredFiles, Box):
+
+# use this function to get file size and metadata for all files on the staging server in a Specific box box
+def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
     '''
     (dict, dict, str) - > dict
     Take a dictionary of with file size for all files on the staging server of a
@@ -930,7 +930,7 @@ def CrossReferenceFileInfo(FileSize, RegisteredFiles, Box):
             name = filename
         # add filename, size and initialize empty lists to store alias and accessions
         if filename not in D:
-            D[filename] = [filename, FileName, str(FileSize[filename]), [], []]
+            D[filename] = [filename, FileName, str(FileSize[filename]), [], [], Box]
         # check if file is registered
         # file may or may not have .gpg extension in RegisteredFiles
         # .gpg present upon registration but subsenquently removed from file name
@@ -942,124 +942,119 @@ def CrossReferenceFileInfo(FileSize, RegisteredFiles, Box):
         elif name[-4:] == '.gpg' and name[:-4] in RegisteredFiles:
             for i in range(len(RegisteredFiles[name[:-4]])):
                 D[filename][3].append(RegisteredFiles[name[:-4]][i][-2])
-                D[filename][4].append(RegisteredFiles[name[-4:]][i][-1])
+                D[filename][4].append(RegisteredFiles[name[:-4]][i][-1])
         elif name[-4:] != '.gpg' and name + '.gpg' in RegisteredFiles:
             for i in range(len(RegisteredFiles[name + '.gpg'])):
                 D[filename][3].append(RegisteredFiles[name + '.gpg'][i][-2])
                 D[filename][4].append(RegisteredFiles[name + '.gpg'][i][-1])
         else:
-            D[filename][3].append('')
-            D[filename][4].append('')
-        # add box
-        D[filename].append(Box)
+            D[filename][3].append('NULL')
+            D[filename][4].append('NULL')
+        # convert lists to strings
+        # check if multiple aliases and accessions exist for that file
+        if len(D[filename][3]) > 1:
+            D[filename][3] = ';'.join(D[filename][3])
+        else:
+            D[filename][3] = D[filename][3][0]
+        if len(D[filename][4]) > 1:
+            D[filename][4]= ';'.join(D[filename][4])
+        else:
+            D[filename][4] = D[filename][4][0]
     return D
 
 
-
-# use this function to list files on staging server in database
-def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesTable, RunsTable, StagingServerTable, **Box):
+# use this function to add file from the staging server into database
+def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesTable, RunsTable, StagingServerTable, Box):
+    '''
+    (str, str, str, str, str, str, str) -> None
+    Add file info including size and accession IDs for files on the staging server
+    of Box in Table StagingServerTable of SubDataBase using credentials to connect to each database
     '''
     
-    
-    '''
-    
-    try:
-        Boxes = [Box['ega_box_12'], Box['ega_box_137']]
-    except:
-        Boxes = []
-
-    if len(Boxes) != 0:
-        # list all directories on the staging server for each box
-        Directories = [GrabAllDirectoriesStagingServer(CredentialFile, box) for box in Boxes]
-        # Extract file size for all files on the staging server
-        FileSize = []
-        for i in range(len(Boxes)):
-            FileSize.append([ExtractFileSizeStagingServer(CredentialFile, Boxes[i], j) for j in Directories[i]])
-        # Extract md5sums and accessions from the metadata database
-        RegisteredAnalyses = [LinkFilesWithAlias(CredentialFile, MetDataBase, AnalysesTable, box) for box in Boxes]
-        RegisteredRuns = [LinkFilesWithAlias(CredentialFile, MetDataBase, RunsTable, box) for box in Boxes]
+    # list all directories on the staging server of box
+    Directories = GrabAllDirectoriesStagingServer(CredentialFile, Box)
+    # Extract file size for all files on the staging server
+    FileSize = [ExtractFileSizeStagingServer(CredentialFile, Box, i) for i in Directories]
+    # Extract md5sums and accessions from the metadata database
+    RegisteredAnalyses = LinkFilesWithAlias(CredentialFile, MetDataBase, AnalysesTable, Box)
+    RegisteredRuns = LinkFilesWithAlias(CredentialFile, MetDataBase, RunsTable, Box)
         
-        
-        
-        # 4) Cross-reference dictionaries, add alias and egaAcessionId
-        
-        
-        Data = CrossReferenceFileInfo(FileSize, RegisteredFiles, Boxes)
-        
-        
-        print('cross-referenced data')
-
+    # merge registered files for each box
+    Registered = {}
+    for filename in RegisteredAnalyses:
+        Registered[filename] = RegisteredAnalyses[filename]
+        if filename in RegisteredRuns:
+            Registered[filename].append(RegisteredRuns[filename])
+    for filename in RegisteredRuns:
+        if filename not in Registered:
+            Registered[filename] = RegisteredRuns[filename]
+                    
+    # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
+    Data = [MergeFileInfoStagingServer(D, Registered, Box) for D in FileSize]
+                
+    # create table if table doesn't exist
+    Tables = ListTables(CredentialFile, SubDataBase)
+    if StagingServerTable not in Tables:
         # connect to submission database
         conn = EstablishConnection(CredentialFile, SubDataBase)
         cur = conn.cursor()
-  
-        # Fields = ["file", "fileSize", "md5Unc", "md5enc", "alias", "egaAccessionId", "egaBox"]
-        
+        # format colums with datatype and convert to string
         Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
-                
-        
-        
-        
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == 'egaBox':
-                Columns.append(Fields[i] + ' TEXT NULL')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL,')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
+        Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+        cur.execute('CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns))
+        conn.commit()
+        conn.close()
+    else:
+        # connect to submission database
+        conn = EstablishConnection(CredentialFile, SubDataBase)
+        cur = conn.cursor()
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(StagingServerTable))
+        Fields = [i[0] for i in cur.description]
+        conn.close()
 
-        # create a string with column headers
-        ColumnNames = ', '.join(Fields)
+    # connect to submission database
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()
+    # format colums with datatype and convert to string
+    Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
+    Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
 
-
-        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(StagingServerTable), 'CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns)]
-        for i in SqlCommand:
-            cur.execute(i)
+    # drop all entries for that Box
+    cur.execute('DELETE FROM {0} WHERE {0}.egaBox=\"{1}\"'.format(StagingServerTable, Box))
+    conn.commit()
+        
+    # loop over dicts
+    for i in range(len(Data)):
+        # list values according to the table column order
+        for filename in Data[i]:
+            # convert data to strings, converting missing values to NULL
+            Values =  FormatData(Data[i][filename])
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
             conn.commit()
-
-        print('created StagingServer table')
-
-
-        # loop over data in boxes
-        for i in range(len(Data)):
-            print('inserting data into StagingServer for data on {0}'.format(Boxes[i]))
-                
-            # loop over dict in each box
-            for D in Data[i]:
-                # list values according to the table column order
-                for filename in D:
-                    # convert data to strings, converting missing values to NULL
-                    Values =  FormatData(D[filename])
-                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
-                    conn.commit()
     conn.close()            
-
 
 
 # use this function to add information to Footprint table
 def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintTable):
     '''
-    
-    
+    (str, str, str, str) -> None
+    Use credentials to connect to SubDatabase, extract file information from StagingServerTable
+    and collapse it per directory in each staging server in FootPrintTable
     '''
-    
-    #
     
     # connect to submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
-    
-    Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
-    
-       
     try:
         cur.execute('SELECT * FROM {0}'.format(StagingServerTable))
         Data = cur.fetchall()
     except:
         Data = []
-    
+    conn.close()
+        
     Size = {}
     if len(Data) != 0:
         for i in Data:
@@ -1086,7 +1081,6 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
             else:
                  Size[box][directory][3] += 1
                  Size[box][directory][6] += filesize
-                            
         
         # compute size for all files per box
         for i in Data:
@@ -1100,23 +1094,13 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
             # correct directory value
             Size[box]['All'][0] = 'All'
         
-        
-        
-        
         # connect to submission database
         conn = EstablishConnection(CredentialFile, SubDataBase)
         cur = conn.cursor()
   
         Fields = ["egaBox", "location", "AllFiles", "Registered", "NotRegistered", "Size", "SizeRegistered", "SizeNotRegistered"]
-        # format colums with datatype
-        Columns = []
-        for i in range(len(Fields)):
-            if Fields[i] == "SizeNotRegistered":
-                Columns.append(Fields[i] + ' TEXT NULL')
-            else:
-                Columns.append(Fields[i] + ' TEXT NULL,')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
+        # format colums with datatype - convert to string
+        Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
         # create a string with column headers
         ColumnNames = ', '.join(Fields)
 
@@ -1124,14 +1108,9 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
         for i in SqlCommand:
             cur.execute(i)
             conn.commit()
-
-        print('created FootPrintTable table')
-
-        
+               
         # loop over data in boxes
         for box in Size:
-            print('inserting data into FootPrintTable for data on {0}'.format(box))
-                
             # loop over directory in each box
             for directory in Size[box]:
                 # add box to list of data
@@ -1145,25 +1124,6 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
     conn.close()            
                 
         
-#AddFileInfoStagingServer('.EGA_metData', 'EGA', 'EGASUB', 'Analyses', 'StagingServer', ega_box_12='ega-box-12', ega_box_137='ega-box-137')
-#AddFootprintData('.EGA_metData', 'EGASUB', 'StagingServer', 'FootPrint')
-
-
-#AddFileInfoStagingServer('.EGA_metData', 'EGA', 'EGASUB', 'Runs', 'StagingServer', ega_box_12='ega-box-12', ega_box_137='ega-box-137')
-#AddFootprintData('.EGA_metData', 'EGASUB', 'StagingServer', 'FootPrint')
-
-
-
-
-
-
-
-
-
-
-
-
-##########################################
 
 ## functions specific to Analyses objects
     
@@ -2669,7 +2629,22 @@ def SubmitMetadata(args):
         ## submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
 
-        
+    
+# use this function to list files on the staging servers
+def FileInfoStagingServer(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and populate tables with file info
+    including size and accessions Ids of files on the staging servers of available boxes
+    '''
+
+    # add file info from each box
+    for i in args.box:
+        AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, i)
+    # add data into footprint table
+    AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable)
+    
+    
     
 if __name__ == '__main__':
 
@@ -2774,7 +2749,18 @@ if __name__ == '__main__':
     RegisterAnalysesParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     RegisterAnalysesParser.set_defaults(func=SubmitMetadata)
    
-       
+    # list files on the staging servers
+    StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers')
+    StagingServerParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    StagingServerParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the submission database. Default is EGASUB')
+    StagingServerParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database used to collect EGA metadata. Default is EGA')
+    StagingServerParser.add_argument('-b', '--Box', dest='box', nargs='*', help='Boxes where samples will be registered. One more boxes are required', required=True)
+    StagingServerParser.add_argument('--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
+    StagingServerParser.add_argument('--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
+    StagingServerParser.add_argument('--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
+    StagingServerParser.add_argument('--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
+    StagingServerParser.set_defaults(func=FileInfoStagingServer)
+   
     # get arguments from the command line
     args = parser.parse_args()
     # pass the args to the default function
