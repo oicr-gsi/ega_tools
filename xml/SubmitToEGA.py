@@ -1327,7 +1327,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # loop over files for that alias      
         for i in range(len(filePaths)):
             # check that FileName is valid
-            if os.path.isfile(filePaths) == False:
+            if os.path.isfile(filePaths[i]) == False:
                 # return error that will be caught if file doesn't exist
                 return [-1] 
             else:
