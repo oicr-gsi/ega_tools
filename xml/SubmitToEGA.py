@@ -957,92 +957,74 @@ def MergeFileInfoStagingServer(FileSize, RegisteredFiles, Box):
 
 
 # use this function to add file from the staging server into database
-def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesTable, RunsTable, StagingServerTable, **Box):
+def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesTable, RunsTable, StagingServerTable, Box):
     '''
-    (str, str, str, str, str, str, dict) -> None
+    (str, str, str, str, str, str, str) -> None
     Add file info including size and accession IDs for files on the staging server
-    of each Box in StagingServerTable of SubDataBase using credentials to connect to each database
+    of Box in Table StagingServerTable of SubDataBase using credentials to connect to each database
     '''
     
-    # make a list of ega boxes
-    Boxes = [Box[i] for i in Box]
+    # list all directories on the staging server of box
+    Directories = GrabAllDirectoriesStagingServer(CredentialFile, Box)
+    # Extract file size for all files on the staging server
+    FileSize = [ExtractFileSizeStagingServer(CredentialFile, Box, i) for i in Directories]
+    # Extract md5sums and accessions from the metadata database
+    RegisteredAnalyses = LinkFilesWithAlias(CredentialFile, MetDataBase, AnalysesTable, Box)
+    RegisteredRuns = LinkFilesWithAlias(CredentialFile, MetDataBase, RunsTable, Box)
+        
+    # merge registered files for each box
+    Registered = {}
+    for filename in RegisteredAnalyses:
+        Registered[filename] = RegisteredAnalyses[filename]
+        if filename in RegisteredRuns:
+            Registered[filename].append(RegisteredRuns[filename])
+    for filename in RegisteredRuns:
+        if filename not in Registered:
+            Registered[filename] = RegisteredRuns[filename]
+                    
+    # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
+    Data = [MergeFileInfoStagingServer(D, Registered, Box) for D in FileSize]
+                
+    # convert lists to string
+    for i in range(len(Data)):
+        for filename in Data[i]:
+            # check if multiple aliases and accessions exist for that file
+            if len(Data[i][filename][3]) > 1:
+                Data[i][filename][3] = ';'.join(Data[i][filename][3])
+            else:
+                Data[i][filename][3] = Data[i][filename][3][0]
+            if len(Data[i][filename][4]) > 1:
+                Data[i][filename][4]= ';'.join(Data[i][filename][4])
+            else:
+                Data[i][filename][4] = Data[i][filename][4][0]
+    
+    # create table if it doesn't exist
     
 
-    if len(Boxes) != 0:
-        # list all directories on the staging server for each box
-        Directories = [GrabAllDirectoriesStagingServer(CredentialFile, box) for box in Boxes]
-        # Extract file size for all files on the staging server
-        FileSize = []
-        for i in range(len(Boxes)):
-            FileSize.append([ExtractFileSizeStagingServer(CredentialFile, Boxes[i], j) for j in Directories[i]])
-        # Extract md5sums and accessions from the metadata database
-        RegisteredAnalyses = [LinkFilesWithAlias(CredentialFile, MetDataBase, AnalysesTable, box) for box in Boxes]
-        RegisteredRuns = [LinkFilesWithAlias(CredentialFile, MetDataBase, RunsTable, box) for box in Boxes]
+
+           
+    # connect to submission database
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()
+    # format colums with datatype and convert to string
+    Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
+    Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+
+    # drop all entries for that Box
+    cur.execute('DELETE FROM {0} WHERE {0}.egaBox=\"{1}\"'.format(StagingServerTable, Box))
+    conn.commit()
         
-        # merge registered files for each box
-        Registered = []    
-        for i in range(len(RegisteredAnalyses)):
-            D = {}
-            for filename in RegisteredAnalyses[i]:
-                D[filename] = RegisteredAnalyses[i][filename]
-                if filename in RegisteredRuns[i]:
-                    D[filename].append(RegisteredRuns[i][filename])
-            for filename in RegisteredRuns[i]:
-                if filename not in D:
-                    D[filename] = RegisteredRuns[i][filename]
-            Registered.append(D)    
-                
-        # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
-        Data = []
-        for i in range(len(Boxes)):
-            Data.append([MergeFileInfoStagingServer(D, Registered[i], Boxes[i]) for D in FileSize[i]])
-                
-        # convert lists to string
-        for i in range(len(Data)):
-            for j in range(len(Data[i])):
-                for filename in Data[i][j]:
-                    # check if multiple aliases and accessions exist for that file
-                    if len(Data[i][j][filename][3]) > 1:
-                        Data[i][j][filename][3] = ';'.join(Data[i][j][filename][3])
-                    else:
-                        Data[i][j][filename][3] = Data[i][j][filename][3][0]
-                    if len(Data[i][j][filename][4]) > 1:
-                        Data[i][j][filename][4]= ';'.join(Data[i][j][filename][4])
-                    else:
-                        Data[i][j][filename][4] = Data[i][j][filename][4][0]
-                
-        # connect to submission database
-        conn = EstablishConnection(CredentialFile, SubDataBase)
-        cur = conn.cursor()
-  
-        Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
-                
-        # format colums with datatype
-        Columns = [Fields[i] + ' TEXT NULL,' for i in range(len(Fields))]
-        Columns[-1] = Columns[-1].replace(',', '')
-        # convert list to string    
-        Columns = ' '.join(Columns)        
-
-        # create a string with column headers
-        ColumnNames = ', '.join(Fields)
-
-        # create new table each time
-        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(StagingServerTable), 'CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns)]
-        for i in SqlCommand:
-            cur.execute(i)
+    # loop over dicts
+    for i in range(len(Data)):
+        # list values according to the table column order
+        for filename in Data[i]:
+            # convert data to strings, converting missing values to NULL
+            Values =  FormatData(Data[i][filename])
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
             conn.commit()
-        
-        # loop over data in boxes
-        for i in range(len(Data)):
-            # loop over dicts
-            for j in range(len(Data[i])):
-                # list values according to the table column order
-                for filename in Data[i][j]:
-                    # convert data to strings, converting missing values to NULL
-                    Values =  FormatData(Data[i][j][filename])
-                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(StagingServerTable, ColumnNames, Values))
-                    conn.commit()
-        conn.close()            
+    conn.close()            
 
 
 # use this function to add information to Footprint table
