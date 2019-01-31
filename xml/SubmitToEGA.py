@@ -791,7 +791,6 @@ def GetJobExitStatus(JobName):
         # return error code
         return '1'
 
-#############################################
 
 # use this function to grab all sub-directories of a given directory on the staging server
 def GetSubDirectories(UserName, PassWord, Directory):
@@ -993,11 +992,27 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
     # cross-reference dictionaries and get aliases and accessions for files on staging servers if registered
     Data = [MergeFileInfoStagingServer(D, Registered, Box) for D in FileSize]
                 
-    # create table if it doesn't exist
-    
+    # create table if table doesn't exist
+    Tables = ListTables(CredentialFile, SubDataBase)
+    if StagingServerTable not in Tables:
+        # connect to submission database
+        conn = EstablishConnection(CredentialFile, SubDataBase)
+        cur = conn.cursor()
+        # format colums with datatype and convert to string
+        Fields = ["file", "filename", "fileSize", "alias", "egaAccessionId", "egaBox"]
+        Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+        cur.execute('CREATE TABLE {0} ({1})'.format(StagingServerTable, Columns))
+        conn.commit()
+        conn.close()
+    else:
+        # connect to submission database
+        conn = EstablishConnection(CredentialFile, SubDataBase)
+        cur = conn.cursor()
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(StagingServerTable))
+        Fields = [i[0] for i in cur.description]
+        conn.close()
 
-
-           
     # connect to submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
@@ -1109,8 +1124,6 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
     conn.close()            
                 
         
-
-##########################################
 
 ## functions specific to Analyses objects
     
