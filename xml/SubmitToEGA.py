@@ -776,22 +776,53 @@ def GetJobExitStatus(JobName):
     Take a job name and return the exit code of that job after it finished running
     ('0' indicates a normal, error-free run and '1' or another value inicates an error)
     '''
-
-    # get information about JobName
-    i =  subprocess.check_output('qacct -j {0}'.format(JobName), shell=True).decode('utf-8').rstrip().split('\n')
-    # extract exit status
-    d = {}
-    for j in i:
-        if not j.startswith('='):
-            j = j.split()
-            d[j[0]] = j[1]
-    if 'exit_status' in d:
-        return d['exit_status']
+    
+    # make a sorted list of accounting files with job info archives
+    Archives = subprocess.check_output('ls -lt /oicr/cluster/ogs2011.11/default/common/accounting*', shell=True).decode('utf-8').rstrip().split('\n')
+    # keep accounting files for the current year
+    Archives = [Archives[i].split()[-1] for i in range(len(Archives)) if ':' in Archives[i].split()[-2]]
+    
+    # loop over the most recent archives and stop when job is found    
+    for AccountingFile in Archives:
+        try:
+            i = subprocess.check_output('qacct -j {0} -f {1}'.format(JobName, AccountingFile), shell=True).decode('utf-8').rstrip().split('\n')
+        except:
+            i = ''
+        else:
+            if i != '':
+                break
+            
+    # create a dict with months
+    Months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+               'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+    
+    # check if accounting file with job has been found
+    if i == '':
+        # return error
+        return '1'        
     else:
-        # return error code
-        return '1'
-
-
+        # record all exit status. the same job may have been run multiple times if re-encryption was needed
+        d = {}
+        for j in i:
+            if 'end_time' in j:
+                k = j.split()[2:]
+                # convert date to epoch time
+                date = '.'.join([k[1], Months[k[0]], k[-1]]) + ' ' + k[2] 
+                p = '%d.%m.%Y %H:%M:%S'
+                date = int(time.mktime(time.strptime(date, p)))
+            elif 'exit_status' in j:
+                d[date] = j.split()[1]
+        
+        # get the exit status of the most recent job    
+        EndJobs = list(d.keys())
+        EndJobs.sort()
+        if len(d) != 0:
+            # return exit code
+            return d[EndJobs[-1]]
+        else:
+            # return error
+            return '1'
+    
 # use this function to grab all sub-directories of a given directory on the staging server
 def GetSubDirectories(UserName, PassWord, Directory):
     '''
@@ -1385,7 +1416,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
-            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ':'.join(JobNames)) + '\n')
                 
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
@@ -1476,7 +1507,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
     '''        
         
     # make a list of job names
-    JobNames = JobNames.split(';')
+    JobNames = JobNames.split(':')
     
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
@@ -1554,7 +1585,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
         Error = 'Could not check encryption'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, Alias, Box))
         conn.commit()
         conn.close()
 
@@ -1637,7 +1668,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
-        newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ';'.join(JobNames)) + '\n')
+        newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ':'.join(JobNames)) + '\n')
                 
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -1977,7 +2008,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
                     Uploaded = False
             
             # check the exit status of the jobs uploading files
-            for jobName in JobNames.split(';'):
+            for jobName in JobNames.split(':'):
                 if GetJobExitStatus(jobName) != '0':
                     Uploaded = False
             
@@ -2012,7 +2043,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
         Error = 'Could not check uploaded files'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, Alias, Box)) 
         conn.commit()                                
         conn.close()
 
@@ -2723,7 +2754,7 @@ if __name__ == '__main__':
     CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
-    CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Semicolon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
+    CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
     # check upload
@@ -2733,7 +2764,7 @@ if __name__ == '__main__':
     CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     CheckUploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
-    CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Semicolon-separated string of job names used for uploading all files under a given alias', required=True)
+    CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for uploading all files under a given alias', required=True)
     CheckUploadParser.add_argument('--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     CheckUploadParser.set_defaults(func=IsUploadDone)
     
