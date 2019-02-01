@@ -799,7 +799,7 @@ def GetJobExitStatus(JobName):
     # check if accounting file with job has been found
     if i == '':
         # return error
-        return '2'        
+        return '1'        
     else:
         # record all exit status. the same job may have been run multiple times if re-encryption was needed
         d = {}
