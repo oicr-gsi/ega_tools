@@ -1381,7 +1381,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
                     JobNames.extend([JobName1, JobName2, JobName3])
         
         # launch check encryption job
-        MyCmd = 'module load python-gsi/3.6.4; python3.6 {0} IsEncryptionDone -c {1} -s {2} -t {3} -b {4} -a {5} -j {6}'
+        MyCmd = 'module load python-gsi/3.6.4; python3.6 {0} CheckEncryption -c {1} -s {2} -t {3} -b {4} -a {5} -j {6}'
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
@@ -1633,7 +1633,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    Cmd = 'module load python-gsi/3.6.4; python3.6 {0} IsUploadDone -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    Cmd = 'module load python-gsi/3.6.4; python3.6 {0} CheckUploadd -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
@@ -2746,7 +2746,7 @@ if __name__ == '__main__':
     RegisterAnalysesParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='EGA object to register', required=True)
     RegisterAnalysesParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     RegisterAnalysesParser.set_defaults(func=SubmitMetadata)
-   
+
     # list files on the staging servers
     StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers')
     StagingServerParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
