@@ -776,22 +776,53 @@ def GetJobExitStatus(JobName):
     Take a job name and return the exit code of that job after it finished running
     ('0' indicates a normal, error-free run and '1' or another value inicates an error)
     '''
-
-    # get information about JobName
-    i =  subprocess.check_output('qacct -j {0}'.format(JobName), shell=True).decode('utf-8').rstrip().split('\n')
-    # extract exit status
-    d = {}
-    for j in i:
-        if not j.startswith('='):
-            j = j.split()
-            d[j[0]] = j[1]
-    if 'exit_status' in d:
-        return d['exit_status']
+    
+    # make a sorted list of accounting files with job info archives
+    Archives = subprocess.check_output('ls -lt /oicr/cluster/ogs2011.11/default/common/accounting*', shell=True).decode('utf-8').rstrip().split('\n')
+    # keep accounting files for the current year
+    Archives = [Archives[i].split()[-1] for i in range(len(Archives)) if ':' in Archives[i].split()[-2]]
+    
+    # loop over the most recent archives and stop when job is found    
+    for AccountingFile in Archives:
+        try:
+            i = subprocess.check_output('qacct -j {0} -f {1}'.format(JobName, AccountingFile), shell=True).decode('utf-8').rstrip().split('\n')
+        except:
+            i = ''
+        else:
+            if i != '':
+                break
+            
+    # create a dict with months
+    Months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+               'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+    
+    # check if accounting file with job has been found
+    if i == '':
+        # return error
+        return '2'        
     else:
-        # return error code
-        return '1'
-
-
+        # record all exit status. the same job may have been run multiple times if re-encryption was needed
+        d = {}
+        for j in i:
+            if 'end_time' in j:
+                k = j.split()[2:]
+                # convert date to epoch time
+                date = '.'.join([k[1], Months[k[0]], k[-1]]) + ' ' + k[2] 
+                p = '%d.%m.%Y %H:%M:%S'
+                date = int(time.mktime(time.strptime(date, p)))
+            elif 'exit_status' in j:
+                d[date] = j.split()[1]
+        
+        # get the exit status of the most recent job    
+        EndJobs = list(d.keys())
+        EndJobs.sort()
+        if len(d) != 0:
+            # return exit code
+            return d[EndJobs[-1]]
+        else:
+            # return error
+            return '1'
+    
 # use this function to grab all sub-directories of a given directory on the staging server
 def GetSubDirectories(UserName, PassWord, Directory):
     '''
