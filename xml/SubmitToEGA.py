@@ -1585,7 +1585,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
         Error = 'Could not check encryption'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, Alias, Box))
         conn.commit()
         conn.close()
 
@@ -2043,7 +2043,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
         Error = 'Could not check uploaded files'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, Alias, Box)) 
         conn.commit()                                
         conn.close()
 
