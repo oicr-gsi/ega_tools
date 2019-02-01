@@ -1416,7 +1416,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
-            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ':'.join(JobNames)) + '\n')
                 
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
@@ -1507,7 +1507,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
     '''        
         
     # make a list of job names
-    JobNames = JobNames.split(';')
+    JobNames = JobNames.split(':')
     
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
@@ -1668,7 +1668,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
-        newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ';'.join(JobNames)) + '\n')
+        newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ':'.join(JobNames)) + '\n')
                 
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -2008,7 +2008,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
                     Uploaded = False
             
             # check the exit status of the jobs uploading files
-            for jobName in JobNames.split(';'):
+            for jobName in JobNames.split(':'):
                 if GetJobExitStatus(jobName) != '0':
                     Uploaded = False
             
@@ -2754,7 +2754,7 @@ if __name__ == '__main__':
     CheckEncryptionParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     CheckEncryptionParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
-    CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Semicolon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
+    CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
     # check upload
@@ -2764,7 +2764,7 @@ if __name__ == '__main__':
     CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     CheckUploadParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
-    CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Semicolon-separated string of job names used for uploading all files under a given alias', required=True)
+    CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for uploading all files under a given alias', required=True)
     CheckUploadParser.add_argument('--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     CheckUploadParser.set_defaults(func=IsUploadDone)
     
