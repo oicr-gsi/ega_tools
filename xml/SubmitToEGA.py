@@ -1734,7 +1734,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
             # upload files
             JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
             # check if upload launched properly for all files under that alias
-            if not(len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
+            if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                 # record error message, reset status same uploading --> upload
                 Error = 'Could not launch upload jobs'
                 conn = EstablishConnection(CredentialFile, DataBase)
