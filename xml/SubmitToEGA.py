@@ -1615,12 +1615,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
         os.mkdir(logDir)
     assert os.path.isdir(logDir)
     
-    # create destination directory
-    Cmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; bye;\\\" ftp://ftp-private.ebi.ac.uk\""
-    subprocess.call(Cmd.format(UserName, MyPassword, StagePath), shell=True)     
-        
-    # command to create destination directory and upload files    
-    # aspera is installed on xfer4
+    # command to upload files. aspera is installed on xfer4
     if UploadMode == 'lftp':
         UploadCmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mput {3} {4} {5} -O {2}  bye;\\\" ftp://ftp-private.ebi.ac.uk\""
     elif UploadMode == 'aspera':
@@ -1632,6 +1627,21 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     filePaths = list(files.keys())
     # loop over filepaths
     for i in range(len(filePaths)):
+        # create destination directory
+        Cmd = "ssh xfer4.res.oicr.on.ca \"lftp -u {0},{1} -e \\\" set ftp:ssl-allow false; mkdir -p {2}; bye;\\\" ftp://ftp-private.ebi.ac.uk\""
+        # put commands in shell script
+        BashScript = os.path.join(qsubdir, alias + '_make_destination_directory.sh')
+        with open(BashScript, 'w') as newfile:
+            newfile.write(Cmd.format(UserName, MyPassword, StagePath))    
+        # launch job directly for the 1st file only
+        JobName = 'MakeDestinationDir.{0}'.format(alias)
+        QsubCmd = "qsub -b y -q {0} -N {1} -e {2} -o {2} \"bash {3}\"".format(Queue, JobName, logDir, BashScript)
+        if JobName not in JobNames:
+            job = subprocess.call(QsubCmd, shell=True)
+            # record job name but not exit code.
+            # may produce an error message if directory already exists. do not evaluate command during CheckUpload
+            JobNames.append(JobName)
+            
         # get filename
         fileName = os.path.basename(filePaths[i])
         encryptedFile = os.path.join(FileDir, files[filePaths[i]]['encryptedName'])
@@ -1650,12 +1660,8 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             newfile.close()
             # launch job directly
             JobName = 'Upload.{0}'.format(alias + '__' + fileName)
-            # check if file path 1st in list
-            if i == 0:
-                QsubCmd = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName, logDir, BashScript)
-            else:
-                # hold until previous job is done
-                QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
+            # hold until previous job is done
+            QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
             job = subprocess.call(QsubCmd, shell=True)
             # store job exit code and name
             JobExits.append(job)
@@ -1664,11 +1670,13 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    Cmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    CheckCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    # do not check job used to make destination directory
+    JobNames = JobNames[1:]
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
-        newfile.write(Cmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ':'.join(JobNames)) + '\n')
+        newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ':'.join(JobNames)) + '\n')
                 
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -1730,7 +1738,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
             cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"None\"  WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
             conn.commit()
             conn.close()
-                
+            
             # upload files
             JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
             # check if upload launched properly for all files under that alias
@@ -2600,27 +2608,27 @@ def FormAnalysesJson(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        #CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'analyses', args.box, args.myscript, projects = args.projects)
+        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'analyses', args.box, args.myscript, projects = args.projects)
         
         ## set up working directory, add to analyses table and update status valid --> start
-        #AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
+        AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
         ## update Analysis table in submission database with sample accessions and change status start -> encrypt
-        #AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
+        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
         ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-        #EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
+        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
         
         ## upload files and change the status upload -> uploading 
         ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
         UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
                 
         ## remove files with uploaded status
-        #RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+        RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        #AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, projects = args.projects)
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, projects = args.projects)
 
  
 
