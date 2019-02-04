@@ -1664,7 +1664,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    Cmd = 'module load python-gsi/3.6.4; python3.6 {0} CheckUploadd -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    Cmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckUploadd -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
