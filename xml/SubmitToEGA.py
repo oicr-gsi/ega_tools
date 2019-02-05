@@ -1154,7 +1154,29 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
                 conn.commit()
     conn.close()            
                 
-        
+
+# use this function to get the available disk space on the staging server
+def GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrint, Box):
+    '''
+    (str, str, str, str) -> float
+    Take a file with credentials to connect to EGA submission database and 
+    extract the footprint of non-registered files in that Box (in Tb)
+    '''
+    
+    # connect to database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    try:
+        # extract files for alias in upload mode for given box
+        cur.execute('SELECT {0}.SizeNotRegistered from {0} WHERE {0}.location=\"All\" AND {0}.egaBox=\"{1}\"'.format(FootPrint, Box))
+        # check that some alias are in upload mode
+        Data = int(cur.fetchall()[0][0]) / (10**12)
+    except:
+        Data = -1
+    # close connection
+    conn.close()
+    return Data
+
 
 ## functions specific to Analyses objects
     
@@ -1687,10 +1709,9 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     JobExits.append(job)          
         
     return JobExits
-    
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, Max):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, FootPrintTable, Box, Queue, Mem, UploadMode, Max, MaxFootPrint):
     '''
     (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -1715,7 +1736,11 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Box,
     # close connection
     conn.close()
         
-    if len(Data) != 0:
+    # get the footprint of non-registered files on the Box's staging server
+    NotRegistered = GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrintTable, Box)
+    
+    # check that alias are ready for uploading and that staging server's limit is not reached 
+    if len(Data) != 0 and 0 < NotRegistered < MaxFootPrint:
         # count the number of files being uploaded
         Uploading = int(subprocess.check_output('qstat | grep Upload | wc -l', shell=True).decode('utf-8').rstrip())        
         # upload new files up to Max
@@ -2622,8 +2647,8 @@ def FormAnalysesJson(args):
         
         ## upload files and change the status upload -> uploading 
         ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.box, args.queue, args.memory, args.uploadmode, args.max)
-                
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint)
+        
         ## remove files with uploaded status
         RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
@@ -2749,9 +2774,11 @@ if __name__ == '__main__':
     FormAnalysesJsonParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     FormAnalysesJsonParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
     FormAnalysesJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
+    FormAnalysesJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
     FormAnalysesJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
     FormAnalysesJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     FormAnalysesJsonParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
+    FormAnalysesJsonParser.add_argument('--MaxFootPrint', dest='maxfootprint', default=15, type=int, help='Maximum footprint of non-registered files on the box\'s staging sever. Default is 15Tb')
     FormAnalysesJsonParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
     FormAnalysesJsonParser.set_defaults(func=FormAnalysesJson)
 
