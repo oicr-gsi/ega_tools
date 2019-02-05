@@ -2791,7 +2791,7 @@ if __name__ == '__main__':
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
     # check upload
-    CheckUploadParser = subparsers.add_parser('CheckUploadd', help='Check that upload is done for a given alias')
+    CheckUploadParser = subparsers.add_parser('CheckUpload', help='Check that upload is done for a given alias')
     CheckUploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
