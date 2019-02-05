@@ -2630,7 +2630,7 @@ def FormAnalysesJson(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'analyses', args.box, args.myscript, projects = args.projects)
+        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'analyses', args.box, args.myscript, args.mypython, projects = args.projects)
         
         ## set up working directory, add to analyses table and update status valid --> start
         AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
@@ -2667,7 +2667,7 @@ def FormSamplesJson(args):
         
         ## check if required information is present in tables.
         # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'samples', args.box, args.myscript)
+        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'samples', args.box, args.myscript, args.mypython)
         
         ## form json for samples in valid status add to table
         # update status valid -> submit if no error of keep status --> valid and record errorMessage
