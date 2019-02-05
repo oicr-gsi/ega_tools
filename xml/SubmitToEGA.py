@@ -185,7 +185,7 @@ def FormatData(L):
 
 
 # use this function to list enumerations
-def ListEnumerations(URLs, MyScript, MyPython='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6'):
+def ListEnumerations(URLs, MyScript, MyPython):
     '''
     (list, str, str) -> list
     Take a list of URLs for various enumerations, the path to the python program,
@@ -335,7 +335,7 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
 
 
 # use this function to check information in Tables    
-def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, datatype, Object, MyScript, **KeyWordParams):
+def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, datatype, Object, MyScript, MyPython, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, str, dict) -> dict
     Extract information from DataBase Table, AttributesTable and also from ProjectsTable
@@ -353,7 +353,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
              'https://ega-archive.org/submission-api/v1/enums/case_control',
              'https://ega-archive.org/submission-api/v1/enums/genders']
     
-    Enums = ListEnumerations(URLs, MyScript)
+    Enums = ListEnumerations(URLs, MyScript, MyPython)
     FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
 
     # connect to db
@@ -491,7 +491,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
 
 
 # use this function to check that all information for Analyses objects is available before encrypting files     
-def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Object, Box, MyScript, **KeyWordParams):
+def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Object, Box, MyScript, MyPython, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, dict) -> None
     Extract information from DataBase Table, AttributesTable and ProjectsTable if Object is analyses
@@ -512,10 +512,10 @@ def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Obje
             K[i[0]] = []
     
         # get error messages for the different tables. create dicts {alias" error}
-        D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'analyses', Object, MyScript)
-        E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'attributes', Object, MyScript)
+        D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'analyses', Object, MyScript, MyPython)
+        E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'attributes', Object, MyScript, MyPython)
         if Object == 'analyses':
-            F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'projects', Object, MyScript, **KeyWordParams)
+            F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'projects', Object, MyScript, MyPython, **KeyWordParams)
         
         # record error messages
         for alias in K:
@@ -562,7 +562,7 @@ def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Obje
 
 
 # use this function to format the analysis json
-def FormatJson(D, Object, MyScript):
+def FormatJson(D, Object, MyScript, MyPython):
     '''
     (dict, str, str) -> dict
     Take a dictionary with information for an object, the path to the script to fetch 
@@ -578,7 +578,7 @@ def FormatJson(D, Object, MyScript):
             'https://ega-archive.org/submission-api/v1/enums/case_control',
              'https://ega-archive.org/submission-api/v1/enums/genders']
              
-    ExperimentTypes, AnalysisTypes, FileTypes, CaseControl, Genders = ListEnumerations(URLs, MyScript)
+    ExperimentTypes, AnalysisTypes, FileTypes, CaseControl, Genders = ListEnumerations(URLs, MyScript, MyPython)
         
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
@@ -701,7 +701,7 @@ def FormatJson(D, Object, MyScript):
 
 
 # use this function to form jsons and store to submission db
-def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object, MyScript, **KeyWordParams):
+def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object, MyScript, MyPython, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, str, dict) -> None
     Form a json for Objects in the given Box and add it to Table by
@@ -751,7 +751,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object
                 D[Header[j]] = i[j]
             L.append(D)
         # create object-formatted jsons from each dict 
-        Jsons = [FormatJson(D, Object, MyScript) for D in L]
+        Jsons = [FormatJson(D, Object, MyScript, MyPython) for D in L]
         # add json back to table and update status
         for D in Jsons:
             # check if json is correctly formed (ie. required fields are present)
@@ -2650,7 +2650,7 @@ def FormAnalysesJson(args):
         RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, projects = args.projects)
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, args.mypython, projects = args.projects)
 
  
 
@@ -2671,7 +2671,7 @@ def FormSamplesJson(args):
         
         ## form json for samples in valid status add to table
         # update status valid -> submit if no error of keep status --> valid and record errorMessage
-        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'samples', args.myscript)
+        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'samples', args.myscript, args.mypython)
         
        
 # use this function to submit object metadata 
@@ -2773,6 +2773,7 @@ if __name__ == '__main__':
     FormAnalysesJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormAnalysesJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
     FormAnalysesJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
+    FormAnalysesJsonParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     FormAnalysesJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     FormAnalysesJsonParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
     FormAnalysesJsonParser.add_argument('--MaxFootPrint', dest='maxfootprint', default=15, type=int, help='Maximum footprint of non-registered files on the box\'s staging sever. Default is 15Tb')
