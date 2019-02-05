@@ -1719,9 +1719,6 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Foot
     Queue, Memory and UploadMode and update status to uploading. 
     '''
     
-    # parse the crdential file, get username and password for given box
-    UserName, MyPassword = ParseCredentials(CredentialFile, Box)
-                       
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
