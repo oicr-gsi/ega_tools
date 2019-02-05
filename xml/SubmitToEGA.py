@@ -1357,7 +1357,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
+def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript):
     '''
     (file, str, str, str, str, list, list, str, str, str, int, str) -> list
     Take the file with credential to connect to db, a given alias for Box in Table,
@@ -1612,7 +1612,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
         conn.close()
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py'):
+def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript):
     '''
     (str, dict, str, str, str, str, str, str, str, str, str, str, str) -> list
     Take a files dictionary with file information for a given alias in Box, the file with 
@@ -1762,7 +1762,7 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Foot
             conn.close()
             
             # upload files
-            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
+            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript)
             # check if upload launched properly for all files under that alias
             if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                 # record error message, reset status same uploading --> upload
