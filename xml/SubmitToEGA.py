@@ -1692,7 +1692,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    CheckCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
     # do not check job used to make destination directory
     JobNames = JobNames[1:]
     # put commands in shell script
@@ -2791,7 +2791,7 @@ if __name__ == '__main__':
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
     # check upload
-    CheckUploadParser = subparsers.add_parser('CheckUploadd', help='Check that upload is done for a given alias')
+    CheckUploadParser = subparsers.add_parser('CheckUpload', help='Check that upload is done for a given alias')
     CheckUploadParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckUploadParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
