@@ -1692,7 +1692,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    CheckCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
     # do not check job used to make destination directory
     JobNames = JobNames[1:]
     # put commands in shell script
