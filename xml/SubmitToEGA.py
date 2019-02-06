@@ -1453,7 +1453,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace):
+def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace, MyScript):
     '''
     (file, str, str, str, str, str, int) -> None
     Take a file with credentials to connect to Database, encrypt files of aliases
@@ -1506,7 +1506,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                     conn.close()
 
                     # encrypt and run md5sums on original and encrypted files and check encryption status
-                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem)
+                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem, MyScript)
                     # check if encription was launched successfully
                     if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                         # store error message, reset status encrypting --> encrypt
@@ -1711,7 +1711,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     return JobExits
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, FootPrintTable, Box, Queue, Mem, UploadMode, Max, MaxFootPrint):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, FootPrintTable, Box, Queue, Mem, UploadMode, Max, MaxFootPrint, MyScript):
     '''
     (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -2640,11 +2640,11 @@ def FormAnalysesJson(args):
 
         ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace)
+        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
         
         ## upload files and change the status upload -> uploading 
         ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint)
+        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
         
         ## remove files with uploaded status
         RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
