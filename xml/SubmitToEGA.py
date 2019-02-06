@@ -2755,7 +2755,9 @@ if __name__ == '__main__':
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
     CollectEnumParser.add_argument('--URL', dest='url', choices = ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
                                                                    'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/analysis_types'], help='URL with enumerations', required=True)
+                                                                   'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+                                                                   'https://ega-archive.org/submission-api/v1/enums/case_control',
+                                                                   'https://ega-archive.org/submission-api/v1/enums/genders'], help='URL with enumerations', required=True)
     CollectEnumParser.set_defaults(func=GrabEgaEnums)
 
     # form analyses to EGA       
