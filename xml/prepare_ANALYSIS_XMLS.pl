@@ -139,34 +139,41 @@ sub load_analysis_files{
 
 	my %hash;
 	
-	while(<$FH>){
-		chomp;
+	while(my $rec=<$FH>){
+		chomp $rec;
 		my %h;
-		@h{@headers}=split /\t/;
+		@h{@headers}=split /\t/,$rec;
 		
-		my $file=$h{file};
-		%{$hash{$file}}=%h;
+		my $alias=$h{alias};
+		delete $h{alias};
+		my $sample=$h{sample};
+		delete $h{sample};
 		
-
-
+		### check if that alias is associated with a different sample
+		if($hash{$alias}){
+			if($sample ne $hash{$alias}{sample}){
+				usage("error: one alias is associated with two different sample ids.  alias=$alias")
+			}
+			
+		}
+		$hash{$alias}{sample}=$sample;
+		push(@{$hash{$alias}{files}},\%h);
 	}
-	
 	return %hash;
 }
 
 
 
 my %xmlmerge;
-for my $file(sort keys %analysis_files){
+for my $alias(sort keys %analysis_files){
 	
-	print "generating xml for $file\n";
+	print "generating xml for $alias\n";
 	
 	my %info=%p;
-	$info{file}=$analysis_files{$file};
-	$info{file}{stage_path}=$opts{stage_path};
-	
-	
-	
+	$info{files}=$analysis_files{$alias};
+	$info{files}{stage_path}=$opts{stage_path};
+
+	#print Dumper(%info);exit;
 	
 	
 #	if(%reg && $reg{$sid}){
@@ -174,7 +181,7 @@ for my $file(sort keys %analysis_files){
 #	}
 	my $xml;
 		
-	$xml=analysis_xml($file,\%info,$opts{file_type});
+	$xml=analysis_xml($alias,\%info,$opts{file_type});
 	
 	#if($opts{file_type} eq "bam"){
 	#	$xml=analysis_bam_xml($file,\%info);
@@ -182,7 +189,7 @@ for my $file(sort keys %analysis_files){
 	#	$xml=analysis_vcf_xml($file,\%info);
 	#}
 	
-	my $xmlfile=$opts{out} . "/" . "$file.xml";
+	my $xmlfile=$opts{out} . "/" . "$alias.xml";
 	(open my $XML,">",$xmlfile) || die "unable to open xml file $xmlfile";
 	print $XML $xml->toString(1);
 	close $XML;		
@@ -194,7 +201,7 @@ for my $file(sort keys %analysis_files){
 		my @lines=split /\n/,$xmlstring;
 		shift @lines;
 		$xmlstring=join("\n",@lines);
-		$xmlmerge{$file}=$xmlstring;
+		$xmlmerge{$alias}=$xmlstring;
 	}
 	
 	
@@ -307,8 +314,7 @@ sub usage{
 	print "\nprepare_SAMPLE_XMLS.pl [options]\n";
 	print "Options are as follows:\n";
 	print "\t--file_table String/filename. Required. A file with a table describing files that have been uploaded and are ready to register\n";  
-	print "\t\tTable header must include : 'sample (EGAN accession or registered Alias, multiple samples should be colon separated), alias (for the analysis object),file,md5,encrypted_file,encrypted_md5\n";  
-	print "\t--file_type String/filename. Required.  Either bam or vcf\n";
+	print "\t\tTable header must include : 'sample (EGAN accession or registered Alias, multiple samples should be colon separated), alias (for the analysis object),file,type(bam, bai, vcf),md5,encrypted_file,encrypted_md5\n";  
 	print "\t--analysis String/filename. Required. A file with a table describing analysis parameters.  Key:value pairs\n";  
 	print "\t--reference String/filename. Optional. A file with accessions for th reference sequence. First line is the build name and accession\n";  
 	

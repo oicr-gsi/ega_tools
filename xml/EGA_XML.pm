@@ -446,7 +446,8 @@ sub experiment_xml_older{
 
 
 sub analysis_xml{
-	my($file,$info,$type)=@_;
+	my($alias,$info,$type)=@_;
+	
 	
 	
 	my $XML=XML::LibXML::Document->new('1.0','utf-8');
@@ -454,7 +455,7 @@ sub analysis_xml{
 	
 	
 	### INFORMATION ABOUT THE STUDY CENTRE AND SUBMISSION
-	$ANALYSIS->setAttribute(alias        	=>$$info{file}{alias});
+	$ANALYSIS->setAttribute(alias        	=>$alias);
 	$ANALYSIS->setAttribute(center_name  	=>$$info{study}{center_name});
 	$ANALYSIS->setAttribute(broker_name  	=>$$info{study}{broker_name});
 	$ANALYSIS->setAttribute(analysis_center =>$$info{analysis}{center});
@@ -481,7 +482,7 @@ sub analysis_xml{
 	### for each sample in teh readgroups information
 	### EGAN can be specified with multiple identifiers, each will be a sample reference.  these should be colon separated
 	
-	my $EGANs=$$info{file}{sample} || "noacc";
+	my $EGANs=$$info{files}{sample} || "noacc";
 	my @EGANs=split /:/,$EGANs;
 	for my $EGAN(@EGANs){
 		my $SAMPLE_REF=$XML->createElement("SAMPLE_REF");
@@ -501,7 +502,7 @@ sub analysis_xml{
 	$STANDARD->setAttribute(accession=>$$info{analysis}{ref}{accession});
 	$ASSEMBLY->appendChild($STANDARD);
 	$ATYPE->appendChild($ASSEMBLY);
-
+    
 	for my $seqid(sort keys %{$$info{analysis}{ref}{chromosomes}}){
 		my $acc=$$info{analysis}{ref}{chromosomes}{$seqid};
 		my $SEQUENCE=$XML->createElement("SEQUENCE");
@@ -514,13 +515,16 @@ sub analysis_xml{
 	$ANALYSIS->appendChild($ANALYSIS_TYPE);
 
 	my $FILES=$XML->createElement("FILES");
-	my $FILE=$XML->createElement("FILE");
-	$FILE->setAttribute(filename=>$$info{file}{stage_path} . "/". $$info{file}{encrypted_file});
-	$FILE->setAttribute(filetype=>$type);
-	$FILE->setAttribute(checksum_method=>"MD5");
-	$FILE->setAttribute(checksum=>$$info{file}{encrypted_md5});
-	$FILE->setAttribute(unencrypted_checksum=>$$info{file}{md5});
-	$FILES->appendChild($FILE);
+	
+	for my $file(@{$$info{files}{files}}){
+		my $FILE=$XML->createElement("FILE");
+		$FILE->setAttribute(filename=>$$info{files}{stage_path} . "/". $$file{encrypted_file});
+		$FILE->setAttribute(filetype=>$$file{type});
+		$FILE->setAttribute(checksum_method=>"MD5");
+		$FILE->setAttribute(checksum=>$$file{encrypted_md5});
+		$FILE->setAttribute(unencrypted_checksum=>$$file{md5});
+		$FILES->appendChild($FILE);
+	}
 	$ANALYSIS->appendChild($FILES);
 
 	my $ANALYSIS_ATTRIBUTES=$XML->createElement("ANALYSIS_ATTRIBUTES");
