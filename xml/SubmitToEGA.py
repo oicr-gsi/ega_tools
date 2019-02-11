@@ -334,6 +334,61 @@ def RecordMessage(CredentialFile, DataBase, Table, Box, Alias, Message, Status):
         cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Message, Alias, Box))
     conn.commit()
     conn.close()
+ 
+    
+# use this function to delete objects with VALIDATED_WITH_ERRORS status    
+def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Object, Portal):
+    '''
+    (str, str, str, str, str, str) - > None
+    Connect to Database using CredentialFile, extract all aliases with submit status
+    and Box from Table, connect to the API and delete the corresponding Object
+    if submissionStatus is VALIDATED_WITH ERRORS 
+    '''
+
+    # grab all aliases with submit status
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        # extract all information 
+        Data = cur.fetchall()
+    except:
+        Data = []
+    conn.close()
+    
+    # check if alias with submit status
+    if len(Data) != 0:
+        # extract the aliases
+        Aliases = [i[0] for i in Data]
+    
+        # connect to EGA and get a token. parse credentials to get userName and Password
+        UserName, MyPassword = ParseCredentials(CredentialFile, Box)
+        # create json with credentials
+        data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
+        # get the adress of the submission portal
+        if Portal[-1] == '/':
+            URL = Portal[:-1]
+        else:
+            URL = Portal
+
+        # connect to the API
+        Login = requests.post(URL + '/login', data=data)
+        # get a token
+        Token = Login.json()['response']['result'][0]['session']['sessionToken']
+        headers = {"Content-type": "application/json", "X-Token": Token}
+        # retrieve all objects with VALIDATED_WITH ERRORS status
+        response = requests.get(URL + '/{0}?status=VALIDATED_WITH_ERRORS&skip=0&limit=0'.format(Object), headers=headers, data=data)
+        
+        # loop over aliases
+        for i in range(len(Aliases)):
+            ObjectId = ''
+            for j in response.json()['response']['result']:
+                # check if alias with validated_with_errors status
+                if j["alias"] == Aliases[i]:
+                    ObjectId = j['id']
+                    if ObjectId != '':
+                        # delete object
+                        requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
     
     
 # use this function to register objects
