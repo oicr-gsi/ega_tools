@@ -3024,8 +3024,9 @@ def SubmitMetadata(args):
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
-                  
-        ## submit analyses with submit status                
+        # clean up objects with VALIDATED_WITH_ERRORS submission status
+        DeleteValidatedObjectsWithErrors(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
+        # submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
 
     
