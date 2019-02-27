@@ -196,125 +196,6 @@ def ListEnumerations(URLs, MyScript, MyPython):
     return Enums
 
 
-## use this function to register objects
-#def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
-#    '''
-#    (file, str, str, str, str, str) -> None
-#    Take the file with credentials to connect to the submission database, 
-#    extract the json for each Object in Table and register the objects
-#    in EGA BOX using the submission Portal. 
-#    '''
-#    
-#    # pull json for objects with ready Status for given box
-#    conn = EstablishConnection(CredentialFile, DataBase)
-#    cur = conn.cursor()
-#    cur.execute('SELECT {0}.Json FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-#    conn.close()
-#    
-#    # extract all information 
-#    Data = cur.fetchall()
-#    # check that objects in submit mode do exist
-#    if len(Data) != 0:
-#        # make a list of jsons
-#        L = [json.loads(i[0].replace("'", "\"")) for i in Data]
-#        assert len(L) == len(Data)
-#
-#        # connect to EGA and get a token
-#        # parse credentials to get userName and Password
-#        UserName, MyPassword = ParseCredentials(CredentialFile, Box)
-#                    
-#        # get the token
-#        data = {"username": UserName, "password": MyPassword, "loginType": "submitter"}
-#        # get the adress of the submission portal
-#        if Portal[-1] == '/':
-#            URL = Portal[:-1]
-#        else:
-#            URL = Portal
-#        Login = requests.post(URL + '/login', data=data)
-#        # check that response code is OK
-#        if Login.status_code == requests.codes.ok:
-#            # response is OK, get Token
-#            Token = Login.json()['response']['result'][0]['session']['sessionToken']
-#            
-#            # open a submission for each object
-#            for J in L:
-#                headers = {"Content-type": "application/json", "X-Token": Token}
-#                submissionJson = {"title": "{0} submission", "description": "opening a submission for {0} {1}".format(Object, J["alias"])}
-#                OpenSubmission = requests.post(URL + '/submissions', headers=headers, data=str(submissionJson).replace("'", "\""))
-#                # check if submission is successfully open
-#                if OpenSubmission.status_code == requests.codes.ok:
-#                    # get submission Id
-#                    submissionId = OpenSubmission.json()['response']['result'][0]['id']
-#                    # create object
-#                    ObjectCreation = requests.post(URL + '/submissions/{0}/{1}'.format(submissionId, Object), headers=headers, data=str(J).replace("'", "\""))
-#                    # check response code
-#                    if ObjectCreation.status_code == requests.codes.ok:
-#                        # validate, get status (VALIDATED or VALITED_WITH_ERRORS) 
-#                        ObjectId = ObjectCreation.json()['response']['result'][0]['id']
-#                        submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
-#                        assert submissionStatus == 'DRAFT'
-#                        # store submission json and status in db table
-#                        conn = EstablishConnection(CredentialFile, DataBase)
-#                        cur = conn.cursor()
-#                        cur.execute('UPDATE {0} SET {0}.submissionStatus=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, submissionStatus, J["alias"], Box))
-#                        conn.commit()
-#                        conn.close()
-#                        # validate object
-#                        ObjectValidation = requests.put(URL + '/{0}/{1}?action=VALIDATE'.format(Object, ObjectId), headers=headers)
-#                        # check code and validation status
-#                        if ObjectValidation.status_code == requests.codes.ok:
-#                            # get object status
-#                            ObjectStatus=ObjectValidation.json()['response']['result'][0]['status']
-#                            # record error messages
-#                            errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['validationErrorMessages'])
-#                            # store error message and status in db table
-#                            conn = EstablishConnection(CredentialFile, DataBase)
-#                            cur = conn.cursor()
-#                            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.submissionStatus=\"{2}\" WHERE {0}.alias="\{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, str(errorMessages), ObjectStatus, J["alias"], Box))
-#                            conn.commit()
-#                            conn.close()
-#                            
-#                            # check if object is validated
-#                            if ObjectStatus == 'VALIDATED':
-#                                # submit object
-#                                ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
-#                                # check if successfully submitted
-#                                if ObjectSubmission.status_code == requests.codes.ok:
-#                                    # record error messages
-#                                    errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['submissionErrorMessages'])
-#                                    # store submission json and status in db table
-#                                    conn = EstablishConnection(CredentialFile, DataBase)
-#                                    cur = conn.cursor()
-#                                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias="\{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, errorMessages, J["alias"], Box))
-#                                    conn.commit()
-#                                    conn.close()
-#                                    
-#                                    # check status
-#                                    ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']
-#                                    if ObjectStatus == 'SUBMITTED':
-#                                        # get the receipt, and the accession id
-#                                        Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission.json()['response']['result'][0]['egaAccessionId']
-#                                        # store the date it was submitted
-#                                        Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-#                                        # add Receipt, accession and time to table and change status
-#                                        conn = EstablishConnection(CredentialFile, DataBase)
-#                                        cur = conn.cursor()
-#                                        cur.execute('UPDATE {0} SET {0}.Receipt=\"{1}\", {0}.egaAccessionId=\"{2}\", {0}.Status=\"{3}\", {0}.submissionStatus=\"{3}\", {0}.CreationTime=\"{4}\" WHERE {0}.alias=\"{5}\" AND {0}.egaBox=\"{6}\"'.format(Table, Receipt, egaAccessionId, ObjectStatus, Time, J["alias"], Box))
-#                                        conn.commit()
-#                                        conn.close()
-#                                    else:
-#                                        # delete sample
-#                                        ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
-#                            else:
-#                                #delete sample
-#                                ObjectDeletion = requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
-#            # disconnect by removing token
-#            response = requests.delete(URL + '/logout', headers={"X-Token": Token})     
-
-
-#####################
-
-
 # use this function to record an error message for a given alias
 def RecordMessage(CredentialFile, DataBase, Table, Box, Alias, Message, Status):
     '''
@@ -360,7 +241,7 @@ def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Objec
     if len(Data) != 0:
         # extract the aliases
         Aliases = [i[0] for i in Data]
-    
+        
         # connect to EGA and get a token. parse credentials to get userName and Password
         UserName, MyPassword = ParseCredentials(CredentialFile, Box)
         # create json with credentials
@@ -387,9 +268,12 @@ def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Objec
                 if j["alias"] == Aliases[i]:
                     ObjectId = j['id']
                     if ObjectId != '':
+                        print(Aliases[i], ObjectId)
                         # delete object
                         requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
-    
+        # disconnect from api
+        requests.delete(URL + '/logout', headers={"X-Token": Token})     
+
     
 # use this function to register objects
 def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
@@ -432,131 +316,54 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
 
         # connect to API and open a submission for each object
         for J in L:
-            
-            print(J["alias"])
-            
             Login = requests.post(URL + '/login', data=data)
-            
-            print('login', Login.status_code)
-            
-            
             # check that response code is OK
             if Login.status_code == requests.codes.ok:
                 # response is OK, get Token
                 try:
                     Token = Login.json()['response']['result'][0]['session']['sessionToken']
-                    print('try', Token) 
-                
                 except:
-                    print('cannot obtain token')
                     # record error message
                     RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain a token', 'Error')                
                 else:
-                    
-                    print('got token', Token)
-                    
-                    
                     # open a submission with token
                     headers = {"Content-type": "application/json", "X-Token": Token}
-                    
-                    
-                    print(headers)
-                    
-                    
                     submissionJson = {"title": "{0} submission", "description": "opening a submission for {0} {1}".format(Object, J["alias"])}
                     OpenSubmission = requests.post(URL + '/submissions', headers=headers, data=str(submissionJson).replace("'", "\""))
-                    
-                    print('opened a submission', OpenSubmission.status_code)
-                    
-                    
                     # check if submission is successfully open
                     if OpenSubmission.status_code == requests.codes.ok:
                         try:
                             # get submission Id
                             submissionId = OpenSubmission.json()['response']['result'][0]['id']
-                            print('try', submissionId)
                         except:
-                            print('Cannot obtain a submissionId')
-                            
                             # record error message
                             RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain a submissionId', 'Error') 
                         else:
-                            
-                            
-                            print('opened a submission', submissionId)
-                            
-                            
-                            
                             # create object
                             ObjectCreation = requests.post(URL + '/submissions/{0}/{1}'.format(submissionId, Object), headers=headers, data=str(J).replace("'", "\""))
-                            
-                            
-                            print('created object', ObjectCreation.status_code)
-                            
-                            
-                            
                             # check response code
                             if ObjectCreation.status_code == requests.codes.ok:
                                 # validate, get status (VALIDATED or VALITED_WITH_ERRORS) 
                                 try:
                                     ObjectId = ObjectCreation.json()['response']['result'][0]['id']
                                     submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
-                                
-                                    print('try', ObjectId)
-                                    print('try', submissionStatus)
-                                
                                 except:
                                     # record error message
                                     RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot create an object', 'Error') 
-                                    
-                                    print('Cannot create an object')
-                                
-                                
                                 else:
-                                    
-                                    
-                                    print('created an object', ObjectId, submissionStatus)
-                                    
-                                    
-                                    
                                     # store submission json and status (DRAFT) in db table
                                     RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], submissionStatus, 'Status') 
                                     # validate object
                                     ObjectValidation = requests.put(URL + '/{0}/{1}?action=VALIDATE'.format(Object, ObjectId), headers=headers)
-                                    
-                                    print('validated object', ObjectValidation.status_code)
-                                    
-                                    
-                                    
                                     # check code and validation status
                                     if ObjectValidation.status_code == requests.codes.ok:
-                                        
-                                        print('validation json')
-                                        print(ObjectValidation.json())
-                                        
-                                        
                                         # get object status
                                         try:
                                             ObjectStatus = ObjectValidation.json()['response']['result'][0]['status']
                                             errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['validationErrorMessages'])
-                                        
-                                            print('try', ObjectStatus)
-                                            print('try', errorMessages)
-                                        
-                                        
-                                        
                                         except:
                                             RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain validation status', 'Error')
-                                        
-                                            print('Cannot obtain validation status')
-                                        
-                                        
-                                        
                                         else:
-                                            
-                                            print('validated object', J["alias"], ObjectStatus, errorMessages)
-                                            
-                                            
                                             # record error messages
                                             RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], errorMessages, 'Error')
                                             # record object status
@@ -565,34 +372,16 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                             if ObjectStatus == 'VALIDATED':
                                                 # submit object
                                                 ObjectSubmission = requests.put(URL + '/{0}/{1}?action=SUBMIT'.format(Object, ObjectId), headers=headers)
-                                                
-                                                
-                                                print('sunmitted object', ObjectSubmission.status_code)
-                                                
-                                                
-                                                
                                                 # check if successfully submitted
                                                 if ObjectSubmission.status_code == requests.codes.ok:
                                                     # get status 
                                                     try:
                                                         errorMessages = CleanUpError(ObjectSubmission.json()['response']['result'][0]['submissionErrorMessages'])
                                                         ObjectStatus = ObjectSubmission.json()['response']['result'][0]['status']                
-                                                    
-                                                        print('try', ObjectStatus, errorMessages)
-                                                    
-                                                    
                                                     except:
                                                         # record error message
                                                         RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain submission status', 'Error')
-                                                    
-                                                        print('Cannot obtain submission status')
-                                                    
-                                                    
                                                     else:
-                                                        
-                                                        print('submitted object', J["alias"], ObjectStatus, errorMessages)
-                                                        
-                                                        
                                                         # record error messages and status
                                                         RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], errorMessages, 'Error')
                                                         # record object status
@@ -602,23 +391,10 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                                             # get the receipt, and the accession id
                                                             try:
                                                                 Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission.json()['response']['result'][0]['egaAccessionId']
-                                                            
-                                                                print('try', egaAccessionId)
-                                                            
-                                                            
                                                             except:
                                                                 # record error message
                                                                 RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain receipt and/or accession Id', 'Error')
-                                                            
-                                                                print('Cannot obtain receipt and/or accession Id')
-                                                                
-                                                            
                                                             else:
-                                                                
-                                                                print('submission successfull', J["alias"], egaAccessionId)
-                                                                
-                                                                
-                                                                
                                                                 # store the date it was submitted
                                                                 Time = time.strftime('%Y-%m-%d', time.localtime(time.time()))
                                                                 # add Receipt, accession and time to table and change status
@@ -628,28 +404,14 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                                                 conn.commit()
                                                                 conn.close()
                                                         else:
-                                                            
-                                                            print('deleting object because status is not submitted')
-                                                            
                                                             # delete object
                                                             requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
                                             else:
-                                                
-                                                print('deleting object because status is not validated')
-                                                
-                                                
                                                 #delete object
                                                 requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
                     # disconnect by removing token
-                    
-                    
-                    print('closing submission')
-                    
-                    
                     requests.delete(URL + '/logout', headers={"X-Token": Token})     
 
-
-###########################
 
 
 # use this function to extract ega accessions from metadata database
