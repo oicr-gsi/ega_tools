@@ -2240,6 +2240,29 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
                         # remove md5sum
                         os.system('rm {0}'.format(b))
 
+#################
+
+## functions specific to datasets
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################
+
+
 
 ## functions specific to Samples objects
 
@@ -2353,6 +2376,150 @@ def GrabEgaEnums(args):
             Enum[i['value']] = i['tag']
     print(Enum)    
     
+
+# use this function to add data to the dataset table
+def AddDatasetInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add dataset information
+    to the Dataset Table of the EGAsub database if samples are not already registered
+    Precondition: can only add infor for a single dataset at one time
+    '''
+    
+    # check if accessions are valid
+    # check if accessions are provided as file or list in the command
+    if args.accessionfile:
+        # check that path is valid
+        if os.path.isfile(args.accessionfile):
+            # accessions are provided by input file
+            infile = open(args.accessionfile)
+            AccessionIds = infile.read().rstrip().split('\n')
+            infile.close()
+        else:
+            print('Provide a valid file with accessions')
+    elif args.accessions:
+        # accessions are provided from the command
+        AccessionIds = args.accessions
+    else:
+        # provide empty list
+        AccessionIds = []
+    
+    # check if accessions contains information
+    if len(AccessionIds) == 0:
+        print('Accessions are required')
+    else:
+        # record dataset information only if Runs and/or Analyses accessions have been provided
+        if False in list(map(lambda x: x.startswith('EGAZ') or x.startswith('EGAR'), AccessionIds)):
+            print('Accessions should start with EGAR or EGAZ')
+    
+    # check if dataset links are provided
+    datasetslinks = []
+    ValidURLs = True
+    if args.datasetslinks:
+        # check if valid file
+        if os.path.isfile(args.datasetslinks):
+            infile = open(args.datasetslinks)
+            for line in infile:
+                if 'https' in line:
+                    line = line.rstrip().split()
+                    datasetslinks.append({"label": line[0], "url": line[1]})
+                else:
+                    ValidURLs = False
+            infile.close()
+        else:
+            print('Provide valid file with URLs')
+    
+    # check if attributes are provided
+    attributes = []
+    ValidAttributes = True
+    if args.attributes:
+        # check if valid file
+        if os.path.isfile(args.attributes):
+            infile = open(args.attributes)
+            for line in infile:
+                line = line.rstrip()
+                if line != '':
+                    line = line.split('\t')
+                    if len(line) == 2:
+                        attributes.append({"tag": line[0], "value": line[1]})
+                    else:
+                        ValidAttributes = False
+            infile.close()
+        else:
+            print('Provide valid attributes file')
+    
+    # check if provided data is valid
+    if ValidAttributes and ValidURLs and len(AccessionIds) != 0 and False not in list(map(lambda x: x.startswith('EGAZ') or x.startswith('EGAR'), AccessionIds)):
+        # create table if table doesn't exist
+        Tables = ListTables(args.credential, args.subdb)
+        # connect to submission database
+        conn = EstablishConnection(args.credential, args.subdb)
+        cur = conn.cursor()
+        if args.table not in Tables:
+            Fields = ["alias", "datasetTypeIds", "policyId", "runsReferences",
+                      "analysisReferences", "title", "description", "datasetLinks",
+                      "attributes", "Json", "submissionStatus", "errorMessages", "Receipt",
+                      "CreationTime", "egaAccessionId", "egaBox", "attributes", "Status"]
+            # format colums with datatype
+            Columns = []
+            for i in range(len(Fields)):
+                if Fields[i] == 'Status':
+                    Columns.append(Fields[i] + ' TEXT NULL')
+                elif Fields[i] in ['Json', 'Receipt']:
+                    Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+                elif Fields[i] in ['runsReferences', 'analysisReferences']:
+                    Columns.append(Fields[i] + ' LONGTEXT NULL,')
+                elif Fields[i] == 'alias':
+                    Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+                else:
+                    Columns.append(Fields[i] + ' TEXT NULL,')
+            # convert list to string    
+            Columns = ' '.join(Columns)        
+            # create table with column headers
+            cur = conn.cursor()
+            cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+            conn.commit()
+        else:
+            # get the column headers from the table
+            cur.execute("SELECT * FROM {0}".format(args.table))
+            Fields = [i[0] for i in cur.description]
+    
+        # create a string with column headers
+        ColumnNames = ', '.join(Fields)
+    
+        # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+        # create a dict {alias: accession}
+        cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+        Recorded = [i[0] for i in cur]
+        # pull down dataset alias and egaId from metadata db, alias should be unique
+        # create a dict {alias: accession} 
+        Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+        # check if alias is recorded or registered
+        if args.alias in Recorded:
+            # skip, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(args.alias, args.box))
+        elif args.alias in Registered:
+            # skip, already registered in EGA
+            print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
+        else:
+            # sort Runs and Analyses Id
+            runsReferences = [i for i in AccessionIds if i.startswith('EGAR')]
+            analysisReferences = [i for i in AccessionIds if i.startswith('EGAZ')]
+            
+            # make a list of data ordered according to columns
+            D = {"alias": args.alias, "datasetTypeIds": ';'.join(args.datasetTypeIds),
+                    "policyId": args.policy, "runsReferences": ';'.join(runsReferences),
+                    "analysisReferences": ';'.join(analysisReferences), "title": args.title,
+                    "description": args.description, "datasetLinks": ';'.join(datasetslinks),
+                    "attributes": ';'.join(attributes)}            
+            # list values according to the table column order
+            L = [D[field] if field in D else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+        conn.close()            
 
    
 # use this function to add data to the sample table
@@ -2853,6 +3020,24 @@ if __name__ == '__main__':
     AddAttributesProjectsParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     AddAttributesProjectsParser.add_argument('-d', '--DataType', dest='datatype', choices=['Projects', 'Attributes'], help='Add Projects or Attributes infor to db')
     AddAttributesProjectsParser.set_defaults(func=AddAnalysesAttributesProjects)
+    
+    # add datasets to Datasets Table
+    AddDatasetsParser = subparsers.add_parser('AddDatasets', help ='Add datasets information to Datasets Table')
+    AddDatasetsParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddDatasetsParser.add_argument('-t', '--Table', dest='table', default='Datasets', help='Datasets table. Default is Datasets')
+    AddDatasetsParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
+    AddDatasetsParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    AddDatasetsParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    AddDatasetsParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the dataset', required=True)
+    AddDatasetsParser.add_argument('-p', '--Policy', dest='policy', help='Policy Id. Must start with EGAP', required=True)
+    AddDatasetsParser.add_argument('--Description', dest='description', help='Description. Will be published on the EGA website', required=True)
+    AddDatasetsParser.add_argument('--Title', dest='title', help='Short title. Will be published on the EGA website', required=True)
+    AddDatasetsParser.add_argument('--DatasetId', dest='datasetTypeIds', nargs='*', help='Dataset Id. A single string or a list. Controlled vocabulary available from EGA enumerations https://ega-archive.org/submission-api/v1/enums/dataset_types', required=True)
+    AddDatasetsParser.add_argument('--Accessions', dest='accessions', nargs='*', help='Analyses accession Ids. A single string or a list of EGAR and/or EGAZ accessions. Can also be provided as a list using args.accessionfile')
+    AddDatasetsParser.add_argument('--AccessionFile', dest='accessionfile', help='File with analyses accession Ids. Must contains EGAR and/or EGAZ accessions. Can also be provided as a command parameter but accessions passed in a file take precedence')
+    AddDatasetsParser.add_argument('--DatasetsLinks', dest='datasetslinks', help='Optional file with dataset URLs')
+    AddDatasetsParser.add_argument('--Attributes', dest='attributes', help='Optional file with attributes')
+    AddDatasetsParser.set_defaults(func=AddDatasetInfo)
     
     # collect enumerations from EGA
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
