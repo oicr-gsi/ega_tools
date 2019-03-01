@@ -185,14 +185,25 @@ def FormatData(L):
 
 
 # use this function to list enumerations
-def ListEnumerations(URLs, MyScript, MyPython):
+def ListEnumerations(MyScript, MyPython):
     '''
-    (list, str, str) -> list
-    Take a list of URLs for various enumerations, the path to the python program,
-    and the path to the python script and return a list of dictionaries, one for each enumeration
+    (str, str) -> list
+    Take a the path to the python program, and the path to the python script and
+    return a dictionary with enumeration as key and corresponding dictionary of metadata as value
+    Precondition: the list of enumerations available from EGA is hard-coded
     '''
     
-    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
+    # list all enumerations available from EGA
+    url = 'https://ega-archive.org/submission-api/v1/enums/'
+    L = ['analysis_file_types', 'analysis_types', 'case_control', 'dataset_types', 'experiment_types',
+         'file_types', 'genders', 'instrument_models', 'library_selections', 'library_sources',
+         'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types']
+    URLs = [os.path.join(url, i for i in L)]
+
+    # create a dictionary to store each enumeration
+    Enums = {}
+    for URL in URLs:
+        Enums[os.path.basename(URLs[i]).title().replace('_', '')] = json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\""))
     return Enums
 
 
@@ -453,7 +464,8 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
              'https://ega-archive.org/submission-api/v1/enums/experiment_types',
              'https://ega-archive.org/submission-api/v1/enums/analysis_types',
              'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders']
+             'https://ega-archive.org/submission-api/v1/enums/genders',
+             'https://ega-archive.org/submission-api/v1/enums/dataset_types']
     
     Enums = ListEnumerations(URLs, MyScript, MyPython)
     FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
@@ -589,6 +601,202 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
             assert d['alias'] not in D
             D[d['alias']] = Error
     return D
+
+
+#########################
+
+
+# use this function to check information in Tables    
+def IsDatasetInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPython):
+    '''
+    (str, str, str, str, str, str, str, str, dict) -> dict
+    Extract information from DataBase Table, AttributesTable and also from ProjectsTable
+    if Object is analyses using credentials in file, check if information is valid and return a dict
+    with error message for each alias in Table
+    '''
+
+    # create a dictionary {alias: error}
+    D = {}
+
+    # get the enumerations
+    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
+             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
+             'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+             'https://ega-archive.org/submission-api/v1/enums/case_control',
+             'https://ega-archive.org/submission-api/v1/enums/genders',
+             'https://ega-archive.org/submission-api/v1/enums/dataset_types']
+    
+    
+    'https://ega-archive.org/submission-api/v1/enums/
+    
+    
+    'analysis_file_types', 'analysis_types', 'case_control', 'dataset_types',
+    'experiment_types', 'file_types', 'genders', 'instrument_models', 'library_selections',
+    'library_sources', 'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types'
+    
+    
+    
+    
+    
+    
+    Enums = ListEnumerations(URLs, MyScript, MyPython)
+    # create a dictionary to store the enumerations for each data type
+    Enumerations = {}
+    for i in range(len(URLs)):
+        Enumerations[os.path.basename(URLs[i]).title().replace('_', '')] = Enums[i]
+    
+    # connect to db
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()      
+    # get required information
+    if Object == 'analyses':
+        if datatype == 'analyses':
+            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
+            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        elif datatype == 'attributes':
+            Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
+            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+        elif datatype == 'projects':
+            if datatype in KeyWordParams:
+                ProjectsTable = KeyWordParams[datatype]
+            else:
+                ProjectsTable = 'Empty'
+            Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
+            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box)
+    elif Object == 'samples':
+        if datatype == 'samples':
+            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
+            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        elif datatype == 'attributes':
+            Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
+            {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+        
+    # extract data 
+    try:
+        cur.execute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
+    conn.close()
+    
+    # check info
+    if len(Data) != 0:
+        if Object == 'analyses':
+            if datatype == 'analyses':
+                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+            elif datatype == 'attributes':
+                Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
+                Required = ['title', 'description', 'genomeId', 'StagePath']
+            elif datatype == 'projects':
+                Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+                Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+        elif Object == 'samples':
+            if datatype == 'samples':
+                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+            elif datatype == 'attributes':
+                Keys = ['alias', 'title', 'description', 'attributes']
+                Required = ['title', 'description']
+            
+        for i in range(len(Data)):
+            # set up boolean. update if missing values
+            Missing = False
+            # create a dict with all information
+            d = {Keys[j]: Data[i][j] for j in range(len(Keys))}
+            # create an error message
+            Error = []
+            # check if information is valid
+            for key in Keys:
+                if key in Required:
+                    if d[key] in ['', 'NULL', None]:
+                        Missing = True
+                        Error.append(key)
+                
+                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
+                if key == 'egaBox':
+                    if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
+                        Missing = True
+                        Error.append(key)
+                # check files
+                if key == 'files':
+                    files = json.loads(d['files'].replace("'", "\""))
+                    for filePath in files:
+                        # check if file is valid
+                        if os.path.isfile(filePath) == False:
+                            Missing = True
+                            Error.append('files')
+                        # check validity of file type
+                        if files[filePath]['fileTypeId'].lower() not in FileTypes:
+                            Missing = True
+                            Error.append('fileTypeId')
+                # check study Id
+                if key == 'studyId':
+                    if 'EGAS' not in d[key]:
+                        Missing = True
+                        Error.append(key)
+                # check enumerations
+                if key == 'experimentTypeId':
+                    if d['experimentTypeId'] not in ExperimentTypes:
+                        Missing = True
+                        Error.append(key)
+                if key == 'analysisTypeId':
+                    if d['analysisTypeId'] not in AnalysisTypes:
+                        Missing = True
+                        Error.append(key)
+                if key == 'caseOrControlId':
+                    if d['caseOrControlId'] not in CaseControl:
+                        Missing = True
+                        Error.append(key)
+                if key == 'genderId':
+                    if d['genderId'] not in Genders:
+                        Missing = True
+                        Error.append(key)
+                # check attributes of attributes table
+                if key == 'attributes' and datatype == 'attributes':
+                    if d['attributes'] not in ['', 'NULL', None]:
+                        # check format of attributes
+                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
+                        for k in attributes:
+                            # do not allow keys other than tag, unit and value
+                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
+                                Missing = True
+                                Error.append(key)
+                            # tag and value are required keys
+                            if 'tag' not in k.keys() and 'value' not in k.keys():
+                                Missing = True
+                                Error.append(key)
+
+            # check if object has missing/non-valid information
+            if Missing == True:
+                 # record error message and update status ready --> dead
+                 Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
+            elif Missing == False:
+                Error = 'None'
+            assert d['alias'] not in D
+            D[d['alias']] = Error
+    return D
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###########################
 
 
 
@@ -3041,11 +3249,20 @@ if __name__ == '__main__':
     
     # collect enumerations from EGA
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
-    CollectEnumParser.add_argument('--URL', dest='url', choices = ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/case_control',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/genders'], help='URL with enumerations', required=True)
+    CollectEnumParser.add_argument('--URL', dest='url', choices=['https://ega-archive.org/submission-api/v1/enums/path/enums/analysis_file_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/case_control',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/dataset_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/experiment_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/file_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/genders',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/instrument_models',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/library_selections',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/library_sources',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/library_strategies',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/reference_chromosomes',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/reference_genomes',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/study_types'], help='URL with enumerations', required=True)
     CollectEnumParser.set_defaults(func=GrabEgaEnums)
 
     # form analyses to EGA       
