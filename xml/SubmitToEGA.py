@@ -185,14 +185,25 @@ def FormatData(L):
 
 
 # use this function to list enumerations
-def ListEnumerations(URLs, MyScript, MyPython):
+def ListEnumerations(MyScript, MyPython):
     '''
-    (list, str, str) -> list
-    Take a list of URLs for various enumerations, the path to the python program,
-    and the path to the python script and return a list of dictionaries, one for each enumeration
+    (str, str) -> list
+    Take a the path to the python program, and the path to the python script and
+    return a dictionary with enumeration as key and corresponding dictionary of metadata as value
+    Precondition: the list of enumerations available from EGA is hard-coded
     '''
     
-    Enums = [json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\"")) for URL in URLs]
+    # list all enumerations available from EGA
+    url = 'https://ega-archive.org/submission-api/v1/enums/'
+    L = ['analysis_file_types', 'analysis_types', 'case_control', 'dataset_types', 'experiment_types',
+         'file_types', 'genders', 'instrument_models', 'library_selections', 'library_sources',
+         'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types']
+    URLs = [os.path.join(url, i) for i in L]
+
+    # create a dictionary to store each enumeration
+    Enums = {}
+    for URL in URLs:
+        Enums[os.path.basename(URL).title().replace('_', '')] = json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\""))
     return Enums
 
 
@@ -437,7 +448,7 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
 
 
 # use this function to check information in Tables    
-def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, datatype, Object, MyScript, MyPython, **KeyWordParams):
+def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, str, dict) -> dict
     Extract information from DataBase Table, AttributesTable and also from ProjectsTable
@@ -449,41 +460,36 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
     D = {}
 
     # get the enumerations
-    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-             'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-             'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders']
+    Enums = ListEnumerations(MyScript, MyPython)
     
-    Enums = ListEnumerations(URLs, MyScript, MyPython)
-    FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
-
     # connect to db
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()      
     # get required information
     if Object == 'analyses':
-        if datatype == 'analyses':
-            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
-            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
+        if 'attributes' in KeyWordParams:
+            AttributesTable = KeyWordParams['attributes']
             Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
             FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        elif datatype == 'projects':
-            if datatype in KeyWordParams:
-                ProjectsTable = KeyWordParams[datatype]
-            else:
-                ProjectsTable = 'Empty'
+        elif 'projects' in KeyWordParams:
+            ProjectsTable = KeyWordParams['projects']
             Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box)
+            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
+        else:
+            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
+            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'samples':
-        if datatype == 'samples':
-            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
-            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
+        if 'attributes' in KeyWordParams:
+            AttributesTable = KeyWordParams['attributes']
             Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
             {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        
+        else:
+            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
+            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'datasets':
+        Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
+        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
+    
     # extract data 
     try:
         cur.execute(Cmd)
@@ -495,23 +501,27 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
     # check info
     if len(Data) != 0:
         if Object == 'analyses':
-            if datatype == 'analyses':
-                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-            elif datatype == 'attributes':
+            if 'attributes' in KeyWordParams:
                 Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
                 Required = ['title', 'description', 'genomeId', 'StagePath']
-            elif datatype == 'projects':
+            elif 'projects' in KeyWordParams:
                 Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
                 Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+            else:
+                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
         elif Object == 'samples':
-            if datatype == 'samples':
-                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-            elif datatype == 'attributes':
+            if 'attributes' in KeyWordParams:
                 Keys = ['alias', 'title', 'description', 'attributes']
                 Required = ['title', 'description']
-            
+            else:
+                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+        elif Object == 'datasets':
+            Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
+                    'description', 'datasetLinks', 'attributes', 'egaBox']     
+            Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
+    
         for i in range(len(Data)):
             # set up boolean. update if missing values
             Missing = False
@@ -525,7 +535,20 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
                     if d[key] in ['', 'NULL', None]:
                         Missing = True
                         Error.append(key)
-                
+                # check that references are provided
+                if 'runsReferences' in d and 'analysisReferences' in d:
+                    # at least runsReferences or analysesReferences should include some accessions
+                    if d['runsReferences'] in ['', 'NULL', None] and d['analysisReferences'] in ['', 'NULL', None]:
+                        Missing = True
+                        Error.append('References')
+                    if d['runsReferences'] not in ['', 'NULL', None]:
+                        if False in list(map(lambda x: x.startswith('EGAR'), d['runsReferences'].split(';'))):
+                            Missing = True
+                            Error.append('runsReferences')
+                    if d['analysisReferences'] not in ['', 'NULL', None]:
+                        if False in list(map(lambda x: x.startswith('EGAZ'), d['analysisReferences'].split(';'))):
+                            Missing = True
+                            Error.append('analysisReferences')
                 # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
                 if key == 'egaBox':
                     if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
@@ -540,7 +563,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
                             Missing = True
                             Error.append('files')
                         # check validity of file type
-                        if files[filePath]['fileTypeId'].lower() not in FileTypes:
+                        if files[filePath]['fileTypeId'].lower() not in Enums['FileTypes']:
                             Missing = True
                             Error.append('fileTypeId')
                 # check study Id
@@ -548,57 +571,65 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
                     if 'EGAS' not in d[key]:
                         Missing = True
                         Error.append(key)
+                # chyeck policy Id
+                if key == 'policyId':
+                    if 'EGAP' not in d[key]:
+                        Missing = True
+                        Error.append(key)
                 # check enumerations
                 if key == 'experimentTypeId':
-                    if d['experimentTypeId'] not in ExperimentTypes:
+                    if d['experimentTypeId'] not in Enums['ExperimentTypes']:
                         Missing = True
                         Error.append(key)
                 if key == 'analysisTypeId':
-                    if d['analysisTypeId'] not in AnalysisTypes:
+                    if d['analysisTypeId'] not in Enums['AnalysisTypes']:
                         Missing = True
                         Error.append(key)
                 if key == 'caseOrControlId':
-                    if d['caseOrControlId'] not in CaseControl:
+                    if d['caseOrControlId'] not in Enums['CaseControl']:
                         Missing = True
                         Error.append(key)
                 if key == 'genderId':
-                    if d['genderId'] not in Genders:
+                    if d['genderId'] not in Enums['Genders']:
                         Missing = True
                         Error.append(key)
+                if key == 'datasetTypeIds':
+                    if d['datasetTypeIds'] not in Enums['DatasetTypes']:
+                        Missing = True
+                        Error.append(key)
+                
                 # check attributes of attributes table
-                if key == 'attributes' and datatype == 'attributes':
-                    if d['attributes'] not in ['', 'NULL', None]:
-                        # check format of attributes
-                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
-                        for k in attributes:
-                            # do not allow keys other than tag, unit and value
-                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
-                                Missing = True
-                                Error.append(key)
-                            # tag and value are required keys
-                            if 'tag' not in k.keys() and 'value' not in k.keys():
-                                Missing = True
-                                Error.append(key)
+                if key == 'attributes':
+                    if (Object in ['analyses', 'samples'] and 'attributes' in KeyWordParams) or Object == 'datasets':
+                        if d['attributes'] not in ['', 'NULL', None]:
+                            # check format of attributes
+                            attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
+                            for k in attributes:
+                                # do not allow keys other than tag, unit and value
+                                if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
+                                    Missing = True
+                                    Error.append(key)
+                                # tag and value are required keys
+                                if 'tag' not in k.keys() and 'value' not in k.keys():
+                                    Missing = True
+                                    Error.append(key)
 
             # check if object has missing/non-valid information
             if Missing == True:
                  # record error message and update status ready --> dead
                  Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
             elif Missing == False:
-                Error = 'None'
+                Error = 'NoError'
             assert d['alias'] not in D
             D[d['alias']] = Error
     return D
 
 
-
 # use this function to check that all information for Analyses objects is available before encrypting files     
-def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Object, Box, MyScript, MyPython, **KeyWordParams):
+def CheckTableInformation(CredentialFile, DataBase, Table, Object, Box, MyScript, MyPython, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, dict) -> None
-    Extract information from DataBase Table, AttributesTable and ProjectsTable if Object is analyses
-    using credentials in file and update status to "valid" if all information is correct
-    or keep status to "ready" if incorrect or missing
+    Extract information from DataBase Tables using credentials in file and update errorMessages for each alias
     '''
 
     # create dict {alias: [errors]}
@@ -606,62 +637,66 @@ def CheckTableInformation(CredentialFile, DataBase, Table, AttributesTable, Obje
     # connect to db
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()      
-    cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    Data = cur.fetchall()
+    try:
+        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        Data = cur.fetchall()
+    except:
+        Data = []
     conn.close()
+    # record error messages
     if len(Data) != 0:
         for i in Data:
-            K[i[0]] = []
-    
-        # get error messages for the different tables. create dicts {alias" error}
-        D = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'analyses', Object, MyScript, MyPython)
-        E = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'attributes', Object, MyScript, MyPython)
-        if Object == 'analyses':
-            F = IsInfoValid(CredentialFile, DataBase, Table, AttributesTable, Box, 'projects', Object, MyScript, MyPython, **KeyWordParams)
-        
+            K[i[0]] = i[1].split('|')
+        # check Table
+        D = IsInfoValid(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams)
         # record error messages
         for alias in K:
             if alias in D:
                 K[alias].append(D[alias])
             else:
                 K[alias].append('In {0} table, no information'.format(Table))
-            if alias in E:
-                K[alias].append(E[alias])
-            else:
-                K[alias].append('In {0} table, no information'.format(AttributesTable))
-            if Object == 'analyses':
-                if 'projects' in KeyWordParams:
-                    ProjectsTable = KeyWordParams['projects']
-                else:
-                    ProjectsTable = 'xxx'
-                if alias in F:
-                    K[alias].append(F[alias])
-                else:
-                    K[alias].append('In {0} table, no information'.format(ProjectsTable))
-            
+                  
+    # update status and record errorMessage
+    if len(K) != 0:
         # connect to database
         conn = EstablishConnection(CredentialFile, DataBase)
-        cur = conn.cursor()      
-        # update status and record errorMessage
-        if len(K) != 0:
-            for alias in K:
-                # check if error message
-                if len(list(set(K[alias]))) == 1:
-                    if list(set(K[alias]))[0] == 'None':
-                        # record error message, update status ready --> valid
-                        cur.execute('UPDATE {0} SET {0}.Status=\"valid\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
-                        conn.commit()
-                elif len(list(set(K[alias]))) == 0:
-                    Error = 'No information'
-                    # record error message, keep status ready --> ready
-                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                    conn.commit()
-                else:
-                    # record errorMessage and keep status ready --> ready
-                    cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, '|'.join(K[alias]), alias, Box))
-                    conn.commit()
+        cur = conn.cursor()    
+        for alias in K:
+            Error = '|'.join(K[alias])
+            # record error message
+            cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+            conn.commit()
         conn.close()
 
+
+# use this function to check that all information is required for a given object
+def CheckObjectInformation(CredentialFile, DataBase, Table, Box):
+    '''
+    (str, str, str, str) -> None
+    Extract information from DataBase Table using credentials in file and update
+    status to "valid" if all information is correct or keep status to "ready" if incorrect or missing
+    '''
+    
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()      
+    try:
+        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        Data = cur.fetchall()
+    except:
+        Data = []
+    # record error messages
+    if len(Data) != 0:
+        for i in Data:
+            alias, Error = i[0], i[1].split('|')
+            # check error message and update status only if no error found
+            if len(list(set(Error))) == 1:
+                if list(set(Error)) == 'NoError':
+                    # update status ready --> valid
+                    cur.execute('UPDATE {0} SET {0}.Status=\"valid\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
+                    conn.commit()
+    conn.close()        
+    
 
 # use this function to format the analysis json
 def FormatJson(D, Object, MyScript, MyPython):
@@ -673,14 +708,7 @@ def FormatJson(D, Object, MyScript, MyPython):
     Precondition: strings in D have double-quotes
     '''
     
-    # get the enumerations
-    URLs = ['https://ega-archive.org/submission-api/v1/enums/experiment_types',
-            'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-            'https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-            'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders']
-             
-    ExperimentTypes, AnalysisTypes, FileTypes, CaseControl, Genders = ListEnumerations(URLs, MyScript, MyPython)
+    Enums = ListEnumerations(MyScript, MyPython)
         
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
@@ -726,14 +754,14 @@ def FormatJson(D, Object, MyScript, MyPython):
                     for filePath in files:
                         # create a dict to store file info
                         # check that fileTypeId is valid
-                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
+                        if files[filePath]["fileTypeId"].lower() not in Enums['FileTypes']:
                             # cannot obtain fileTypeId. erase dict and add alias
                             J = {}
                             J["alias"] = D["alias"]
                             # return dict with alias only if required fields are missing
                             return J
                         else:
-                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
+                            fileTypeId = Enums['FileTypes'][files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -749,44 +777,44 @@ def FormatJson(D, Object, MyScript, MyPython):
                     J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
                 elif field == "experimentTypeId":
                     # check that experimentTypeId is valid
-                    if D[field] not in ExperimentTypes:
+                    if D[field] not in Enums['ExperimentTypes']:
                         # cannot obtain experimentTypeId. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = [ExperimentTypes[D[field]]]
+                        J[field] = [Enums['ExperimentTypes'][D[field]]]
                 elif field == "analysisTypeId":
                     # check that analysisTypeId is valid
-                    if D[field] not in AnalysisTypes:
+                    if D[field] not in Enums['AnalysisTypes']:
                         # cannot obtain analysisTypeId. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = AnalysisTypes[D[field]]
+                        J[field] = Enums['AnalysisTypes'][D[field]]
                 elif field == "caseOrControlId":
                     # check that caseOrControlId is valid:
-                    if D[field] not in CaseControl:
+                    if D[field] not in Enums['CaseControl']:
                         # cannot obtain caseOrControlId. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = CaseControl[D[field]]
+                        J[field] = Enums['CaseControl'][D[field]]
                 elif field == "genderId":
                     # check that genderId is valid
-                    if D[field] not in Genders:
+                    if D[field] not in Enums['Genders']:
                         # cannot obtain genderId, erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = Genders[D[field]]
+                        J[field] = Enums['Genders'][D[field]]
                 else:
                     J[field] = D[field]
         else:
@@ -2240,6 +2268,29 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
                         # remove md5sum
                         os.system('rm {0}'.format(b))
 
+#################
+
+## functions specific to datasets
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################
+
+
 
 ## functions specific to Samples objects
 
@@ -2353,6 +2404,150 @@ def GrabEgaEnums(args):
             Enum[i['value']] = i['tag']
     print(Enum)    
     
+
+# use this function to add data to the dataset table
+def AddDatasetInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add dataset information
+    to the Dataset Table of the EGAsub database if samples are not already registered
+    Precondition: can only add infor for a single dataset at one time
+    '''
+    
+    # check if accessions are valid
+    # check if accessions are provided as file or list in the command
+    if args.accessionfile:
+        # check that path is valid
+        if os.path.isfile(args.accessionfile):
+            # accessions are provided by input file
+            infile = open(args.accessionfile)
+            AccessionIds = infile.read().rstrip().split('\n')
+            infile.close()
+        else:
+            print('Provide a valid file with accessions')
+    elif args.accessions:
+        # accessions are provided from the command
+        AccessionIds = args.accessions
+    else:
+        # provide empty list
+        AccessionIds = []
+    
+    # check if accessions contains information
+    if len(AccessionIds) == 0:
+        print('Accessions are required')
+    else:
+        # record dataset information only if Runs and/or Analyses accessions have been provided
+        if False in list(map(lambda x: x.startswith('EGAZ') or x.startswith('EGAR'), AccessionIds)):
+            print('Accessions should start with EGAR or EGAZ')
+    
+    # check if dataset links are provided
+    datasetslinks = []
+    ValidURLs = True
+    if args.datasetslinks:
+        # check if valid file
+        if os.path.isfile(args.datasetslinks):
+            infile = open(args.datasetslinks)
+            for line in infile:
+                if 'https' in line:
+                    line = line.rstrip().split()
+                    datasetslinks.append({"label": line[0], "url": line[1]})
+                else:
+                    ValidURLs = False
+            infile.close()
+        else:
+            print('Provide valid file with URLs')
+    
+    # check if attributes are provided
+    attributes = []
+    ValidAttributes = True
+    if args.attributes:
+        # check if valid file
+        if os.path.isfile(args.attributes):
+            infile = open(args.attributes)
+            for line in infile:
+                line = line.rstrip()
+                if line != '':
+                    line = line.split('\t')
+                    if len(line) == 2:
+                        attributes.append({"tag": line[0], "value": line[1]})
+                    else:
+                        ValidAttributes = False
+            infile.close()
+        else:
+            print('Provide valid attributes file')
+    
+    # check if provided data is valid
+    if ValidAttributes and ValidURLs and len(AccessionIds) != 0 and False not in list(map(lambda x: x.startswith('EGAZ') or x.startswith('EGAR'), AccessionIds)):
+        # create table if table doesn't exist
+        Tables = ListTables(args.credential, args.subdb)
+        # connect to submission database
+        conn = EstablishConnection(args.credential, args.subdb)
+        cur = conn.cursor()
+        if args.table not in Tables:
+            Fields = ["alias", "datasetTypeIds", "policyId", "runsReferences",
+                      "analysisReferences", "title", "description", "datasetLinks",
+                      "attributes", "Json", "submissionStatus", "errorMessages", "Receipt",
+                      "CreationTime", "egaAccessionId", "egaBox", "attributes", "Status"]
+            # format colums with datatype
+            Columns = []
+            for i in range(len(Fields)):
+                if Fields[i] == 'Status':
+                    Columns.append(Fields[i] + ' TEXT NULL')
+                elif Fields[i] in ['Json', 'Receipt']:
+                    Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+                elif Fields[i] in ['runsReferences', 'analysisReferences']:
+                    Columns.append(Fields[i] + ' LONGTEXT NULL,')
+                elif Fields[i] == 'alias':
+                    Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+                else:
+                    Columns.append(Fields[i] + ' TEXT NULL,')
+            # convert list to string    
+            Columns = ' '.join(Columns)        
+            # create table with column headers
+            cur = conn.cursor()
+            cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+            conn.commit()
+        else:
+            # get the column headers from the table
+            cur.execute("SELECT * FROM {0}".format(args.table))
+            Fields = [i[0] for i in cur.description]
+    
+        # create a string with column headers
+        ColumnNames = ', '.join(Fields)
+    
+        # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+        # create a dict {alias: accession}
+        cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+        Recorded = [i[0] for i in cur]
+        # pull down dataset alias and egaId from metadata db, alias should be unique
+        # create a dict {alias: accession} 
+        Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+        # check if alias is recorded or registered
+        if args.alias in Recorded:
+            # skip, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(args.alias, args.box))
+        elif args.alias in Registered:
+            # skip, already registered in EGA
+            print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
+        else:
+            # sort Runs and Analyses Id
+            runsReferences = [i for i in AccessionIds if i.startswith('EGAR')]
+            analysisReferences = [i for i in AccessionIds if i.startswith('EGAZ')]
+            
+            # make a list of data ordered according to columns
+            D = {"alias": args.alias, "datasetTypeIds": ';'.join(args.datasetTypeIds),
+                    "policyId": args.policy, "runsReferences": ';'.join(runsReferences),
+                    "analysisReferences": ';'.join(analysisReferences), "title": args.title,
+                    "description": args.description, "datasetLinks": ';'.join(datasetslinks),
+                    "attributes": ';'.join(attributes)}            
+            # list values according to the table column order
+            L = [D[field] if field in D else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+        conn.close()            
 
    
 # use this function to add data to the sample table
@@ -2730,10 +2925,15 @@ def FormAnalysesJson(args):
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
         
-        ## check if required information is present in tables.
-        # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'analyses', args.box, args.myscript, args.mypython, projects = args.projects)
-        
+        ## check if required information is present in table
+        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython)
+        ## check if required information is present in attributes table
+        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, attributes = args.attributes)
+        ## check if required information is present in attributes table
+        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, projects = args.projects)
+        # change status ready --> valid if no error or keep status ready --> ready
+        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+                
         ## set up working directory, add to analyses table and update status valid --> start
         AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
@@ -2767,9 +2967,12 @@ def FormSamplesJson(args):
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables and args.attributes in Tables:
         
-        ## check if required information is present in tables.
-        # change status ready --> valid if no error or keep status ready --> ready and record errorMessage
-        CheckTableInformation(args.credential, args.subdb, args.table, args.attributes, 'samples', args.box, args.myscript, args.mypython)
+        ## check if required information is present in table.
+        CheckTableInformation(args.credential, args.subdb, args.table, 'samples', args.box, args.myscript, args.mypython)
+        ## check if required information is present in attributes table.
+        CheckTableInformation(args.credential, args.subdb, args.table, 'samples', args.box, args.myscript, args.mypython, attributes = args.attributes)
+        # change status ready --> valid if no error or keep status ready --> ready
+        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
         
         ## form json for samples in valid status add to table
         # update status valid -> submit if no error of keep status --> valid and record errorMessage
@@ -2854,13 +3057,40 @@ if __name__ == '__main__':
     AddAttributesProjectsParser.add_argument('-d', '--DataType', dest='datatype', choices=['Projects', 'Attributes'], help='Add Projects or Attributes infor to db')
     AddAttributesProjectsParser.set_defaults(func=AddAnalysesAttributesProjects)
     
+    # add datasets to Datasets Table
+    AddDatasetsParser = subparsers.add_parser('AddDatasets', help ='Add datasets information to Datasets Table')
+    AddDatasetsParser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
+    AddDatasetsParser.add_argument('-t', '--Table', dest='table', default='Datasets', help='Datasets table. Default is Datasets')
+    AddDatasetsParser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
+    AddDatasetsParser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
+    AddDatasetsParser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    AddDatasetsParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the dataset', required=True)
+    AddDatasetsParser.add_argument('-p', '--Policy', dest='policy', help='Policy Id. Must start with EGAP', required=True)
+    AddDatasetsParser.add_argument('--Description', dest='description', help='Description. Will be published on the EGA website', required=True)
+    AddDatasetsParser.add_argument('--Title', dest='title', help='Short title. Will be published on the EGA website', required=True)
+    AddDatasetsParser.add_argument('--DatasetId', dest='datasetTypeIds', nargs='*', help='Dataset Id. A single string or a list. Controlled vocabulary available from EGA enumerations https://ega-archive.org/submission-api/v1/enums/dataset_types', required=True)
+    AddDatasetsParser.add_argument('--Accessions', dest='accessions', nargs='*', help='Analyses accession Ids. A single string or a list of EGAR and/or EGAZ accessions. Can also be provided as a list using args.accessionfile')
+    AddDatasetsParser.add_argument('--AccessionFile', dest='accessionfile', help='File with analyses accession Ids. Must contains EGAR and/or EGAZ accessions. Can also be provided as a command parameter but accessions passed in a file take precedence')
+    AddDatasetsParser.add_argument('--DatasetsLinks', dest='datasetslinks', help='Optional file with dataset URLs')
+    AddDatasetsParser.add_argument('--Attributes', dest='attributes', help='Optional file with attributes')
+    AddDatasetsParser.set_defaults(func=AddDatasetInfo)
+    
     # collect enumerations from EGA
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
-    CollectEnumParser.add_argument('--URL', dest='url', choices = ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/case_control',
-                                                                   'https://ega-archive.org/submission-api/v1/enums/genders'], help='URL with enumerations', required=True)
+    CollectEnumParser.add_argument('--URL', dest='url', choices=['https://ega-archive.org/submission-api/v1/enums/path/enums/analysis_file_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/analysis_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/case_control',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/dataset_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/experiment_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/file_types',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/genders',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/instrument_models',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/library_selections',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/library_sources',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/library_strategies',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/reference_chromosomes',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/reference_genomes',
+                                                                 'https://ega-archive.org/submission-api/v1/enums/study_types'], help='URL with enumerations', required=True)
     CollectEnumParser.set_defaults(func=GrabEgaEnums)
 
     # form analyses to EGA       
