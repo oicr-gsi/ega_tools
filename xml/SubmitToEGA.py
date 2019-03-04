@@ -198,12 +198,12 @@ def ListEnumerations(MyScript, MyPython):
     L = ['analysis_file_types', 'analysis_types', 'case_control', 'dataset_types', 'experiment_types',
          'file_types', 'genders', 'instrument_models', 'library_selections', 'library_sources',
          'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types']
-    URLs = [os.path.join(url, i for i in L)]
+    URLs = [os.path.join(url, i) for i in L]
 
     # create a dictionary to store each enumeration
     Enums = {}
     for URL in URLs:
-        Enums[os.path.basename(URLs[i]).title().replace('_', '')] = json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\""))
+        Enums[os.path.basename(URL).title().replace('_', '')] = json.loads(subprocess.check_output('ssh xfer4 \"{0} {1} Enums --URL {2}\"'.format(MyPython, MyScript, URL), shell=True).decode('utf-8').rstrip().replace("'", "\""))
     return Enums
 
 
@@ -448,7 +448,7 @@ def ExtractAccessions(CredentialFile, DataBase, Box, Table):
 
 
 # use this function to check information in Tables    
-def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, datatype, Object, MyScript, MyPython, **KeyWordParams):
+def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams):
     '''
     (str, str, str, str, str, str, str, str, dict) -> dict
     Extract information from DataBase Table, AttributesTable and also from ProjectsTable
@@ -460,42 +460,36 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
     D = {}
 
     # get the enumerations
-    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-             'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-             'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders',
-             'https://ega-archive.org/submission-api/v1/enums/dataset_types']
+    Enums = ListEnumerations(MyScript, MyPython)
     
-    Enums = ListEnumerations(URLs, MyScript, MyPython)
-    FileTypes, ExperimentTypes, AnalysisTypes, CaseControl, Genders =  Enums
-
     # connect to db
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()      
     # get required information
     if Object == 'analyses':
-        if datatype == 'analyses':
-            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
-            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
+        if 'attributes' in KeyWordParams:
+            AttributesTable = KeyWordParams['attributes']
             Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
             FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        elif datatype == 'projects':
-            if datatype in KeyWordParams:
-                ProjectsTable = KeyWordParams[datatype]
-            else:
-                ProjectsTable = 'Empty'
+        elif 'projects' in KeyWordParams:
+            ProjectsTable = KeyWordParams['projects']
             Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box)
+            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
+        else:
+            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
+            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'samples':
-        if datatype == 'samples':
-            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
-            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
+        if 'attributes' in KeyWordParams:
+            AttributesTable = KeyWordParams['attributes']
             Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
             {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        
+        else:
+            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
+            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'datasets':
+        Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
+        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
+    
     # extract data 
     try:
         cur.execute(Cmd)
@@ -507,23 +501,27 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
     # check info
     if len(Data) != 0:
         if Object == 'analyses':
-            if datatype == 'analyses':
-                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-            elif datatype == 'attributes':
+            if 'attributes' in KeyWordParams:
                 Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
                 Required = ['title', 'description', 'genomeId', 'StagePath']
-            elif datatype == 'projects':
+            elif 'projects' in KeyWordParams:
                 Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
                 Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+            else:
+                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
         elif Object == 'samples':
-            if datatype == 'samples':
-                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-            elif datatype == 'attributes':
+            if 'attributes' in KeyWordParams:
                 Keys = ['alias', 'title', 'description', 'attributes']
                 Required = ['title', 'description']
-            
+            else:
+                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+        elif Object == 'datasets':
+            Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
+                    'description', 'datasetLinks', 'attributes', 'egaBox']     
+            Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
+    
         for i in range(len(Data)):
             # set up boolean. update if missing values
             Missing = False
@@ -537,7 +535,20 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
                     if d[key] in ['', 'NULL', None]:
                         Missing = True
                         Error.append(key)
-                
+                # check that references are provided
+                if 'runsReferences' in d and 'analysisReferences' in d:
+                    # at least runsReferences or analysesReferences should include some accessions
+                    if d['runsReferences'] in ['', 'NULL', None] and d['analysisReferences'] in ['', 'NULL', None]:
+                        Missing = True
+                        Error.append('References')
+                    if d['runsReferences'] not in ['', 'NULL', None]:
+                        if False in list(map(lambda x: x.startswith('EGAR'), d['runsReferences'].split(';'))):
+                            Missing = True
+                            Error.append('runsReferences')
+                    if d['analysisReferences'] not in ['', 'NULL', None]:
+                        if False in list(map(lambda x: x.startswith('EGAZ'), d['analysisReferences'].split(';'))):
+                            Missing = True
+                            Error.append('analysisReferences')
                 # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
                 if key == 'egaBox':
                     if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
@@ -552,7 +563,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
                             Missing = True
                             Error.append('files')
                         # check validity of file type
-                        if files[filePath]['fileTypeId'].lower() not in FileTypes:
+                        if files[filePath]['fileTypeId'].lower() not in Enums['FileTypes']:
                             Missing = True
                             Error.append('fileTypeId')
                 # check study Id
@@ -560,212 +571,48 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, AttributesTable, Box, dataty
                     if 'EGAS' not in d[key]:
                         Missing = True
                         Error.append(key)
+                # chyeck policy Id
+                if key == 'policyId':
+                    if 'EGAP' not in d[key]:
+                        Missing = True
+                        Error.append(key)
                 # check enumerations
                 if key == 'experimentTypeId':
-                    if d['experimentTypeId'] not in ExperimentTypes:
+                    if d['experimentTypeId'] not in Enums['ExperimentTypes']:
                         Missing = True
                         Error.append(key)
                 if key == 'analysisTypeId':
-                    if d['analysisTypeId'] not in AnalysisTypes:
+                    if d['analysisTypeId'] not in Enums['AnalysisTypes']:
                         Missing = True
                         Error.append(key)
                 if key == 'caseOrControlId':
-                    if d['caseOrControlId'] not in CaseControl:
+                    if d['caseOrControlId'] not in Enums['CaseControl']:
                         Missing = True
                         Error.append(key)
                 if key == 'genderId':
-                    if d['genderId'] not in Genders:
+                    if d['genderId'] not in Enums['Genders']:
                         Missing = True
                         Error.append(key)
-                # check attributes of attributes table
-                if key == 'attributes' and datatype == 'attributes':
-                    if d['attributes'] not in ['', 'NULL', None]:
-                        # check format of attributes
-                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
-                        for k in attributes:
-                            # do not allow keys other than tag, unit and value
-                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
-                                Missing = True
-                                Error.append(key)
-                            # tag and value are required keys
-                            if 'tag' not in k.keys() and 'value' not in k.keys():
-                                Missing = True
-                                Error.append(key)
-
-            # check if object has missing/non-valid information
-            if Missing == True:
-                 # record error message and update status ready --> dead
-                 Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
-            elif Missing == False:
-                Error = 'None'
-            assert d['alias'] not in D
-            D[d['alias']] = Error
-    return D
-
-
-#########################
-
-
-# use this function to check information in Tables    
-def IsDatasetInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPython):
-    '''
-    (str, str, str, str, str, str, str, str, dict) -> dict
-    Extract information from DataBase Table, AttributesTable and also from ProjectsTable
-    if Object is analyses using credentials in file, check if information is valid and return a dict
-    with error message for each alias in Table
-    '''
-
-    # create a dictionary {alias: error}
-    D = {}
-
-    # get the enumerations
-    URLs =  ['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-             'https://ega-archive.org/submission-api/v1/enums/experiment_types',
-             'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-             'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders',
-             'https://ega-archive.org/submission-api/v1/enums/dataset_types']
-    
-    
-    'https://ega-archive.org/submission-api/v1/enums/
-    
-    
-    'analysis_file_types', 'analysis_types', 'case_control', 'dataset_types',
-    'experiment_types', 'file_types', 'genders', 'instrument_models', 'library_selections',
-    'library_sources', 'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types'
-    
-    
-    
-    
-    
-    
-    Enums = ListEnumerations(URLs, MyScript, MyPython)
-    # create a dictionary to store the enumerations for each data type
-    Enumerations = {}
-    for i in range(len(URLs)):
-        Enumerations[os.path.basename(URLs[i]).title().replace('_', '')] = Enums[i]
-    
-    # connect to db
-    conn = EstablishConnection(CredentialFile, SubDataBase)
-    cur = conn.cursor()      
-    # get required information
-    if Object == 'analyses':
-        if datatype == 'analyses':
-            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
-            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
-            Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        elif datatype == 'projects':
-            if datatype in KeyWordParams:
-                ProjectsTable = KeyWordParams[datatype]
-            else:
-                ProjectsTable = 'Empty'
-            Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box)
-    elif Object == 'samples':
-        if datatype == 'samples':
-            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
-            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-        elif datatype == 'attributes':
-            Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
-            {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-        
-    # extract data 
-    try:
-        cur.execute(Cmd)
-        Data = cur.fetchall()
-    except:
-        Data = []
-    conn.close()
-    
-    # check info
-    if len(Data) != 0:
-        if Object == 'analyses':
-            if datatype == 'analyses':
-                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-            elif datatype == 'attributes':
-                Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
-                Required = ['title', 'description', 'genomeId', 'StagePath']
-            elif datatype == 'projects':
-                Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-                Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-        elif Object == 'samples':
-            if datatype == 'samples':
-                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-            elif datatype == 'attributes':
-                Keys = ['alias', 'title', 'description', 'attributes']
-                Required = ['title', 'description']
-            
-        for i in range(len(Data)):
-            # set up boolean. update if missing values
-            Missing = False
-            # create a dict with all information
-            d = {Keys[j]: Data[i][j] for j in range(len(Keys))}
-            # create an error message
-            Error = []
-            # check if information is valid
-            for key in Keys:
-                if key in Required:
-                    if d[key] in ['', 'NULL', None]:
+                if key == 'datasetTypeIds':
+                    if d['datasetTypeIds'] not in Enums['DatasetTypes']:
                         Missing = True
                         Error.append(key)
                 
-                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
-                if key == 'egaBox':
-                    if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
-                        Missing = True
-                        Error.append(key)
-                # check files
-                if key == 'files':
-                    files = json.loads(d['files'].replace("'", "\""))
-                    for filePath in files:
-                        # check if file is valid
-                        if os.path.isfile(filePath) == False:
-                            Missing = True
-                            Error.append('files')
-                        # check validity of file type
-                        if files[filePath]['fileTypeId'].lower() not in FileTypes:
-                            Missing = True
-                            Error.append('fileTypeId')
-                # check study Id
-                if key == 'studyId':
-                    if 'EGAS' not in d[key]:
-                        Missing = True
-                        Error.append(key)
-                # check enumerations
-                if key == 'experimentTypeId':
-                    if d['experimentTypeId'] not in ExperimentTypes:
-                        Missing = True
-                        Error.append(key)
-                if key == 'analysisTypeId':
-                    if d['analysisTypeId'] not in AnalysisTypes:
-                        Missing = True
-                        Error.append(key)
-                if key == 'caseOrControlId':
-                    if d['caseOrControlId'] not in CaseControl:
-                        Missing = True
-                        Error.append(key)
-                if key == 'genderId':
-                    if d['genderId'] not in Genders:
-                        Missing = True
-                        Error.append(key)
                 # check attributes of attributes table
-                if key == 'attributes' and datatype == 'attributes':
-                    if d['attributes'] not in ['', 'NULL', None]:
-                        # check format of attributes
-                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
-                        for k in attributes:
-                            # do not allow keys other than tag, unit and value
-                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
-                                Missing = True
-                                Error.append(key)
-                            # tag and value are required keys
-                            if 'tag' not in k.keys() and 'value' not in k.keys():
-                                Missing = True
-                                Error.append(key)
+                if key == 'attributes':
+                    if (Object in ['analyses', 'samples'] and 'attributes' in KeyWordParams) or Object == 'datasets':
+                        if d['attributes'] not in ['', 'NULL', None]:
+                            # check format of attributes
+                            attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
+                            for k in attributes:
+                                # do not allow keys other than tag, unit and value
+                                if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
+                                    Missing = True
+                                    Error.append(key)
+                                # tag and value are required keys
+                                if 'tag' not in k.keys() and 'value' not in k.keys():
+                                    Missing = True
+                                    Error.append(key)
 
             # check if object has missing/non-valid information
             if Missing == True:
@@ -776,28 +623,6 @@ def IsDatasetInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript
             assert d['alias'] not in D
             D[d['alias']] = Error
     return D
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-###########################
-
 
 
 # use this function to check that all information for Analyses objects is available before encrypting files     
@@ -881,14 +706,7 @@ def FormatJson(D, Object, MyScript, MyPython):
     Precondition: strings in D have double-quotes
     '''
     
-    # get the enumerations
-    URLs = ['https://ega-archive.org/submission-api/v1/enums/experiment_types',
-            'https://ega-archive.org/submission-api/v1/enums/analysis_types',
-            'https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
-            'https://ega-archive.org/submission-api/v1/enums/case_control',
-             'https://ega-archive.org/submission-api/v1/enums/genders']
-             
-    ExperimentTypes, AnalysisTypes, FileTypes, CaseControl, Genders = ListEnumerations(URLs, MyScript, MyPython)
+    Enums = ListEnumerations(MyScript, MyPython)
         
     # create a dict to be strored as a json. note: strings should have double quotes
     J = {}
@@ -934,14 +752,14 @@ def FormatJson(D, Object, MyScript, MyPython):
                     for filePath in files:
                         # create a dict to store file info
                         # check that fileTypeId is valid
-                        if files[filePath]["fileTypeId"].lower() not in FileTypes:
+                        if files[filePath]["fileTypeId"].lower() not in Enums['FileTypes']:
                             # cannot obtain fileTypeId. erase dict and add alias
                             J = {}
                             J["alias"] = D["alias"]
                             # return dict with alias only if required fields are missing
                             return J
                         else:
-                            fileTypeId = FileTypes[files[filePath]["fileTypeId"].lower()]
+                            fileTypeId = Enums['FileTypes'][files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -957,44 +775,44 @@ def FormatJson(D, Object, MyScript, MyPython):
                     J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
                 elif field == "experimentTypeId":
                     # check that experimentTypeId is valid
-                    if D[field] not in ExperimentTypes:
+                    if D[field] not in Enums['ExperimentTypes']:
                         # cannot obtain experimentTypeId. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = [ExperimentTypes[D[field]]]
+                        J[field] = [Enums['ExperimentTypes'][D[field]]]
                 elif field == "analysisTypeId":
                     # check that analysisTypeId is valid
-                    if D[field] not in AnalysisTypes:
+                    if D[field] not in Enums['AnalysisTypes']:
                         # cannot obtain analysisTypeId. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = AnalysisTypes[D[field]]
+                        J[field] = Enums['AnalysisTypes'][D[field]]
                 elif field == "caseOrControlId":
                     # check that caseOrControlId is valid:
-                    if D[field] not in CaseControl:
+                    if D[field] not in Enums['CaseControl']:
                         # cannot obtain caseOrControlId. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = CaseControl[D[field]]
+                        J[field] = Enums['CaseControl'][D[field]]
                 elif field == "genderId":
                     # check that genderId is valid
-                    if D[field] not in Genders:
+                    if D[field] not in Enums['Genders']:
                         # cannot obtain genderId, erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = Genders[D[field]]
+                        J[field] = Enums['Genders'][D[field]]
                 else:
                     J[field] = D[field]
         else:
