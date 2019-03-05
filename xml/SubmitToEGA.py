@@ -724,6 +724,15 @@ def FormatJson(D, Object, MyScript, MyPython):
                     "organismPart", "cellLine", "region", "phenotype", "subjectId",
                     "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
         Required = ["alias", "title", "description", "caseOrControlId", "genderId", "phenotype"] 
+    elif Object == 'datasets':
+        JsonKeys = ["alias", "datasetTypeIds", "policyId", "runsReferences", "analysisReferences",
+                    "title", "description", "datasetLinks", "attributes"]
+        Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
+    
+    # map typeId with enumerations
+    MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
+               "caseOrControlId": "CaseControl", "genderId": 'Genders', 
+               "datasetTypeIds": "DatasetTypes"}        
 
     # loop over required json keys
     for field in JsonKeys:
@@ -739,7 +748,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                 # other fields can be missing, either as empty list or string
                 else:
                     # chromosomeReferences is hard-coded as empty list
-                    if field == "chromosomeReferences" or field == "attributes":
+                    if field in ["chromosomeReferences", "attributes", "datasetLinks", "runsReferences", "analysisReferences"]:
                         J[field] = []
                     else:
                         J[field] = ""
@@ -768,53 +777,30 @@ def FormatJson(D, Object, MyScript, MyPython):
                              "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
                              "fileTypeId": fileTypeId}
                         J[field].append(d)
-                elif field == 'attributes':
+                elif field in ['runsReferences', 'analysisReferences']:
+                    J[field] = D[field].split(';')
+                elif field in ['attributes', 'datasetLinks']:
                     # ensure strings are double-quoted
                     attributes = D[field].replace("'", "\"")
                     # convert string to dict
                     # loop over all attributes
                     attributes = attributes.split(';')
                     J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
-                elif field == "experimentTypeId":
-                    # check that experimentTypeId is valid
-                    if D[field] not in Enums['ExperimentTypes']:
-                        # cannot obtain experimentTypeId. erase dict and add alias
+                # check enumerations
+                elif field in MapEnum:
+                    # check that enumeration is valid
+                    if D[field] not in Enums[MapEnum[field]]:
+                        # cannot obtain enumeration. erase dict and add alias
                         J = {}
                         J["alias"] = D["alias"]
                         # return dict with alias only if required fields are missing
                         return J
                     else:
-                        J[field] = [Enums['ExperimentTypes'][D[field]]]
-                elif field == "analysisTypeId":
-                    # check that analysisTypeId is valid
-                    if D[field] not in Enums['AnalysisTypes']:
-                        # cannot obtain analysisTypeId. erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = Enums['AnalysisTypes'][D[field]]
-                elif field == "caseOrControlId":
-                    # check that caseOrControlId is valid:
-                    if D[field] not in Enums['CaseControl']:
-                        # cannot obtain caseOrControlId. erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = Enums['CaseControl'][D[field]]
-                elif field == "genderId":
-                    # check that genderId is valid
-                    if D[field] not in Enums['Genders']:
-                        # cannot obtain genderId, erase dict and add alias
-                        J = {}
-                        J["alias"] = D["alias"]
-                        # return dict with alias only if required fields are missing
-                        return J
-                    else:
-                        J[field] = Enums['Genders'][D[field]]
+                        # check field to add enumeration to json
+                        if field == "experimentTypeId":
+                            J[field] = [Enums[MapEnum[field]][D[field]]]
+                        else:
+                            J[field] = Enums[MapEnum[field]][D[field]]
                 else:
                     J[field] = D[field]
         else:
@@ -831,24 +817,30 @@ def FormatJson(D, Object, MyScript, MyPython):
 
 
 # use this function to form jsons and store to submission db
-def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object, MyScript, MyPython, **KeyWordParams):
+def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams):
     '''
-    (str, str, str, str, str, str, str, str, dict) -> None
+    (str, str, str, str, str, str, str, dict) -> None
     Form a json for Objects in the given Box and add it to Table by
-    quering required information from the Analysis, and Attributes Tables and also
-    from the Projects table if Object is analyses using the file with credentials
-    to connect to Database update the status if json is formed correctly
+    quering required information from Table and optional tables using the file
+    with credentials to connect to Database update the status if json is formed correctly
     '''
     
     # connect to the database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     
+    # get optional tables
+    if 'projects' in KeyWordParams:
+        ProjectsTable = KeyWordParams['projects']
+    else:
+        ProjectsTable = 'empty'
+    if 'attributes' in KeyWordParams:
+        AttributesTable = KeyWordParams['attributes']
+    else:
+        AttributesTable = 'empty'
+    
+    # command depends on Object type    
     if Object == 'analyses':
-        if 'projects' in KeyWordParams:
-            ProjectsTable = KeyWordParams['projects']
-        else:
-            ProjectsTable = 'empty'
         Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
         {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
         {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
@@ -859,7 +851,11 @@ def AddJsonToTable(CredentialFile, DataBase, Table, AttributesTable, Box, Object
         {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.biosampleId, \
         {0}.sampleAge, {0}.sampleDetail, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} \
         WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
-     
+    elif Object == 'datasets':
+        Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, \
+        {0}.analysisReferences, {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} \
+        WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    
     # extract information to for json    
     try:
         cur.execute(Cmd)
@@ -2487,7 +2483,7 @@ def AddDatasetInfo(args):
             Fields = ["alias", "datasetTypeIds", "policyId", "runsReferences",
                       "analysisReferences", "title", "description", "datasetLinks",
                       "attributes", "Json", "submissionStatus", "errorMessages", "Receipt",
-                      "CreationTime", "egaAccessionId", "egaBox", "attributes", "Status"]
+                      "CreationTime", "egaAccessionId", "egaBox", "Status"]
             # format colums with datatype
             Columns = []
             for i in range(len(Fields)):
@@ -2952,9 +2948,7 @@ def FormAnalysesJson(args):
         RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
         ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'analyses', args.myscript, args.mypython, projects = args.projects)
-
- 
+        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'analyses', args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
 
 # use this function to form json for Samples objects
 def FormSamplesJson(args):
@@ -2976,8 +2970,8 @@ def FormSamplesJson(args):
         
         ## form json for samples in valid status add to table
         # update status valid -> submit if no error of keep status --> valid and record errorMessage
-        AddJsonToTable(args.credential, args.subdb, args.table, args.attributes, args.box, 'samples', args.myscript, args.mypython)
-        
+        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'samples', args.myscript, args.mypython, attributes = args.attributes)
+
        
 # use this function to submit object metadata 
 def SubmitMetadata(args):
