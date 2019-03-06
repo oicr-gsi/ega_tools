@@ -19,12 +19,12 @@ import xml.etree.ElementTree as ET
 
 
 
-# resource for jaon formatting and api submission
+# resource for json formatting and api submission
 #https://ega-archive.org/submission/programmatic_submissions/json-message-format
 #https://ega-archive.org/submission/programmatic_submissions/submitting-metadata
 
 
-## functions common to multiple objects
+## functions common to multiple objects =======================================
 
 # use this function to extract credentials from file
 def ExtractCredentials(CredentialFile):
@@ -476,7 +476,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
             FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
         else:
-            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
+            Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.files, {0}.egaBox, \
             {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'samples':
         if 'attributes' in KeyWordParams:
@@ -489,7 +489,12 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
         {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
-    
+    elif Object == 'experiments':
+        Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
+        {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
+        {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+
     # extract data 
     try:
         cur.execute(Cmd)
@@ -498,6 +503,12 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         Data = []
     conn.close()
     
+    # map typeId with enumerations
+    MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
+               "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
+               "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
+               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies"}
+
     # check info
     if len(Data) != 0:
         if Object == 'analyses':
@@ -508,8 +519,8 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                 Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
                 Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
             else:
-                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+                Keys = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
+                Required = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
         elif Object == 'samples':
             if 'attributes' in KeyWordParams:
                 Keys = ['alias', 'title', 'description', 'attributes']
@@ -521,7 +532,14 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
                     'description', 'datasetLinks', 'attributes', 'egaBox']     
             Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
-    
+        elif Object == 'experiments':
+            Keys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
+                    "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+            Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                        "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
+                        "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+      
         for i in range(len(Data)):
             # set up boolean. update if missing values
             Missing = False
@@ -576,28 +594,17 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                     if 'EGAP' not in d[key]:
                         Missing = True
                         Error.append(key)
+                # check library layout
+                if key == "libraryLayoutId":
+                    if str(d[key]) not in ['0', '1']:
+                        Missing = True
+                        Error.append(key)
                 # check enumerations
-                if key == 'experimentTypeId':
-                    if d['experimentTypeId'] not in Enums['ExperimentTypes']:
+                if key in MapEnum:
+                    # check that enumeration is valid
+                    if d[key] not in Enums[MapEnum[key]]:
                         Missing = True
                         Error.append(key)
-                if key == 'analysisTypeId':
-                    if d['analysisTypeId'] not in Enums['AnalysisTypes']:
-                        Missing = True
-                        Error.append(key)
-                if key == 'caseOrControlId':
-                    if d['caseOrControlId'] not in Enums['CaseControl']:
-                        Missing = True
-                        Error.append(key)
-                if key == 'genderId':
-                    if d['genderId'] not in Enums['Genders']:
-                        Missing = True
-                        Error.append(key)
-                if key == 'datasetTypeIds':
-                    if d['datasetTypeIds'] not in Enums['DatasetTypes']:
-                        Missing = True
-                        Error.append(key)
-                
                 # check attributes of attributes table
                 if key == 'attributes':
                     if (Object in ['analyses', 'samples'] and 'attributes' in KeyWordParams) or Object == 'datasets':
@@ -717,7 +724,7 @@ def FormatJson(D, Object, MyScript, MyPython):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-        Required = ["alias", "title", "description", "studyId", "analysisCenter",
+        Required = ["alias", "title", "description", "studyId", "sampleReferences", "analysisCenter",
                     "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]
     elif Object == 'samples':
         JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
@@ -728,11 +735,19 @@ def FormatJson(D, Object, MyScript, MyPython):
         JsonKeys = ["alias", "datasetTypeIds", "policyId", "runsReferences", "analysisReferences",
                     "title", "description", "datasetLinks", "attributes"]
         Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
-    
+    elif Object == 'experiments':
+        JsonKeys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
+                    "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+        Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
+                    "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+      
     # map typeId with enumerations
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
-               "caseOrControlId": "CaseControl", "genderId": 'Genders', 
-               "datasetTypeIds": "DatasetTypes"}        
+               "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
+               "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
+               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies"}
 
     # loop over required json keys
     for field in JsonKeys:
@@ -786,6 +801,26 @@ def FormatJson(D, Object, MyScript, MyPython):
                     # loop over all attributes
                     attributes = attributes.split(';')
                     J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
+                elif field == 'libraryLayoutId':
+                    try:
+                        int(D[field]) in [0, 1]
+                        J[field] = int(D[field])
+                    except:
+                        # must be coded 0 for paired end or 1 for single end
+                        J = {}
+                        # return dict with alias if required field is missing
+                        J["alias"] = D["alias"]
+                        return J
+                elif field  in ['pairedNominalLength', 'pairedNominalSdev']:
+                    try:
+                        float(D[field])
+                        J[field] = float(D[field])
+                    except:
+                        # must be coded 0 for paired end or 1 for single end
+                        J = {}
+                        # return dict with alias if required field is missing
+                        J["alias"] = D["alias"]
+                        return J        
                 # check enumerations
                 elif field in MapEnum:
                     # check that enumeration is valid
@@ -801,17 +836,11 @@ def FormatJson(D, Object, MyScript, MyPython):
                             J[field] = [Enums[MapEnum[field]][D[field]]]
                         else:
                             J[field] = Enums[MapEnum[field]][D[field]]
+                elif field == 'sampleReferences':
+                    # populate with sample accessions
+                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(':')]
                 else:
                     J[field] = D[field]
-        else:
-            if field == 'sampleReferences':
-                # populate with sample accessions
-                J[field] = []
-                if ':' in D['sampleEgaAccessionsId']:
-                    for accession in D['sampleEgaAccessionsId'].split(':'):
-                        J[field].append({"value": accession.strip(), "label":""})
-                else:
-                    J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
     return J                
 
 
@@ -841,7 +870,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
     
     # command depends on Object type    
     if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.analysisDate, {0}.files, \
         {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
         {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
         FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
@@ -855,6 +884,11 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, \
         {0}.analysisReferences, {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} \
         WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'experiments':
+        Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
+        {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
+        {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
     
     # extract information to for json    
     try:
@@ -1304,7 +1338,7 @@ def GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrint, Box):
     return Data
 
 
-## functions specific to Analyses objects
+## functions specific to Analyses objects =====================================
     
 # use this function to parse the input analysis table
 def ParseAnalysisInputTable(Table):
@@ -1323,7 +1357,7 @@ def ParseAnalysisInputTable(Table):
     # get file header
     Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
-    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath'] if i not in Header]
+    Missing =  [i for i in ['alias', 'sampleReferences', 'filePath'] if i not in Header]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
@@ -1336,10 +1370,10 @@ def ParseAnalysisInputTable(Table):
             # extract variables from line
             if 'fileName' not in Header:
                 if 'analysisDate' in Header:
-                    L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
+                    L = ['alias', 'sampleReferences', 'filePath', 'analysisDate']
                     alias, sampleAlias, filePath, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
                 else:
-                    L = ['alias', 'sampleAlias', 'filePath']
+                    L = ['alias', 'sampleReferences', 'filePath']
                     alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
                     analysisDate = ''
                 # file name is not supplied, use filename in filepath             
@@ -1348,10 +1382,10 @@ def ParseAnalysisInputTable(Table):
             else:
                 # file name is supplied, use filename
                 if 'analysisDate' in Header:
-                    L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
+                    L = ['alias', 'sampleReferences', 'filePath', 'fileName', 'analysisDate']
                     alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
                 else:
-                    L = ['alias', 'sampleAlias', 'filePath', 'fileName']
+                    L = ['alias', 'sampleReferences', 'filePath', 'fileName']
                     alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
                     analysisDate = ''
                 # check if fileName is provided for that alias
@@ -1365,13 +1399,13 @@ def ParseAnalysisInputTable(Table):
                 D[alias]['alias'] = alias
                 D[alias]['analysisDate'] = analysisDate
                 # record sampleAlias. multiple sample alias are allowed, eg for VCFs
-                D[alias]['sampleAlias'] = [sampleAlias]
+                D[alias]['sampleReferences'] = [sampleAlias]
                 D[alias]['files'] = {}
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
             else:
                 assert D[alias]['alias'] == alias
                 # record sampleAlias
-                D[alias]['sampleAlias'].append(sampleAlias)
+                D[alias]['sampleReferences'].append(sampleAlias)
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
@@ -1435,12 +1469,12 @@ def ParseAnalysesAccessoryTables(Table, TableType):
 
 
 # use this function to add sample accessions to Analysis Table in the submission database
-def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Table):
+def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, Box):
     '''
-    (file, str, str, str, str) -> None
+    (file, str, str, str, str, str) -> None
     Take a file with credentials to connect to metadata and submission databases
     and update the Table in the submission table with the sample accessions
-    and update the analyses status to upload
+    and update the Object status 
     '''
     
     # grab sample EGA accessions from metadata database, create a dict {alias: accession}
@@ -1449,35 +1483,59 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
-    # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    Data = cur.fetchall()
+    # pull alias, sampleIds for object with ready status for given box
+    if Object == 'analyses':
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'experiments':
+        Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    
+    try:
+        cur.excecute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
     
     # create a dict {alias: [sampleaccessions, ErrorMessage]}
     Samples = {}
-    # check if alias are in ready status
+    # check if alias are in start status
     if len(Data) != 0:
         for i in Data:
             # make a list of sampleAlias
-            sampleAlias = i[0].split(':')
+            sampleAlias = i[1].split(':')
             # make a list of sample accessions
-            sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
+            sampleAccessions = []
+            for j in sampleAlias:
+                if j.startswith('EGAN'):
+                    sampleAccessions.append(j)
+                elif j in Registered:
+                    sampleAccessions.append(Registered[j])
             # record error if sample aliases have missing accessions
             if len(sampleAlias) != len(sampleAccessions):
                 Error = 'Sample accessions not available'
             else:
                 Error = ''
-            Samples[i[2]] = [':'.join(sampleAccessions), Error]
+            Samples[i[0]] = [':'.join(sampleAccessions), Error]
         if len(Samples) != 0:
             for alias in Samples:
-                # update status start --> encrypt if no error
-                if Samples[alias][1] == '':
-                    # update sample accessions and status start --> encrypt
-                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                # check Object for updated status
+                if Object == 'analyses':
+                    # update status start --> encrypt if no error
+                    if Samples[alias][1] == '':
+                        # update sample accessions and status start --> encrypt
+                        cur.execute('UPDATE {0} SET {0}.sampleReferences=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        conn.commit()
+                    else:
+                        # record error message and keep status start --> start
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
-                else:
-                    # record error message and keep status start --> start
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                elif Object == 'experiments':
+                    if Samples[alias][1] == '':
+                        # update sample accessions and status start --> encrypt
+                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        conn.commit()
+                    else:
+                        # record error message and keep status start --> start
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
     conn.close()    
 
@@ -2264,31 +2322,60 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
                         # remove md5sum
                         os.system('rm {0}'.format(b))
 
-#################
 
-## functions specific to datasets
+## functions specific to experiments ==========================================
 
+#use this function to parse the input experiment table
+def ParseExperimentInputTable(Table):
+    '''
+    (file) -> list 
+    Take a tab-delimited file and return a list of dictionaries, each dictionary
+    storing the information for a unique experiment object
+    Preconditions: Required fields must be present or returned list is empty,
+    and missing entries are not permitted (e.g. can be '', NA)
+    '''
+    
+    # create a dict to store information about the experiments
+    D = {}
+    
+    infile = open(Table)
+    # get file header
+    Header = infile.readline().rstrip().split('\t')
+    # check that required fields are present
+    Missing =  [i for i in  ["sampleId", "alias", "libraryName"] if i not in Header]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        # required fields are present, read the content of the file
+        Content = infile.read().rstrip().split('\n')
+        for S in Content:
+            S = S.split('\t')
+            # missing values are not permitted
+            assert len(Header) == len(S), 'missing values should be "" or NA'
+            # extract variables from line
+            if "pairedNominalLength" not in Header:
+                Length = 0
+            else:
+                Length = S[Header.index("pairedNominalLength")]
+            if "pairedNominalSdev" not in Header:
+                Sdev = 0
+            else:
+                Sdev = S[Header.index("pairedNominalSdev")]
+            L = ["sampleId", "alias", "libraryName"]
+            sample, alias, library  = [S[Header.index(L[i])] for i in range(len(L))]
+            
+            assert alias not in D
+            # create inner dict
+            D[alias] = {'alias': alias, 'libraryName': library, 'sampleId': sample,
+             'pairedNominalLength': Length, 'pairedNominalSdev': Sdev}
+    infile.close()
 
+    # create list of dicts to store the info under a same alias
+    L = [{alias: D[alias]} for alias in D]             
+    return L            
+    
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-########################
-
-
-
-## functions specific to Samples objects
+## functions specific to Samples objects ======================================
 
 # use this function to parse the input sample table
 def ParseSampleInputTable(Table):
@@ -2307,10 +2394,10 @@ def ParseSampleInputTable(Table):
     # get file header
     Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
-    L = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
+    Required = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
          "region", "phenotype", "subjectId", "anonymizedName", "biosampleId",
          "sampleAge", "sampleDetail"]
-    Missing = [i for i in L if i not in Header]
+    Missing = [i for i in Required if i not in Header]
     
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
@@ -2379,7 +2466,7 @@ def ParseSampleAttributesTable(Table):
  
 
 
-## functions to run script    
+## functions to run script ====================================================    
    
 # use this function to print a dict the enumerations from EGA to std output
 def GrabEgaEnums(args):
@@ -2545,7 +2632,95 @@ def AddDatasetInfo(args):
             conn.commit()
         conn.close()            
 
-   
+ 
+# use this function to add data to the experiment table
+def AddExperimentInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add experiment information
+    to the Experiment Table of the EGAsub database 
+    '''
+    
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    if args.table not in Tables:
+        Fields = ["alias", "title", "instrumentModelId", "librarySourceId",
+                  "librarySelectionId", "libraryStrategyId", "designDescription",
+                  "libraryName", "libraryConstructionProtocol", "libraryLayoutId",
+                  "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId",
+                  "Json", "submissionStatus", "errorMessages", "Receipt", "CreationTime",
+                  "egaAccessionId", "egaBox", "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] in ['Json', 'Receipt', 'files']:
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accessions}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+    # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
+    
+    # parse data from the input table
+    Data = ParseExperimentInputTable(args.input)
+    
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
+        # check that experiments are not already in the database for that box
+        for D in Data:
+            # get experiment alias
+            alias = list(D.keys())[0]
+            if alias in Registered:
+                # skip already registered in EGA
+                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+            elif alias in Recorded:
+                # skip already recorded in submission database
+                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+            else:
+                # add fields from the command
+                D[alias]['title'], D[alias]['studyId']  = args.title, args.study              
+                D[alias]['designDescription'], D[alias]["instrumentModelId"] = args.description, args.instrument
+                D[alias]["librarySourceId"], D[alias]["librarySelectionId"] = args.source, args.selection
+                D[alias]["libraryStrategyId"], D[alias]["libraryConstructionProtocol"] = args.strategy, args.protocol
+                D[alias]["libraryLayoutId"], D[alias]['egaBox'] = args.library, args.box
+                # set Status to ready
+                D[alias]["Status"] = "ready"
+                # list values according to the table column order
+                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                # convert data to strings, converting missing values to NULL                    L
+                Values = FormatData(L)        
+                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                conn.commit()
+    conn.close()            
+    
+    
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
@@ -2805,7 +2980,7 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "analysisDate",
+        Fields = ["alias", "sampleReferences", "analysisDate",
                   "files", "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "projects",
                   "attributes", "Status"]
@@ -2867,15 +3042,9 @@ def AddAnalysesInfo(args):
                     # add fileTypeId to dict
                     assert 'fileTypeId' not in D[alias]['files'][filePath] 
                     D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
-                # check if multiple sample alias are used. store sampleAlias as string
-                sampleAlias = list(set(D[alias]['sampleAlias']))
-                if len(sampleAlias) == 1:
-                    # only 1 sampleAlias is used
-                    sampleAlias = sampleAlias[0]
-                else:
-                    # multiple sample aliases are used
-                    sampleAlias = ':'.join(sampleAlias)
-                D[alias]['sampleAlias'] = sampleAlias    
+                # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
+                sampleIds = ':'.join(list(set(D[alias]['sampleReferences'])))
+                D[alias]['sampleRefefences'] = sampleIds    
                 # set Status to ready
                 D[alias]["Status"] = "ready"
                 # list values according to the table column order
@@ -2909,12 +3078,12 @@ def IsUploadDone(args):
     CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box, args.alias, args.jobnames)
     
 
-# use this function to form json for Analyses objects
-def FormAnalysesJson(args):
+# use this function to form json for a given object
+def CreateJson(args):
     '''
     (list) -> None
-    Take a list of command line arguments and encrypt, upload and register analysis
-    objects to EGA following sequential steps that depend on the analysis status mode
+    Take a list of command line arguments and form the submission json for a given Object
+    The specific steps involved vary based on the Object
     '''
 
     # check if Analyses table exists
@@ -2922,57 +3091,81 @@ def FormAnalysesJson(args):
     if args.table in Tables:
         
         ## check if required information is present in table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython)
-        ## check if required information is present in attributes table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, attributes = args.attributes)
-        ## check if required information is present in attributes table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, projects = args.projects)
-        # change status ready --> valid if no error or keep status ready --> ready
+        CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
+
+        # check information in attributes table
+        if args.object in ['analyses', 'samples']:
+            ## check if required information is present in attributes table
+            CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, attributes = args.attributes)
+     
+        # check information in projects table
+        if args.object == 'analyses':
+            ## check if required information is present in attributes table
+            CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, projects = args.projects)
+
+        ## change status ready --> valid if no error or keep status ready --> ready
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+        
+        # grab sample Ids
+        if args.object in ['analyses', 'experiments']:
+            ## update Analysis table in submission database with sample accessions and change status valid -> start
+            AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
                 
-        ## set up working directory, add to analyses table and update status valid --> start
-        AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
+        ## encrypt and upload files
+        if args.object == 'analyses':
+            ## set up working directory, add to analyses table and update status start --> encrypt
+            AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
-        ## update Analysis table in submission database with sample accessions and change status start -> encrypt
-        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
-
-        ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
-        ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
+            ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
+            ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
+            EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
         
-        ## upload files and change the status upload -> uploading 
-        ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
+            ## upload files and change the status upload -> uploading 
+            ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
+            UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
         
-        ## remove files with uploaded status
-        RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+            ## remove files with uploaded status
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
-        ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'analyses', args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
+        ## form json and add to table
+        if args.object == 'analyses':
+            ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
 
-# use this function to form json for Samples objects
-def FormSamplesJson(args):
+        elif args.object == 'samples':
+             # update status valid -> submit if no error of keep status --> valid and record errorMessage
+             AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, attributes = args.attributes)
+
+        else:
+            ## form json for datasets in valid status and add to table
+            # update status valid -> submit if no error or leep status --> and record errorMessage
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython)
+
+        
+# use this function to form json for experiments objects        
+def FormExperimentsJson(args):
     '''
     (list) -> None
-    Take a list of command line arguments and form json with metadata for sample registration
+    Take a list of command line arguments and form json with metadata for experiments registration
     '''
 
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
-    if args.table in Tables and args.attributes in Tables:
+    if args.table in Tables:
         
-        ## check if required information is present in table.
-        CheckTableInformation(args.credential, args.subdb, args.table, 'samples', args.box, args.myscript, args.mypython)
-        ## check if required information is present in attributes table.
-        CheckTableInformation(args.credential, args.subdb, args.table, 'samples', args.box, args.myscript, args.mypython, attributes = args.attributes)
+        ## check if required information is present in table
+        CheckTableInformation(args.credential, args.subdb, args.table, 'experiments', args.box, args.myscript, args.mypython)
         # change status ready --> valid if no error or keep status ready --> ready
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+                
+        ## update Experiments table in submission database with sample accessions and change status valid -> start
+        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, 'experiments', args.table, args.box)
         
-        ## form json for samples in valid status add to table
-        # update status valid -> submit if no error of keep status --> valid and record errorMessage
-        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'samples', args.myscript, args.mypython, attributes = args.attributes)
+        ## form json for experiments in start status and add to table
+        # update status start -> submit if no error or leep status --> and record errorMessage
+        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'experiments', args.myscript, args.mypython)
 
-       
+
 # use this function to submit object metadata 
 def SubmitMetadata(args):
     '''
@@ -3014,6 +3207,7 @@ if __name__ == '__main__':
     parent_parser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     parent_parser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     
+    # create main parser
     main_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages EGA submissions')
     subparsers = main_parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
 
@@ -3058,6 +3252,21 @@ if __name__ == '__main__':
     AddDatasetsParser.add_argument('--DatasetsLinks', dest='datasetslinks', help='Optional file with dataset URLs')
     AddDatasetsParser.add_argument('--Attributes', dest='attributes', help='Optional file with attributes')
     AddDatasetsParser.set_defaults(func=AddDatasetInfo)
+    
+    # add experiments to Experiments Table
+    AddExperimentParser = subparsers.add_parser('AddExperiments', help ='Add experiments information to Experiments Table', parents = [parent_parser])
+    AddExperimentParser.add_argument('-t', '--Table', dest='table', default='Experiments', help='Experiments table. Default is Experiments')
+    AddExperimentParser.add_argument('-i', '--Input', dest='input', help='Input table with library and sample information', required=True)
+    AddExperimentParser.add_argument('--Title', dest='title', help='Short title', required=True)
+    AddExperimentParser.add_argument('--StudyId', dest='study', help='Study Id. Must start with EGAS', required=True)
+    AddExperimentParser.add_argument('--Description', dest='description', help='Library description', required=True)
+    AddExperimentParser.add_argument('--Instrument', dest='instrument', help='Instrument model. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Selection', dest='selection', help='Library selection. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Source', dest='source', help='Library source. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Strategy', dest='strategy', help='Library strategy. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Protocol', dest='protocol', help='Library construction protocol.', required=True)
+    AddExperimentParser.add_argument('--Layout', dest='library', help='0 for aired and 1 for single end sequencing', required=True)
+    AddDatasetsParser.set_defaults(func=AddExperimentInfo)
     
     # collect enumerations from EGA
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
