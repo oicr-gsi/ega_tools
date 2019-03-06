@@ -1491,7 +1491,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
     cur = conn.cursor()
     # pull alias, sampleIds for object with ready status for given box
     if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'experiments':
         Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
@@ -1528,7 +1528,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                     # update status start --> encrypt if no error
                     if Samples[alias][1] == '':
                         # update sample accessions and status start --> encrypt
-                        cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
                         conn.commit()
                     else:
                         # record error message and keep status start --> start
@@ -3110,13 +3110,13 @@ def FormAnalysesJson(args):
         CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, projects = args.projects)
         # change status ready --> valid if no error or keep status ready --> ready
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
-                
-        ## set up working directory, add to analyses table and update status valid --> start
-        AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
-        
-        ## update Analysis table in submission database with sample accessions and change status start -> encrypt
+           
+        ## update Analysis table in submission database with sample accessions and change status valid -> start
         AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
 
+        ## set up working directory, add to analyses table and update status start --> encrypt
+        AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
+        
         ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
         ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
         EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
