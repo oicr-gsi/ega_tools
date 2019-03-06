@@ -489,7 +489,12 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
         {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
-    
+    elif Object == 'experiments':
+        Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
+        {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
+        {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+
     # extract data 
     try:
         cur.execute(Cmd)
@@ -498,6 +503,12 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         Data = []
     conn.close()
     
+    # map typeId with enumerations
+    MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
+               "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
+               "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
+               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies"}
+
     # check info
     if len(Data) != 0:
         if Object == 'analyses':
@@ -521,7 +532,14 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
                     'description', 'datasetLinks', 'attributes', 'egaBox']     
             Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
-    
+        elif Object == 'experiments':
+            Keys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
+                    "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+            Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                        "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
+                        "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+      
         for i in range(len(Data)):
             # set up boolean. update if missing values
             Missing = False
@@ -576,28 +594,17 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                     if 'EGAP' not in d[key]:
                         Missing = True
                         Error.append(key)
+                # check library layout
+                if key == "libraryLayoutId":
+                    if str(d[key]) not in ['0', '1']:
+                        Missing = True
+                        Error.append(key)
                 # check enumerations
-                if key == 'experimentTypeId':
-                    if d['experimentTypeId'] not in Enums['ExperimentTypes']:
+                if key in MapEnum:
+                    # check that enumeration is valid
+                    if d[key] not in Enums[MapEnum[key]]:
                         Missing = True
                         Error.append(key)
-                if key == 'analysisTypeId':
-                    if d['analysisTypeId'] not in Enums['AnalysisTypes']:
-                        Missing = True
-                        Error.append(key)
-                if key == 'caseOrControlId':
-                    if d['caseOrControlId'] not in Enums['CaseControl']:
-                        Missing = True
-                        Error.append(key)
-                if key == 'genderId':
-                    if d['genderId'] not in Enums['Genders']:
-                        Missing = True
-                        Error.append(key)
-                if key == 'datasetTypeIds':
-                    if d['datasetTypeIds'] not in Enums['DatasetTypes']:
-                        Missing = True
-                        Error.append(key)
-                
                 # check attributes of attributes table
                 if key == 'attributes':
                     if (Object in ['analyses', 'samples'] and 'attributes' in KeyWordParams) or Object == 'datasets':
@@ -728,10 +735,19 @@ def FormatJson(D, Object, MyScript, MyPython):
         JsonKeys = ["alias", "datasetTypeIds", "policyId", "runsReferences", "analysisReferences",
                     "title", "description", "datasetLinks", "attributes"]
         Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
-    
+    elif Object == 'experiments':
+        JsonKeys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
+                    "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+        Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
+                    "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+      
     # map typeId with enumerations
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
-               "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes"}        
+               "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
+               "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
+               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies"}
 
     # loop over required json keys
     for field in JsonKeys:
@@ -785,6 +801,26 @@ def FormatJson(D, Object, MyScript, MyPython):
                     # loop over all attributes
                     attributes = attributes.split(';')
                     J[field] = [json.loads(attributes[i].strip().replace("'", "\"")) for i in range(len(attributes))]
+                elif field == 'libraryLayoutId':
+                    try:
+                        int(D[field]) in [0, 1]
+                        J[field] = int(D[field])
+                    except:
+                        # must be coded 0 for paired end or 1 for single end
+                        J = {}
+                        # return dict with alias if required field is missing
+                        J["alias"] = D["alias"]
+                        return J
+                elif field  in ['pairedNominalLength', 'pairedNominalSdev']:
+                    try:
+                        float(D[field])
+                        J[field] = float(D[field])
+                    except:
+                        # must be coded 0 for paired end or 1 for single end
+                        J = {}
+                        # return dict with alias if required field is missing
+                        J["alias"] = D["alias"]
+                        return J        
                 # check enumerations
                 elif field in MapEnum:
                     # check that enumeration is valid
@@ -854,6 +890,11 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, \
         {0}.analysisReferences, {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} \
         WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'experiments':
+        Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
+        {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
+        {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
     
     # extract information to for json    
     try:
@@ -3109,6 +3150,26 @@ def FormDatasetsJson(args):
         # update status uploaded -> submit if no error or leep status --> and record errorMessage
         AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'datasets', args.myscript, args.mypython)
 
+        
+# use this function to form json for experiments objects        
+def FormExperimentsJson(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and form json with metadata for experiments registration
+    '''
+
+    # check if Analyses table exists
+    Tables = ListTables(args.credential, args.subdb)
+    if args.table in Tables:
+        
+        ## check if required information is present in table
+        CheckTableInformation(args.credential, args.subdb, args.table, 'experiments', args.box, args.myscript, args.mypython)
+        # change status ready --> valid if no error or keep status ready --> ready
+        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+                
+        ## form json for datasets in valid status and add to table
+        # update status uploaded -> submit if no error or leep status --> and record errorMessage
+        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'experiments', args.myscript, args.mypython)
         
 # use this function to submit object metadata 
 def SubmitMetadata(args):
