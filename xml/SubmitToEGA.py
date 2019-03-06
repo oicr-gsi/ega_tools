@@ -476,7 +476,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
             FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
         else:
-            Cmd = 'SELECT {0}.alias, {0}.sampleAlias, {0}.files, {0}.egaBox, \
+            Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.files, {0}.egaBox, \
             {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'samples':
         if 'attributes' in KeyWordParams:
@@ -519,8 +519,8 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                 Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
                 Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
             else:
-                Keys = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleAlias', 'files', 'egaBox', 'attributes', 'projects']
+                Keys = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
+                Required = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
         elif Object == 'samples':
             if 'attributes' in KeyWordParams:
                 Keys = ['alias', 'title', 'description', 'attributes']
@@ -724,7 +724,7 @@ def FormatJson(D, Object, MyScript, MyPython):
         JsonKeys = ["alias", "title", "description", "studyId", "sampleReferences",
                     "analysisCenter", "analysisDate", "analysisTypeId", "files",
                     "attributes", "genomeId", "chromosomeReferences", "experimentTypeId", "platform"]
-        Required = ["alias", "title", "description", "studyId", "analysisCenter",
+        Required = ["alias", "title", "description", "studyId", "sampleReferences", "analysisCenter",
                     "analysisTypeId", "files", "genomeId", "experimentTypeId", "StagePath"]
     elif Object == 'samples':
         JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
@@ -836,17 +836,11 @@ def FormatJson(D, Object, MyScript, MyPython):
                             J[field] = [Enums[MapEnum[field]][D[field]]]
                         else:
                             J[field] = Enums[MapEnum[field]][D[field]]
+                elif field == 'sampleReferences':
+                    # populate with sample accessions
+                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(':')]
                 else:
                     J[field] = D[field]
-        else:
-            if field == 'sampleReferences':
-                # populate with sample accessions
-                J[field] = []
-                if ':' in D['sampleEgaAccessionsId']:
-                    for accession in D['sampleEgaAccessionsId'].split(':'):
-                        J[field].append({"value": accession.strip(), "label":""})
-                else:
-                    J[field].append({"value": D['sampleEgaAccessionsId'], "label":""})
     return J                
 
 
@@ -876,7 +870,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
     
     # command depends on Object type    
     if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId, {0}.analysisDate, {0}.files, \
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.analysisDate, {0}.files, \
         {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
         {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
         FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
@@ -1363,7 +1357,7 @@ def ParseAnalysisInputTable(Table):
     # get file header
     Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
-    Missing =  [i for i in ['alias', 'sampleAlias', 'filePath'] if i not in Header]
+    Missing =  [i for i in ['alias', 'sampleReferences', 'filePath'] if i not in Header]
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
     else:
@@ -1376,10 +1370,10 @@ def ParseAnalysisInputTable(Table):
             # extract variables from line
             if 'fileName' not in Header:
                 if 'analysisDate' in Header:
-                    L = ['alias', 'sampleAlias', 'filePath', 'analysisDate']
+                    L = ['alias', 'sampleReferences', 'filePath', 'analysisDate']
                     alias, sampleAlias, filePath, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
                 else:
-                    L = ['alias', 'sampleAlias', 'filePath']
+                    L = ['alias', 'sampleReferences', 'filePath']
                     alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
                     analysisDate = ''
                 # file name is not supplied, use filename in filepath             
@@ -1388,10 +1382,10 @@ def ParseAnalysisInputTable(Table):
             else:
                 # file name is supplied, use filename
                 if 'analysisDate' in Header:
-                    L = ['alias', 'sampleAlias', 'filePath', 'fileName', 'analysisDate']
+                    L = ['alias', 'sampleReferences', 'filePath', 'fileName', 'analysisDate']
                     alias, sampleAlias, filePath, fileName, analysisDate = [S[Header.index(L[i])] for i in range(len(L))]
                 else:
-                    L = ['alias', 'sampleAlias', 'filePath', 'fileName']
+                    L = ['alias', 'sampleReferences', 'filePath', 'fileName']
                     alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
                     analysisDate = ''
                 # check if fileName is provided for that alias
@@ -1405,13 +1399,13 @@ def ParseAnalysisInputTable(Table):
                 D[alias]['alias'] = alias
                 D[alias]['analysisDate'] = analysisDate
                 # record sampleAlias. multiple sample alias are allowed, eg for VCFs
-                D[alias]['sampleAlias'] = [sampleAlias]
+                D[alias]['sampleReferences'] = [sampleAlias]
                 D[alias]['files'] = {}
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
             else:
                 assert D[alias]['alias'] == alias
                 # record sampleAlias
-                D[alias]['sampleAlias'].append(sampleAlias)
+                D[alias]['sampleReferences'].append(sampleAlias)
                 # record file info, filepath shouldn't be recorded already 
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
@@ -1491,7 +1485,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
     cur = conn.cursor()
     # pull alias, sampleIds for object with ready status for given box
     if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'experiments':
         Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
@@ -1528,7 +1522,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                     # update status start --> encrypt if no error
                     if Samples[alias][1] == '':
                         # update sample accessions and status start --> encrypt
-                        cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        cur.execute('UPDATE {0} SET {0}.sampleReferences=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
                         conn.commit()
                     else:
                         # record error message and keep status start --> start
@@ -2986,7 +2980,7 @@ def AddAnalysesInfo(args):
     cur = conn.cursor()
     
     if args.table not in Tables:
-        Fields = ["alias", "sampleAlias", "sampleEgaAccessionsId", "analysisDate",
+        Fields = ["alias", "sampleReferences", "analysisDate",
                   "files", "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "projects",
                   "attributes", "Status"]
@@ -3048,15 +3042,9 @@ def AddAnalysesInfo(args):
                     # add fileTypeId to dict
                     assert 'fileTypeId' not in D[alias]['files'][filePath] 
                     D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
-                # check if multiple sample alias are used. store sampleAlias as string
-                sampleAlias = list(set(D[alias]['sampleAlias']))
-                if len(sampleAlias) == 1:
-                    # only 1 sampleAlias is used
-                    sampleAlias = sampleAlias[0]
-                else:
-                    # multiple sample aliases are used
-                    sampleAlias = ':'.join(sampleAlias)
-                D[alias]['sampleAlias'] = sampleAlias    
+                # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
+                sampleIds = ':'.join(list(set(D[alias]['sampleReferences'])))
+                D[alias]['sampleRefefences'] = sampleIds    
                 # set Status to ready
                 D[alias]["Status"] = "ready"
                 # list values according to the table column order
