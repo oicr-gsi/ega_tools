@@ -894,7 +894,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
-        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
     
     # extract information to for json    
     try:
@@ -1475,12 +1475,12 @@ def ParseAnalysesAccessoryTables(Table, TableType):
 
 
 # use this function to add sample accessions to Analysis Table in the submission database
-def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Table):
+def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, Box):
     '''
-    (file, str, str, str, str) -> None
+    (file, str, str, str, str, str) -> None
     Take a file with credentials to connect to metadata and submission databases
     and update the Table in the submission table with the sample accessions
-    and update the analyses status to upload
+    and update the Object status 
     '''
     
     # grab sample EGA accessions from metadata database, create a dict {alias: accession}
@@ -1489,35 +1489,59 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Box, Tabl
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
-    # pull alias, sampleEgacessions for analyses with ready status for given box
-    cur.execute('SELECT {0}.sampleAlias, {0}.sampleEgaAccessionsId, {0}.alias FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-    Data = cur.fetchall()
+    # pull alias, sampleIds for object with ready status for given box
+    if Object == 'analyses':
+        Cmd = 'SELECT {0}.alias, {0}.sampleEgaAccessionsId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'experiments':
+        Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    
+    try:
+        cur.excecute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
     
     # create a dict {alias: [sampleaccessions, ErrorMessage]}
     Samples = {}
-    # check if alias are in ready status
+    # check if alias are in start status
     if len(Data) != 0:
         for i in Data:
             # make a list of sampleAlias
-            sampleAlias = i[0].split(':')
+            sampleAlias = i[1].split(':')
             # make a list of sample accessions
-            sampleAccessions = [Registered[j] for j in sampleAlias if j in Registered]
+            sampleAccessions = []
+            for j in sampleAlias:
+                if j.startswith('EGAN'):
+                    sampleAccessions.append(j)
+                elif j in Registered:
+                    sampleAccessions.append(Registered[j])
             # record error if sample aliases have missing accessions
             if len(sampleAlias) != len(sampleAccessions):
                 Error = 'Sample accessions not available'
             else:
                 Error = ''
-            Samples[i[2]] = [':'.join(sampleAccessions), Error]
+            Samples[i[0]] = [':'.join(sampleAccessions), Error]
         if len(Samples) != 0:
             for alias in Samples:
-                # update status start --> encrypt if no error
-                if Samples[alias][1] == '':
-                    # update sample accessions and status start --> encrypt
-                    cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                # check Object for updated status
+                if Object == 'analyses':
+                    # update status start --> encrypt if no error
+                    if Samples[alias][1] == '':
+                        # update sample accessions and status start --> encrypt
+                        cur.execute('UPDATE {0} SET {0}.sampleEgaAccessionsId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        conn.commit()
+                    else:
+                        # record error message and keep status start --> start
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
-                else:
-                    # record error message and keep status start --> start
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                elif Object == 'experiments':
+                    if Samples[alias][1] == '':
+                        # update sample accessions and status start --> encrypt
+                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        conn.commit()
+                    else:
+                        # record error message and keep status start --> start
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
     conn.close()    
 
@@ -3147,7 +3171,7 @@ def FormDatasetsJson(args):
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
                 
         ## form json for datasets in valid status and add to table
-        # update status uploaded -> submit if no error or leep status --> and record errorMessage
+        # update status valid -> submit if no error or leep status --> and record errorMessage
         AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'datasets', args.myscript, args.mypython)
 
         
@@ -3167,8 +3191,11 @@ def FormExperimentsJson(args):
         # change status ready --> valid if no error or keep status ready --> ready
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
                 
-        ## form json for datasets in valid status and add to table
-        # update status uploaded -> submit if no error or leep status --> and record errorMessage
+        ## update Experiments table in submission database with sample accessions and change status valid -> start
+        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, 'experiments', args.table, args.box)
+        
+        ## form json for experiments in start status and add to table
+        # update status start -> submit if no error or leep status --> and record errorMessage
         AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'experiments', args.myscript, args.mypython)
         
 # use this function to submit object metadata 
