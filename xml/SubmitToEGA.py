@@ -3078,12 +3078,12 @@ def IsUploadDone(args):
     CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box, args.alias, args.jobnames)
     
 
-# use this function to form json for Analyses objects
-def FormAnalysesJson(args):
+# use this function to form json for a given object
+def CreateJson(args):
     '''
     (list) -> None
-    Take a list of command line arguments and encrypt, upload and register analysis
-    objects to EGA following sequential steps that depend on the analysis status mode
+    Take a list of command line arguments and form the submission json for a given Object
+    The specific steps involved vary based on the Object
     '''
 
     # check if Analyses table exists
@@ -3091,76 +3091,55 @@ def FormAnalysesJson(args):
     if args.table in Tables:
         
         ## check if required information is present in table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython)
-        ## check if required information is present in attributes table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, attributes = args.attributes)
-        ## check if required information is present in attributes table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'analyses', args.box, args.myscript, args.mypython, projects = args.projects)
-        # change status ready --> valid if no error or keep status ready --> ready
-        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
-           
-        ## update Analysis table in submission database with sample accessions and change status valid -> start
-        AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.box, args.table)
+        CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
 
-        ## set up working directory, add to analyses table and update status start --> encrypt
-        AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
-        
-        ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
-        ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-        EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
-        
-        ## upload files and change the status upload -> uploading 
-        ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-        UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
-        
-        ## remove files with uploaded status
-        RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
-               
-        ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'analyses', args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
+        # check information in attributes table
+        if args.object in ['analyses', 'samples']:
+            ## check if required information is present in attributes table
+            CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, attributes = args.attributes)
+     
+        # check information in projects table
+        if args.object == 'analyses':
+            ## check if required information is present in attributes table
+            CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, projects = args.projects)
 
-# use this function to form json for Samples objects
-def FormSamplesJson(args):
-    '''
-    (list) -> None
-    Take a list of command line arguments and form json with metadata for sample registration
-    '''
-
-    # check if Analyses table exists
-    Tables = ListTables(args.credential, args.subdb)
-    if args.table in Tables and args.attributes in Tables:
-        
-        ## check if required information is present in table.
-        CheckTableInformation(args.credential, args.subdb, args.table, 'samples', args.box, args.myscript, args.mypython)
-        ## check if required information is present in attributes table.
-        CheckTableInformation(args.credential, args.subdb, args.table, 'samples', args.box, args.myscript, args.mypython, attributes = args.attributes)
-        # change status ready --> valid if no error or keep status ready --> ready
+        ## change status ready --> valid if no error or keep status ready --> ready
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
         
-        ## form json for samples in valid status add to table
-        # update status valid -> submit if no error of keep status --> valid and record errorMessage
-        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'samples', args.myscript, args.mypython, attributes = args.attributes)
-
-
-# use this function to form json for datasets objects        
-def FormDatasetsJson(args):
-    '''
-    (list) -> None
-    Take a list of command line arguments and form json with metadata for dataset registration
-    '''
-
-    # check if Analyses table exists
-    Tables = ListTables(args.credential, args.subdb)
-    if args.table in Tables:
-        
-        ## check if required information is present in table
-        CheckTableInformation(args.credential, args.subdb, args.table, 'datasets', args.box, args.myscript, args.mypython)
-        # change status ready --> valid if no error or keep status ready --> ready
-        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+        # grab sample Ids
+        if args.object in ['analyses', 'experiments']:
+            ## update Analysis table in submission database with sample accessions and change status valid -> start
+            AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
                 
-        ## form json for datasets in valid status and add to table
-        # update status valid -> submit if no error or leep status --> and record errorMessage
-        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'datasets', args.myscript, args.mypython)
+        ## encrypt and upload files
+        if args.object == 'analyses':
+            ## set up working directory, add to analyses table and update status start --> encrypt
+            AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
+        
+            ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
+            ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
+            EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
+        
+            ## upload files and change the status upload -> uploading 
+            ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
+            UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
+        
+            ## remove files with uploaded status
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+               
+        ## form json and add to table
+        if args.object == 'analyses':
+            ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
+
+        elif args.object == 'samples':
+             # update status valid -> submit if no error of keep status --> valid and record errorMessage
+             AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, attributes = args.attributes)
+
+        else:
+            ## form json for datasets in valid status and add to table
+            # update status valid -> submit if no error or leep status --> and record errorMessage
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython)
 
         
 # use this function to form json for experiments objects        
@@ -3185,7 +3164,8 @@ def FormExperimentsJson(args):
         ## form json for experiments in start status and add to table
         # update status start -> submit if no error or leep status --> and record errorMessage
         AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'experiments', args.myscript, args.mypython)
-        
+
+
 # use this function to submit object metadata 
 def SubmitMetadata(args):
     '''
