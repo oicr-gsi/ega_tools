@@ -19,12 +19,12 @@ import xml.etree.ElementTree as ET
 
 
 
-# resource for jaon formatting and api submission
+# resource for json formatting and api submission
 #https://ega-archive.org/submission/programmatic_submissions/json-message-format
 #https://ega-archive.org/submission/programmatic_submissions/submitting-metadata
 
 
-## functions common to multiple objects
+## functions common to multiple objects =======================================
 
 # use this function to extract credentials from file
 def ExtractCredentials(CredentialFile):
@@ -1304,7 +1304,7 @@ def GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrint, Box):
     return Data
 
 
-## functions specific to Analyses objects
+## functions specific to Analyses objects =====================================
     
 # use this function to parse the input analysis table
 def ParseAnalysisInputTable(Table):
@@ -2264,31 +2264,60 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
                         # remove md5sum
                         os.system('rm {0}'.format(b))
 
-#################
 
-## functions specific to datasets
+## functions specific to experiments ==========================================
 
+#use this function to parse the input experiment table
+def ParseExperimentInputTable(Table):
+    '''
+    (file) -> list 
+    Take a tab-delimited file and return a list of dictionaries, each dictionary
+    storing the information for a unique experiment object
+    Preconditions: Required fields must be present or returned list is empty,
+    and missing entries are not permitted (e.g. can be '', NA)
+    '''
+    
+    # create a dict to store information about the experiments
+    D = {}
+    
+    infile = open(Table)
+    # get file header
+    Header = infile.readline().rstrip().split('\t')
+    # check that required fields are present
+    Missing =  [i for i in  ["sampleId", "alias", "libraryName"] if i not in Header]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        # required fields are present, read the content of the file
+        Content = infile.read().rstrip().split('\n')
+        for S in Content:
+            S = S.split('\t')
+            # missing values are not permitted
+            assert len(Header) == len(S), 'missing values should be "" or NA'
+            # extract variables from line
+            if "pairedNominalLength" not in Header:
+                Length = 0
+            else:
+                Length = S[Header.index("pairedNominalLength")]
+            if "pairedNominalSdev" not in Header:
+                Sdev = 0
+            else:
+                Sdev = S[Header.index("pairedNominalSdev")]
+            L = ["sampleId", "alias", "libraryName"]
+            sample, alias, library  = [S[Header.index(L[i])] for i in range(len(L))]
+            
+            assert alias not in D
+            # create inner dict
+            D[alias] = {'alias': alias, 'libraryName': library, 'sampleId': sample,
+             'pairedNominalLength': Length, 'pairedNominalSdev': Sdev}
+    infile.close()
 
+    # create list of dicts to store the info under a same alias
+    L = [{alias: D[alias]} for alias in D]             
+    return L            
+    
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-########################
-
-
-
-## functions specific to Samples objects
+## functions specific to Samples objects ======================================
 
 # use this function to parse the input sample table
 def ParseSampleInputTable(Table):
@@ -2307,10 +2336,10 @@ def ParseSampleInputTable(Table):
     # get file header
     Header = infile.readline().rstrip().split('\t')
     # check that required fields are present
-    L = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
+    Required = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
          "region", "phenotype", "subjectId", "anonymizedName", "biosampleId",
          "sampleAge", "sampleDetail"]
-    Missing = [i for i in L if i not in Header]
+    Missing = [i for i in Required if i not in Header]
     
     if len(Missing) != 0:
         print('These required fields are missing: {0}'.format(', '.join(Missing)))
@@ -2379,7 +2408,7 @@ def ParseSampleAttributesTable(Table):
  
 
 
-## functions to run script    
+## functions to run script ====================================================    
    
 # use this function to print a dict the enumerations from EGA to std output
 def GrabEgaEnums(args):
@@ -2545,7 +2574,95 @@ def AddDatasetInfo(args):
             conn.commit()
         conn.close()            
 
-   
+ 
+# use this function to add data to the experiment table
+def AddExperimentInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add experiment information
+    to the Experiment Table of the EGAsub database 
+    '''
+    
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    if args.table not in Tables:
+        Fields = ["alias", "title", "instrumentModelId", "librarySourceId",
+                  "librarySelectionId", "libraryStrategyId", "designDescription",
+                  "libraryName", "libraryConstructionProtocol", "libraryLayoutId",
+                  "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId",
+                  "Json", "submissionStatus", "errorMessages", "Receipt", "CreationTime",
+                  "egaAccessionId", "egaBox", "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] in ['Json', 'Receipt', 'files']:
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # pull down alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accessions}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+    # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
+    
+    # parse data from the input table
+    Data = ParseExperimentInputTable(args.input)
+    
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
+        # check that experiments are not already in the database for that box
+        for D in Data:
+            # get experiment alias
+            alias = list(D.keys())[0]
+            if alias in Registered:
+                # skip already registered in EGA
+                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+            elif alias in Recorded:
+                # skip already recorded in submission database
+                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+            else:
+                # add fields from the command
+                D[alias]['title'], D[alias]['studyId']  = args.title, args.study              
+                D[alias]['designDescription'], D[alias]["instrumentModelId"] = args.description, args.instrument
+                D[alias]["librarySourceId"], D[alias]["librarySelectionId"] = args.source, args.selection
+                D[alias]["libraryStrategyId"], D[alias]["libraryConstructionProtocol"] = args.strategy, args.protocol
+                D[alias]["libraryLayoutId"], D[alias]['egaBox'] = args.library, args.box
+                # set Status to ready
+                D[alias]["Status"] = "ready"
+                # list values according to the table column order
+                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                # convert data to strings, converting missing values to NULL                    L
+                Values = FormatData(L)        
+                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                conn.commit()
+    conn.close()            
+    
+    
 # use this function to add data to the sample table
 def AddSampleInfo(args):
     '''
@@ -3014,6 +3131,7 @@ if __name__ == '__main__':
     parent_parser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     parent_parser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
     
+    # create main parser
     main_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages EGA submissions')
     subparsers = main_parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
 
@@ -3058,6 +3176,21 @@ if __name__ == '__main__':
     AddDatasetsParser.add_argument('--DatasetsLinks', dest='datasetslinks', help='Optional file with dataset URLs')
     AddDatasetsParser.add_argument('--Attributes', dest='attributes', help='Optional file with attributes')
     AddDatasetsParser.set_defaults(func=AddDatasetInfo)
+    
+    # add experiments to Experiments Table
+    AddExperimentParser = subparsers.add_parser('AddExperiments', help ='Add experiments information to Experiments Table', parents = [parent_parser])
+    AddExperimentParser.add_argument('-t', '--Table', dest='table', default='Experiments', help='Experiments table. Default is Experiments')
+    AddExperimentParser.add_argument('-i', '--Input', dest='input', help='Input table with library and sample information', required=True)
+    AddExperimentParser.add_argument('--Title', dest='title', help='Short title', required=True)
+    AddExperimentParser.add_argument('--StudyId', dest='study', help='Study Id. Must start with EGAS', required=True)
+    AddExperimentParser.add_argument('--Description', dest='description', help='Library description', required=True)
+    AddExperimentParser.add_argument('--Instrument', dest='instrument', help='Instrument model. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Selection', dest='selection', help='Library selection. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Source', dest='source', help='Library source. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Strategy', dest='strategy', help='Library strategy. Controlled vocabulary from EGA', required=True)
+    AddExperimentParser.add_argument('--Protocol', dest='protocol', help='Library construction protocol.', required=True)
+    AddExperimentParser.add_argument('--Layout', dest='library', help='0 for aired and 1 for single end sequencing', required=True)
+    AddDatasetsParser.set_defaults(func=AddExperimentInfo)
     
     # collect enumerations from EGA
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
