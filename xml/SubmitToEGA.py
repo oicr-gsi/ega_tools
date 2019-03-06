@@ -731,8 +731,7 @@ def FormatJson(D, Object, MyScript, MyPython):
     
     # map typeId with enumerations
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
-               "caseOrControlId": "CaseControl", "genderId": 'Genders', 
-               "datasetTypeIds": "DatasetTypes"}        
+               "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes"}        
 
     # loop over required json keys
     for field in JsonKeys:
@@ -3089,7 +3088,28 @@ def FormSamplesJson(args):
         # update status valid -> submit if no error of keep status --> valid and record errorMessage
         AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'samples', args.myscript, args.mypython, attributes = args.attributes)
 
-       
+
+# use this function to form json for datasets objects        
+def FormDatasetsJson(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and form json with metadata for dataset registration
+    '''
+
+    # check if Analyses table exists
+    Tables = ListTables(args.credential, args.subdb)
+    if args.table in Tables:
+        
+        ## check if required information is present in table
+        CheckTableInformation(args.credential, args.subdb, args.table, 'datasets', args.box, args.myscript, args.mypython)
+        # change status ready --> valid if no error or keep status ready --> ready
+        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+                
+        ## form json for datasets in valid status and add to table
+        # update status uploaded -> submit if no error or leep status --> and record errorMessage
+        AddJsonToTable(args.credential, args.subdb, args.table, args.box, 'datasets', args.myscript, args.mypython)
+
+        
 # use this function to submit object metadata 
 def SubmitMetadata(args):
     '''
