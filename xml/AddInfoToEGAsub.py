@@ -527,8 +527,8 @@ def AddExperimentInfo(args):
                 D[alias]["librarySourceId"], D[alias]["librarySelectionId"] = args.source, args.selection
                 D[alias]["libraryStrategyId"], D[alias]["libraryConstructionProtocol"] = args.strategy, args.protocol
                 D[alias]["libraryLayoutId"], D[alias]['egaBox'] = args.library, args.box
-                # set Status to ready
-                D[alias]["Status"] = "ready"
+                # set Status to start
+                D[alias]["Status"] = "start"
                 # list values according to the table column order
                 L = [D[alias][field] if field in D[alias] else '' for field in Fields]
                 # convert data to strings, converting missing values to NULL                    L
@@ -612,8 +612,8 @@ def AddSampleInfo(args):
                 D[alias]['attributes'], D[alias]['egaBox'] = args.attributes, args.box 
                 # add alias
                 D[alias]['sampleAlias'] = alias    
-                # set Status to ready
-                D[alias]["Status"] = "ready"
+                # set Status to start
+                D[alias]["Status"] = "start"
                 # list values according to the table column order
                 L = [D[alias][field] if field in D[alias] else '' for field in Fields]
                 # convert data to strings, converting missing values to NULL                    L
@@ -862,8 +862,8 @@ def AddAnalysesInfo(args):
                 # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
                 sampleIds = ';'.join(list(set(D[alias]['sampleReferences'])))
                 D[alias]['sampleRefefences'] = sampleIds    
-                # set Status to ready
-                D[alias]["Status"] = "ready"
+                # set Status to start
+                D[alias]["Status"] = "start"
                 # list values according to the table column order
                 L = [D[alias][field] if field in D[alias] else '' for field in Fields]
                 # convert data to strings, converting missing values to NULL                    L
