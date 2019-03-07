@@ -111,8 +111,7 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
     '''
     (str, str, str, str) --> None
     Take the file with credentials to connect to Database, create unique directories
-    in file system for each alias in Table with ready Status and Box and record       
-    working directory in Table
+    in file system for each alias in Table and given Box and record working directory in Table
     '''
     
     # check if table exists
@@ -157,11 +156,11 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
                 # check if error message
                 if len(Error) != 0:
                     # error is found, record error message, keep status valid --> valid
-                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))  
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ';'.join(Error), alias, Box))  
                     conn.commit()
                 else:
                     # no error, update Status valid --> start
-                    cur.execute('UPDATE {0} SET {0}.Status=\"start\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))  
+                    cur.execute('UPDATE {0} SET {0}.Status=\"encrypt\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))  
                     conn.commit()
         conn.close()            
 
@@ -215,7 +214,6 @@ def RecordMessage(CredentialFile, DataBase, Table, Box, Alias, Message, Status):
     of the status for a given Alias and Box in Table if Status is respectively Error or Status
     '''
     
-    # pull json for objects with ready Status for given box
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     if Status == 'Error':
@@ -295,7 +293,6 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     in EGA BOX using the submission Portal. 
     '''
     
-    # pull json for objects with ready Status for given box
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
     try:
@@ -470,30 +467,30 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         if 'attributes' in KeyWordParams:
             AttributesTable = KeyWordParams['attributes']
             Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+            FROM {0} JOIN {1} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
         elif 'projects' in KeyWordParams:
             ProjectsTable = KeyWordParams['projects']
             Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
+            FROM {0} JOIN {1} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
         else:
             Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.files, {0}.egaBox, \
-            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'samples':
         if 'attributes' in KeyWordParams:
             AttributesTable = KeyWordParams['attributes']
             Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
-            {0}.Status=\"ready\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+            {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
         else:
             Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
-            {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+            {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
-        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
+        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
     elif Object == 'experiments':
         Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
-        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
 
     # extract data 
     try:
@@ -623,7 +620,6 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
 
             # check if object has missing/non-valid information
             if Missing == True:
-                 # record error message and update status ready --> dead
                  Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
             elif Missing == False:
                 Error = 'NoError'
@@ -645,7 +641,7 @@ def CheckTableInformation(CredentialFile, DataBase, Table, Object, Box, MyScript
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()      
     try:
-        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
     except:
         Data = []
@@ -681,14 +677,14 @@ def CheckObjectInformation(CredentialFile, DataBase, Table, Box):
     '''
     (str, str, str, str) -> None
     Extract information from DataBase Table using credentials in file and update
-    status to "valid" if all information is correct or keep status to "ready" if incorrect or missing
+    status to "clean" if all information is correct or keep status to "start" if incorrect or missing
     '''
     
     # connect to db
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()      
     try:
-        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
     except:
         Data = []
@@ -699,8 +695,8 @@ def CheckObjectInformation(CredentialFile, DataBase, Table, Box):
             # check error message and update status only if no error found
             if len(list(set(Error))) == 1:
                 if list(set(Error)) == 'NoError':
-                    # update status ready --> valid
-                    cur.execute('UPDATE {0} SET {0}.Status=\"valid\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
+                    # update status
+                    cur.execute('UPDATE {0} SET {0}.Status=\"clean\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
                     conn.commit()
     conn.close()        
     
@@ -879,7 +875,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.organismPart, \
         {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.biosampleId, \
         {0}.sampleAge, {0}.sampleDetail, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} \
-        WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
+        WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, \
         {0}.analysisReferences, {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} \
@@ -888,7 +884,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
-        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
     
     # extract information to for json    
     try:
@@ -1356,11 +1352,11 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
-    # pull alias, sampleIds for object with ready status for given box
+    # pull alias, sampleIds for given box
     if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'experiments':
-        Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
     try:
         cur.excecute(Cmd)
@@ -1394,8 +1390,8 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                 if Object == 'analyses':
                     # update status start --> encrypt if no error
                     if Samples[alias][1] == '':
-                        # update sample accessions and status start --> encrypt
-                        cur.execute('UPDATE {0} SET {0}.sampleReferences=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        # update sample accessions and status
+                        cur.execute('UPDATE {0} SET {0}.sampleReferences=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
                         conn.commit()
                     else:
                         # record error message and keep status start --> start
@@ -1404,7 +1400,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                 elif Object == 'experiments':
                     if Samples[alias][1] == '':
                         # update sample accessions and status start --> encrypt
-                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"start\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
+                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
                         conn.commit()
                     else:
                         # record error message and keep status start --> start
@@ -1436,11 +1432,11 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
     cur = conn.cursor()
     # pull alias and egaAccessionIds to be verified
     if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'experiments':
-        Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'datasets':
-        Cmd = 'SELECT {0}.alias, {0}.runsReferences, {0}.analysisReferences, {0}.policyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.runsReferences, {0}.analysisReferences, {0}.policyId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
     try:
         cur.excecute(Cmd)
@@ -1468,14 +1464,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
                     Error = 'EGA accession(s) not available as metadata' 
                 else:
                     Error = 'NoError'
-                # update errorMessages and status depending on object
-                if Object == 'analyses':
-                    NewStatus = 'start'
-                elif Object == 'experiments':
-                    NewStatus = 'start'
-                elif Object == 'datasets':
-                    NewStatus = 'start'
-                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Error, NewStatus, alias, Box)) 
+                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"valid\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                 conn.commit()
     conn.close()    
 
@@ -2327,34 +2316,32 @@ def CreateJson(args):
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
         
-        ## check if required information is present in table
+        
+        ## grab aliases with start status and check if required information is present in table 
+        # check information in main table main table
         CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
-
         # check information in attributes table
         if args.object in ['analyses', 'samples']:
             ## check if required information is present in attributes table
             CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, attributes = args.attributes)
-     
         # check information in projects table
         if args.object == 'analyses':
             ## check if required information is present in attributes table
             CheckTableInformation(args.credential, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, projects = args.projects)
-
-        ## change status ready --> valid if no error or keep status ready --> ready
+        # change status start --> clean if no error or keep status start --> start
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
         
-        ## grab sample Ids
+        ## replace sample aliases with sample accessions and change status clean --> ready or keep clean --> clean
         if args.object in ['analyses', 'experiments']:
-            ## update Analysis table in submission database with sample accessions and change status valid -> start
             AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
         
-        ## check that EGA accessions that object depends on are available metadata
+        ## check that EGA accessions that object depends on are available metadata and change status --> valid or keep clean --> clean
         if args.object in ['analyses', 'datasets', 'experiments']:
             CheckEgaAccessionId(args.credential, args.subdb, args.metadatadb, args.object, args.table, args.box)
         
         ## encrypt and upload files
         if args.object == 'analyses':
-            ## set up working directory, add to analyses table and update status start --> encrypt
+            ## set up working directory, add to analyses table and update status valid --> encrypt
             AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
         
             ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
@@ -2365,10 +2352,10 @@ def CreateJson(args):
             ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
             UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
         
-            ## remove files with uploaded status
+            ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
             RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
                
-        ## form json and add to table
+        ## form json and add to table and update status --> submit or keep current status
         if args.object == 'analyses':
             ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
             AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
