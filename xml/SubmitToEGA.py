@@ -838,7 +838,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                             J[field] = Enums[MapEnum[field]][D[field]]
                 elif field == 'sampleReferences':
                     # populate with sample accessions
-                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(':')]
+                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(';')]
                 else:
                     J[field] = D[field]
     return J                
@@ -1374,7 +1374,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
     if len(Data) != 0:
         for i in Data:
             # make a list of sampleAlias
-            sampleAlias = i[1].split(':')
+            sampleAlias = i[1].split(';')
             # make a list of sample accessions
             sampleAccessions = []
             for j in sampleAlias:
@@ -1387,7 +1387,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                 Error = 'Sample accessions not available'
             else:
                 Error = ''
-            Samples[i[0]] = [':'.join(sampleAccessions), Error]
+            Samples[i[0]] = [';'.join(sampleAccessions), Error]
         if len(Samples) != 0:
             for alias in Samples:
                 # check Object for updated status
@@ -1458,7 +1458,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
             # make a list with all other accessions
             accessions = []
             for j in range(1, len(i)):
-                accessions.extend(i[j].split(':'))
+                accessions.extend(i[j].split(';'))
             Verify[alias] = accessions    
             
         if len(Verify) != 0:
@@ -1562,7 +1562,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
-            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ':'.join(JobNames)) + '\n')
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
                 
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
@@ -1653,7 +1653,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
     '''        
         
     # make a list of job names
-    JobNames = JobNames.split(':')
+    JobNames = JobNames.split(';')
     
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
@@ -1822,7 +1822,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
-        newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ':'.join(JobNames)) + '\n')
+        newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ';'.join(JobNames)) + '\n')
                 
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -2162,7 +2162,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
                     Uploaded = False
             
             # check the exit status of the jobs uploading files
-            for jobName in JobNames.split(':'):
+            for jobName in JobNames.split(';'):
                 if GetJobExitStatus(jobName) != '0':
                     Uploaded = False
             
@@ -2216,7 +2216,7 @@ def CleanUpError(errorMessages):
             errorMessages = errorMessages[0]
         elif len(errorMessages) > 1:
             # combine the messages as single string
-            errorMessages = ':'.join(errorMessages)
+            errorMessages = ';'.join(errorMessages)
         elif len(errorMessages) == 0:
             errorMessages = 'None'
     else:
