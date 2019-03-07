@@ -838,7 +838,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                             J[field] = Enums[MapEnum[field]][D[field]]
                 elif field == 'sampleReferences':
                     # populate with sample accessions
-                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(':')]
+                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(';')]
                 else:
                     J[field] = D[field]
     return J                
@@ -1374,7 +1374,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
     if len(Data) != 0:
         for i in Data:
             # make a list of sampleAlias
-            sampleAlias = i[1].split(':')
+            sampleAlias = i[1].split(';')
             # make a list of sample accessions
             sampleAccessions = []
             for j in sampleAlias:
@@ -1387,7 +1387,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                 Error = 'Sample accessions not available'
             else:
                 Error = ''
-            Samples[i[0]] = [':'.join(sampleAccessions), Error]
+            Samples[i[0]] = [';'.join(sampleAccessions), Error]
         if len(Samples) != 0:
             for alias in Samples:
                 # check Object for updated status
@@ -1410,6 +1410,73 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
                         # record error message and keep status start --> start
                         cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
+    conn.close()    
+
+
+# use this function to check availability of Object egaAccessionId
+def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table, Box):
+    '''
+    (file, str, str, str, str, str) -> None
+    Check that all EGA accessions a given Object depends on for registration are available 
+    metadata in MetDataBase and update status of aliases in Table for Box or keep the same status 
+    '''
+    
+    # collect egaAccessionIds for all tables in EGA metadata db
+    EgaAccessions = []
+    # list all tables in EGA metadata db
+    Tables = ListTables(CredentialFile, MetDataBase)
+    # extract accessions for each table
+    for i in Tables:
+        # extract accessions for that table
+        accessions = ExtractAccessions(CredentialFile, MetDataBase, Box, i)         
+        EgaAccessions.extend(list(accessions.values()))
+    
+    # connect to the submission database
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()
+    # pull alias and egaAccessionIds to be verified
+    if Object == 'analyses':
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'experiments':
+        Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'datasets':
+        Cmd = 'SELECT {0}.alias, {0}.runsReferences, {0}.analysisReferences, {0}.policyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    
+    try:
+        cur.excecute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
+    
+    # create a dict to collect all accessions to be verified for a given alias
+    Verify = {}
+    # check if alias are in start status
+    if len(Data) != 0:
+        for i in Data:
+            # get alias
+            alias = i[0]
+            # make a list with all other accessions
+            accessions = []
+            for j in range(1, len(i)):
+                accessions.extend(i[j].split(';'))
+            Verify[alias] = accessions    
+            
+        if len(Verify) != 0:
+            # check if all accessions are readily available from metadata db
+            for alias in Verify:
+                if False in list(map(lambda x, y: x in y, Verify[alias], EgaAccessions)):
+                    Error = 'EGA accession(s) not available as metadata' 
+                else:
+                    Error = 'NoError'
+                # update errorMessages and status depending on object
+                if Object == 'analyses':
+                    NewStatus = 'start'
+                elif Object == 'experiments':
+                    NewStatus = 'start'
+                elif Object == 'datasets':
+                    NewStatus = 'start'
+                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Error, NewStatus, alias, Box)) 
+                conn.commit()
     conn.close()    
 
 
@@ -1495,7 +1562,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
-            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ':'.join(JobNames)) + '\n')
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
                 
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
@@ -1586,7 +1653,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
     '''        
         
     # make a list of job names
-    JobNames = JobNames.split(':')
+    JobNames = JobNames.split(';')
     
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
@@ -1755,7 +1822,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     # put commands in shell script
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
-        newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ':'.join(JobNames)) + '\n')
+        newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ';'.join(JobNames)) + '\n')
                 
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -2095,7 +2162,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
                     Uploaded = False
             
             # check the exit status of the jobs uploading files
-            for jobName in JobNames.split(':'):
+            for jobName in JobNames.split(';'):
                 if GetJobExitStatus(jobName) != '0':
                     Uploaded = False
             
@@ -2149,7 +2216,7 @@ def CleanUpError(errorMessages):
             errorMessages = errorMessages[0]
         elif len(errorMessages) > 1:
             # combine the messages as single string
-            errorMessages = ':'.join(errorMessages)
+            errorMessages = ';'.join(errorMessages)
         elif len(errorMessages) == 0:
             errorMessages = 'None'
     else:
@@ -2276,11 +2343,15 @@ def CreateJson(args):
         ## change status ready --> valid if no error or keep status ready --> ready
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
         
-        # grab sample Ids
+        ## grab sample Ids
         if args.object in ['analyses', 'experiments']:
             ## update Analysis table in submission database with sample accessions and change status valid -> start
             AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
-                
+        
+        ## check that EGA accessions that object depends on are available metadata
+        if args.object in ['analyses', 'datasets', 'experiments']:
+            CheckEgaAccessionId(args.credential, args.subdb, args.metadatadb, args.object, args.table, args.box)
+        
         ## encrypt and upload files
         if args.object == 'analyses':
             ## set up working directory, add to analyses table and update status start --> encrypt

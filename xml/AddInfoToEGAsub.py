@@ -860,7 +860,7 @@ def AddAnalysesInfo(args):
                     assert 'fileTypeId' not in D[alias]['files'][filePath] 
                     D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
                 # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
-                sampleIds = ':'.join(list(set(D[alias]['sampleReferences'])))
+                sampleIds = ';'.join(list(set(D[alias]['sampleReferences'])))
                 D[alias]['sampleRefefences'] = sampleIds    
                 # set Status to ready
                 D[alias]["Status"] = "ready"
