@@ -14,15 +14,8 @@ Created on Tue Sep 11 13:37:40 2018
 
 
 # import modules
-import json
-import subprocess
-import time
-import pymysql
 import os
 import argparse
-import requests
-import uuid
-import xml.etree.ElementTree as ET
 # import functions 
 from SubmitToEGA import *
 
@@ -870,6 +863,117 @@ def AddAnalysesInfo(args):
                 Values = FormatData(L)        
                 cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
                 conn.commit()
+    conn.close()            
+
+
+# use this function to parse study input table
+def ParseStudyInputTable(Table):
+    '''
+    (file) -> dict
+    Read Table and returns of key: value pairs 
+    '''
+    
+    infile = open(Table)
+    Content = infile.read().rstrip().split('\n')
+    infile.close()
+    # create a dict {key: value}
+    D = {}
+    # check that required fields are present
+    Expected = ["alias", "studyTypeId", "title", "studyAbstract"]
+    
+    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
+    Missing = [i for i in Expected if i not in Fields]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        for S in Content:
+            S = list(map(lambda x: x.strip(), S.split(':')))
+            # non-attributes may contain multiple colons. need to put them back together
+            if S[0] == 'attributes':
+                if 'attributes' not in D:
+                    D['attributes'] = []
+                D['attributes'].append({'tag': str(S[1]), 'value': ':'.join([str(S[i]) for i in range(2, len(S))])})
+            elif S[0] == 'pubMedIds':
+                D[S[0]] = ';'.join([str(S[i]) for i in range(1, len(S))])
+            else:
+                D[S[0]] = ':'.join([str(S[i]) for i in range(1, len(S))])
+    infile.close()
+    return D
+
+# use this function to add data to the study table
+def AddStudyInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add study information into the Study
+    Table of the EGAsub database
+    '''
+    
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    
+    if args.table not in Tables:
+        Fields = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
+                  "ownTerm", "pubMedIds", "customTags", "Json", "submissionStatus",
+                  "errorMessages", "Receipt", "CreationTime", "egaAccessionId", "egaBox",  "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] in ['Json', 'Receipt', 'files', 'pubMedIds', 'studyAbstract']:
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # parse input file
+    Data = ParseStudyInputTable(args.input)
+    
+    # pull down alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accessions}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+            
+    # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    # create a dict {alias: accession}
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
+    
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
+        # get alias
+        alias = Data['alias']
+        if alias in Registered:
+            # skip analysis, already registered in EGA
+            print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+        elif alias in Recorded:
+            # skip analysis, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+        else:
+            Data["Status"] = "start"
+            # list values according to the table column order
+            L = [str(Data[field]) if field in Data else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
     conn.close()            
 
 
