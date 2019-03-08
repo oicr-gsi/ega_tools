@@ -879,7 +879,7 @@ def ParseStudyInputTable(Table):
     # create a dict {key: value}
     D = {}
     # check that required fields are present
-    Expected = ["alias", "studyTypeId", "shortName", "title", "studyAbstract"]
+    Expected = ["alias", "studyTypeId", "title", "studyAbstract"]
     
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
