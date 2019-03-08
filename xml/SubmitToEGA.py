@@ -491,6 +491,10 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
         {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+    elif Object == 'study':
+        Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, \
+        {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} \
+        WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
 
     # extract data 
     try:
@@ -504,7 +508,8 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
                "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
-               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies"}
+               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies",
+               "studyTypeId": "StudyTypes"}
 
     # check info
     if len(Data) != 0:
@@ -536,7 +541,11 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
                         "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
                         "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
-      
+        elif Object == 'study':
+            Keys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
+                    "ownTerm", "pubMedIds", "customTags", "egaBox"]
+            Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
+            
         for i in range(len(Data)):
             # set up boolean. update if missing values
             Missing = False
@@ -738,12 +747,16 @@ def FormatJson(D, Object, MyScript, MyPython):
         Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
                     "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
                     "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
-      
+    elif Object == 'study':
+        JsonKeys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract", "ownTerm", "pubMedIds", "customTags", "egaBox"]
+        Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
+        
     # map typeId with enumerations
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
                "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
-               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies"}
+               "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies",
+               "studyTypeId": "StudyTypes"}
 
     # loop over required json keys
     for field in JsonKeys:
@@ -758,8 +771,9 @@ def FormatJson(D, Object, MyScript, MyPython):
                     return J
                 # other fields can be missing, either as empty list or string
                 else:
-                    # chromosomeReferences is hard-coded as empty list
-                    if field in ["chromosomeReferences", "attributes", "datasetLinks", "runsReferences", "analysisReferences"]:
+                    # some non-required fields need to be lists
+                    if field in ["chromosomeReferences", "attributes", "datasetLinks",
+                                 "runsReferences", "analysisReferences", "pubMedIds", "customTags"]:
                         J[field] = []
                     else:
                         J[field] = ""
@@ -788,9 +802,9 @@ def FormatJson(D, Object, MyScript, MyPython):
                              "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
                              "fileTypeId": fileTypeId}
                         J[field].append(d)
-                elif field in ['runsReferences', 'analysisReferences']:
+                elif field in ['runsReferences', 'analysisReferences', 'pubMedIds']:
                     J[field] = D[field].split(';')
-                elif field in ['attributes', 'datasetLinks']:
+                elif field in ['attributes', 'datasetLinks', 'customTags']:
                     # ensure strings are double-quoted
                     attributes = D[field].replace("'", "\"")
                     # convert string to dict
@@ -885,6 +899,9 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
         {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+    elif Object == 'study':
+        Cmd = 'SELECT {0}.alias, {0}studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
+        {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box) 
     
     # extract information to for json    
     try:
