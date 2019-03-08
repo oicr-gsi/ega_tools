@@ -605,6 +605,12 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                     if str(d[key]) not in ['0', '1']:
                         Missing = True
                         Error.append(key)
+                if key in ['pairedNominalLength', 'pairedNominalSdev']:
+                    try:
+                        float(d[key])
+                    except:
+                        Missing = True
+                        Error.append(key)
                 # check enumerations
                 if key in MapEnum:
                     # check that enumeration is valid
