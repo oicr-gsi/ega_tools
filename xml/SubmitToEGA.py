@@ -1655,13 +1655,14 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
  
         
 # use this function to check that encryption is done for a given alias
-def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
+def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames, ReUpload):
     '''
-    (file, str, str, str, str, str) -> None
+    (file, str, str, str, str, str, bool) -> None
     Take the file with DataBase credentials, a semicolon-seprated string of job
     names used for encryption and md5sum of all files under Alias, extract information
     from Table regarding Alias with encrypting Status and update status to upload and
-    files with md5sums when encrypting is done
+    files with md5sums when encrypting is done (or ReEncryting --> ReUpload if
+    ReUpload is True and check encryption if files already registered)
     '''        
         
     # make a list of job names
@@ -1670,9 +1671,15 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
-    # pull alias files and working directory for Alias with status = encrypting
+    # check if files are re-encrypted and re-uploaded manually and already registered
+    if ReUpload == False:
+        Status, NextStatus, PreviousStatus = 'encrypting', 'upload', 'encrypt'
+    else:
+        Status, NextStatus, PreviousStatus = 'ReEncrypting', 'ReUpload', 'ReEncrypt'
+    
+    
     try:
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"encrypting\" AND {0}.egaBox=\"{1}\" AND {0}.alias=\"{2}\"'.format(Table, Box, Alias))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"{1}\" AND {0}.egaBox=\"{2}\" AND {0}.alias=\"{3}\"'.format(Table, Status, Box, Alias))
         Data = cur.fetchall()
     except:
         Data = []
@@ -1699,7 +1706,11 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
         # check that files were encrypted and that md5sums were generated
         for file in files:
             # get the fileName
-            fileName = files[file]['fileName']
+            if ReUpload == False:
+                fileName = files[file]['fileName']
+            else:
+                # get encrypted file name without extension
+                fileName = files[file]['encryptedName'][:-4]
             fileTypeId = files[file]['fileTypeId']
             # check that encryoted and md5sum files do exist
             originalMd5File = os.path.join(WorkingDir, fileName + '.md5')
@@ -1726,7 +1737,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
             # update file info and status only if all files do exist and md5sums can be extracted
             conn = EstablishConnection(CredentialFile, DataBase)
             cur = conn.cursor()
-            cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"upload\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, str(Files), alias, Box))
+            cur.execute('UPDATE {0} SET {0}.files=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, str(Files), NextStatus, alias, Box))
             conn.commit()
             conn.close()
         elif Encrypted == False:
@@ -1734,7 +1745,7 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
             Error = 'Encryption or md5sum did not complete'
             conn = EstablishConnection(CredentialFile, DataBase)
             cur = conn.cursor()
-            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Error, PreviousStatus, alias, Box))
             conn.commit()
             conn.close()
     else:
@@ -1743,12 +1754,12 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
         Error = 'Could not check encryption'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"encrypt\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, Alias, Box))
+        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Error, PreviousStatus, Alias, Box))
         conn.commit()
         conn.close()
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript):
+def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript, ReUpload):
     '''
     (str, dict, str, str, str, str, str, str, str, str, str, str, str) -> list
     Take a files dictionary with file information for a given alias in Box, the file with 
@@ -1828,7 +1839,12 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             return [-1]
     
     # launch check upload job
-    CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    # are the files manually re-uploaded and already registered?
+    if ReUpload == True:
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7} --ReUpload' 
+    else:
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+    
     # do not check job used to make destination directory
     JobNames = JobNames[1:]
     # put commands in shell script
@@ -1847,7 +1863,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     return JobExits
 
 # use this function to upload the files
-def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, FootPrintTable, Box, Queue, Mem, UploadMode, Max, MaxFootPrint, MyScript):
+def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, FootPrintTable, Box, Queue, Mem, UploadMode, Max, MaxFootPrint, MyScript, ReUpload):
     '''
     (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
@@ -1858,10 +1874,16 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Foot
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
+   
+    # are the files already registered and manually re-uploaded?
+    if ReUpload == False:
+        Status, NewStatus = 'upload', 'uploading'
+    else:
+        Status, NewStatus = 'ReUpload', 'ReUploading'
     
     try:
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"{2}\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Status, Box))
         # check that some alias are in upload mode
         Data = cur.fetchall()
     except:
@@ -1893,29 +1915,32 @@ def UploadAnalysesObjects(CredentialFile, DataBase, Table, AttributesTable, Foot
             # update status -> uploading
             conn = EstablishConnection(CredentialFile, DataBase)
             cur = conn.cursor()
-            cur.execute('UPDATE {0} SET {0}.Status=\"uploading\", {0}.errorMessages=\"None\"  WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\";'.format(Table, alias, Box))
+            # are files re-uploaded manually
+            cur.execute('UPDATE {0} SET {0}.Status=\"{1}\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\";'.format(Table, NewStatus, alias, Box))
             conn.commit()
             conn.close()
             
             # upload files
-            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript)
+            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript, ReUpload)
+                      
             # check if upload launched properly for all files under that alias
             if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                 # record error message, reset status same uploading --> upload
                 Error = 'Could not launch upload jobs'
                 conn = EstablishConnection(CredentialFile, DataBase)
                 cur = conn.cursor()
-                cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                cur.execute('UPDATE {0} SET {0}.Status=\"{1}\", {0}.errorMessages=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Status, Error, alias, Box))
                 conn.commit()
                 conn.close()
                     
                     
 # use this function to print a dictionary of directory
-def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box):
+def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box, ReUpload):
     '''
     (str, str, str, str, str, bool) -> dict
     Return a dictionary of directory: files on the EGA staging server under the 
-    given Box for alias in DataBase Table with uploading status
+    given Box for alias in DataBase Table with uploading status. (or Reuploading
+    if ReUpload is True and the files are manually re-uploaded for registered objects) 
     '''
         
     # parse credential file to get EGA username and password
@@ -1931,12 +1956,19 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
         # extract files for alias in upload mode for given box
-        cur.execute('SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box))
-        # check that some alias are in upload mode
-        Data = cur.fetchall()
-        # close connection
+        # are the files re-uploaded manually?
+        if ReUpload == False:
+            Cmd = 'SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box)
+        else:
+            Cmd = 'SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"ReUploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box)
+        try:
+            cur.execute(Cmd)
+            Data = cur.fetchall()
+        except:
+            Data = []
         conn.close()
         
+        # check that some aliases have the proper status
         if len(Data) != 0:
             # make a list of stagepath
             StagePaths = list(set([i[1] for i in Data]))
@@ -2126,27 +2158,35 @@ def CheckUploadSuccess(LogDir, alias, FileName):
     
     
 # use this function to check that files were successfully uploaded for a given alias and update status uploading -> uploaded
-def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alias, JobNames):
+def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alias, JobNames, ReUpload):
     '''
-    (str, str, str, str, str, str, str) -> None
+    (str, str, str, str, str, str, str, bool) -> None
     Take the file with db credentials, a semicolon-separated string of job names
     used for uploading files under Alias, the table names and box for the Database
-    and update status of Alias from uploading to uploaded if all the files
-    for that alias were successfuly uploaded. 
+    and update status of Alias from uploading to uploaded if all the files for
+    that alias were successfuly uploaded. (or Reuploading --> ReUploaded if
+    ReUpload is True and the files are manually re-uploaded for registered objects) 
     '''
 
     # parse credential file to get EGA username and password
     UserName, MyPassword = ParseCredentials(CredentialFile, Box)
         
     # make a dict {directory: [files]} for alias with uploading status 
-    FilesBox = ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box)
+    FilesBox = ListFilesStagingServer(CredentialFile, DataBase, Table, AttributesTable, Box, ReUpload)
         
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
+    
+    # are the files re-uploaded manually
+    if ReUpload == False:
+        Status, NextStatus, PreviousStatus = ['uploading', 'uploaded', 'upload']
+    else:
+        Status, NextStatus, PreviousStatus = ['ReUploading', 'ReUploaded', 'ReUpload']
+        
     try:
         # extract files for alias in uploading mode for given box
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\" AND {0}.alias=\"{3}\"'.format(Table, AttributesTable, Box, Alias))
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"{2}\" AND {0}.egaBox=\"{3}\" AND {0}.alias=\"{4}\"'.format(Table, AttributesTable, Status, Box, Alias))
         Data = cur.fetchall()
     except:
         Data= []
@@ -2193,7 +2233,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
                 # connect to database, update status and close connection
                 conn = EstablishConnection(CredentialFile, DataBase)
                 cur = conn.cursor()
-                cur.execute('UPDATE {0} SET {0}.Status=\"uploaded\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                cur.execute('UPDATE {0} SET {0}.Status=\"{1}\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, NextStatus, alias, Box)) 
                 conn.commit()                                
                 conn.close()              
             elif Uploaded == False:
@@ -2201,7 +2241,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
                 Error = 'Upload failed'
                 conn = EstablishConnection(CredentialFile, DataBase)
                 cur = conn.cursor()
-                cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                cur.execute('UPDATE {0} SET {0}.Status=\"{1}\", {0}.errorMessages=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, PreviousStatus, Error, alias, Box)) 
                 conn.commit()                                
                 conn.close()
     else:
@@ -2209,7 +2249,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, AttributesTable, Box, Alia
         Error = 'Could not check uploaded files'
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        cur.execute('UPDATE {0} SET {0}.Status=\"upload\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, Alias, Box)) 
+        cur.execute('UPDATE {0} SET {0}.Status=\"{1}\", {0}.errorMessages=\"{2}\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, PreviousStatus, Error, Alias, Box)) 
         conn.commit()                                
         conn.close()
 
@@ -2240,20 +2280,28 @@ def CleanUpError(errorMessages):
 
 
 # use this function to remove encrypted and md5 files
-def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
+def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove, ReUpload):
     '''
-    (str, str, str, str, str, str, bool) -> None
+    (str, str, str, str, str, str, bool, bool) -> None
     Connect to Database using CredentialFile, extract path of the encrypted amd md5sum
-    files corresponding to the given Alias and Box in Table and delete them
+    files corresponding to the given Alias and Box in Table and delete them if status
+    is uploaded (or ReUploaded if ReUpload is True and re-uploaded files were already registered)
     '''
     
     if Remove == True:
         # connect to database
         conn = EstablishConnection(CredentialFile, Database)
         cur = conn.cursor()
-        # get the directory, files for all alias with SUBMITTED status
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.status=\"uploaded\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        Data = cur.fetchall()
+        if ReUpload == False:
+            Status = 'uploaded'
+        else:
+            Status = 'ReUploaded'
+        try:
+            # get the directory, files for all alias with SUBMITTED status
+            cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.status=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, Status, Box))
+            Data = cur.fetchall()
+        except:
+            Data = []
         conn.close()
         if len(Data) != 0:
             for i in Data:
@@ -2312,10 +2360,11 @@ def IsEncryptionDone(args):
     Take a list of command line arguments and update status to upload if encryption
     is done for a given alias or reset status to encrypt
     '''
-    # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload 
-    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias, args.jobnames)
+    # check that encryption is done, store md5sums and path to encrypted file in db
+    # update status encrypting -> upload (default) or ReEncrypting --> ReUpload
+    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias, args.jobnames, args.reupload)
   
-    
+        
 # use this function to check upload    
 def IsUploadDone(args):
     '''    
@@ -2324,7 +2373,7 @@ def IsUploadDone(args):
     is done for a given alias or reset status to upload
     '''
     # check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-    CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box, args.alias, args.jobnames)
+    CheckUploadFiles(args.credential, args.subdb, args.table, args.attributes, args.box, args.alias, args.jobnames, args.reupload)
     
 
 # use this function to form json for a given object
@@ -2373,10 +2422,10 @@ def CreateJson(args):
         
             ## upload files and change the status upload -> uploading 
             ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-            UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
+            UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript, False)
         
             ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
-            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove, False)
                
         ## form json and add to table and update status --> submit or keep current status
         if args.object == 'analyses':
@@ -2408,7 +2457,240 @@ def SubmitMetadata(args):
         # submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
 
+
+
+
+##########################
+
+
+# use this function to edit status to ReEncrypt
+def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
+    '''
+    (file, str, str, str, str) -> None
+    Edit Alias status in Table for Box from SUBMITTED to ReEncrypt using the 
+    file with credentials to connect to DataBase and create a working directory
+    if it doesn't already exist
+    '''
     
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    # create working directory if it doesn't exist
+    try:
+        cur.execute('SELECT {0}.alias, {0}.WorkingDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.Status=\"SUBMITTED\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+        Data = cur.fetchall()[0]
+    except:
+        Data = []
+    if len(Data) != 0:
+        # check working directory
+        alias, WorkingDir = Data[0], Data[1]
+        if WorkingDir in ['', None, 'None', 'NULL']:
+            # create working directory
+            UID = str(uuid.uuid4())             
+            # record identifier in table, create working directory in file system
+            cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, UID, alias, Box))  
+            conn.commit()
+            # create working directories
+            WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+            os.makedirs(WorkingDir)
+    
+    # check if working directory exist. update Status --> ReEncrypt if no error or keep status and record message
+    try:
+        cur.execute('SELECT {0}.alias, {0}.WorkingDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.Status=\"SUBMITTED\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+        Data = cur.fetchall()[0]
+    except:
+        Data = []
+    if len(Data) != 0:
+        Error = []
+        alias, WorkingDir = Data[0], GetWorkingDirectory(Data[1])
+        if WorkingDir in ['', 'NULL', None, 'None']:
+            Error.append('Working directory does not have a valid Id')
+        if os.path.isdir(WorkingDir) == False:
+            Error.append('Working directory not generated')
+        # check if error message
+        if len(Error) != 0:
+            # error is found, record error message
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, ';'.join(Error), alias, Box))  
+            conn.commit()
+        else:
+            # no error, update Status SUBMITTED --> ReEncrypt
+            cur.execute('UPDATE {0} SET {0}.Status=\"ReEncrypt\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\" AND {0}.Status=\"SUBMITTED\"'.format(Table, alias, Box))  
+            conn.commit()
+    conn.close()            
+
+    
+    
+      
+# use this function to encrypt files and update status to encrypting
+def ReEncrypt(CredentialFile, DataBase, Table, Alias, Box, KeyRing, Queue, Mem, MyScript):
+    '''
+    (file, str, str, str, str, str, str) -> None
+    Take a file with credentials to connect to Database, encrypt files of aliases
+    with ReEncrypt status and update status to ReEncrypting if encryption and md5sum jobs
+    are successfully launched using the specified queue and memory
+    '''
+    
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    try:
+        # pull alias, files and working directory for status = ReEncrypt
+        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.Status=\"ReEncrypt\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+        Data = cur.fetchall()[0]
+    except:
+        Data = []
+        
+    # check that some files are in ReEncrypt mode
+    if len(Data) != 0:
+        # get alias
+        alias = Data[0]
+        # get working directory
+        WorkingDir = GetWorkingDirectory(Data[2])
+        # create working directory if doesn't exist
+        if os.path.isdir(WorkingDir) == False:
+            os.makedirs(WorkingDir)
+        # make a directory to save the scripts
+        qsubdir = os.path.join(WorkingDir, 'qsubs')
+        if os.path.isdir(qsubdir) == False:
+            os.mkdir(qsubdir)
+        # create a log dir
+        logDir = os.path.join(qsubdir, 'log')
+        if os.path.isdir(logDir) == False:
+            os.mkdir(logDir)
+    
+        # convert single quotes to double quotes for str -> json conversion
+        files = json.loads(Data[1].replace("'", "\""))
+        # create parallel lists of file paths and names
+        filePaths, fileNames = [] , [] 
+        # loop over files for that alias
+        for file in files:
+            # get the filePath and fileName
+            filePaths.append(files[file]['filePath'])
+            # remove .gpg from file name
+            fileNames.append(files[file]['encryptedName'][:-4])
+            
+        # update status --> ReEncrypting
+        cur = conn.cursor()
+        cur.execute('UPDATE {0} SET {0}.Status=\"ReEncrypting\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
+        conn.commit()
+        
+        # set up md5sum and encytion commands
+        MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
+        MyCmd2 = 'gpg --no-default-keyring --keyring {2} -r EGA_Public_key -r SeqProdBio --trust-model always -o {1}.gpg -e {0}'
+        MyCmd3 = 'md5sum {0}.gpg | cut -f1 -d \' \' > {0}.gpg.md5'
+    
+        # make a list to store the job names and job exit codes
+        JobExits, JobNames = [], []
+        
+        # loop over all files for that alias 
+        for i in range(len(filePaths)):
+            # get name of output file
+            OutFile = os.path.join(WorkingDir, fileNames[i])
+                
+            # put commands in shell script
+            BashScript1 = os.path.join(qsubdir, alias + '_' + fileNames[i] + '_md5sum_original.sh')
+            BashScript2 = os.path.join(qsubdir, alias + '_' + fileNames[i] + '_encrypt.sh')
+            BashScript3 = os.path.join(qsubdir, alias + '_' + fileNames[i] + '_md5sum_encrypted.sh')
+            
+            with open(BashScript1, 'w') as newfile:
+                newfile.write(MyCmd1.format(filePaths[i], OutFile) + '\n')
+            with open(BashScript2, 'w') as newfile:
+                newfile.write(MyCmd2.format(filePaths[i], OutFile, KeyRing) + '\n')
+            with open(BashScript3, 'w') as newfile:
+                newfile.write(MyCmd3.format(OutFile) + '\n')
+        
+            # launch qsub directly, collect job names and exit codes
+            JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileNames[i])
+            # check if 1st file in list
+            if i == 0:
+                QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
+            else:
+                # launch job when previous job is done
+               QsubCmd1 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName1, logDir, BashScript1)
+            job1 = subprocess.call(QsubCmd1, shell=True)
+            JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileNames[i])
+            QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
+            job2 = subprocess.call(QsubCmd2, shell=True)
+            JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileNames[i])
+            QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
+            job3 = subprocess.call(QsubCmd3, shell=True)
+                            
+            # store job names and exit codes
+            JobExits.extend([job1, job2, job3])
+            JobNames.extend([JobName1, JobName2, JobName3])
+        
+        # launch check encryption job
+        MyCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckEncryption -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} --ReUpload'
+        # put commands in shell script
+        BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
+        with open(BashScript, 'w') as newfile:
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
+        # launch qsub directly, collect job names and exit codes
+        JobName = 'CheckEncryption.{0}'.format(alias)
+        # launch job when previous job is done
+        QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
+        job = subprocess.call(QsubCmd, shell=True)
+        # store the exit code (but not the job name)
+        JobExits.append(job)          
+        
+        # check if encription was launched successfully
+        if not (len(set(JobExits)) == 1 and list(set(JobExits))[0] == 0):
+            # store error message, reset status ReEncrypting --> ReEncrypt
+            Error = 'Could not launch encryption jobs'
+            cur.execute('UPDATE {0} SET {0}.Status=\"ReEncrypt\", {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+            conn.commit()
+    conn.close()
+        
+
+# use this function to re-uploaded registered files
+def ReUploadRegisteredFiles(args):
+    '''
+    (list) -> None
+    take a list of command-line arguments and re-encrypot and re-upload files
+    that are already registered but cannot be archived
+    '''
+    
+    # get the list of aliases from the command or from a file
+    # aliases cannot be mixed between analyses and runs object
+    try:
+        infile = open(args.aliasfile)
+        Aliases = list(map(lambda x: x.strip(), infile.read().rstrip().split('\n')))
+        infile.close()
+    except:
+        Aliases = []
+
+    if len(Aliases) != 0:
+        for alias in Aliases:
+            # change status SUBMITTED --> ReEncrypt and create working directory if doesn't exist    
+            EditSubmittedStatus(args.credential, args.subdb, args.table, alias, args.box)
+            # encrypt files, check that encryption is done, store md5sums and path to encrypted file in db, update status ReEncrypting -> ReUpload or reset ReEncrypting -> ReEncrypt
+            ReEncrypt(args.credential, args.subdb, args.table, alias, args.box, args.keyring, args.queue, args.memory, args.myscript)
+                      
+        if args.object == 'analyses':
+            # upload the files
+            UploadAnalysesObjects(args.credential, args.subdb, args.table, args.attributes, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript, args.reupload)
+            ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove, args.reupload)
+            
+        # change status ReUploaded --> SUBMITTED
+        # connect to db
+        conn = EstablishConnection(args.credential, args.subdb)
+        cur = conn.cursor()
+        try:
+            cur.execute('SELECT {0}.alias, {0}.Status FROM {0} WHERE {0}.Status=\"ReUploaded\" AND {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+            Data = cur.fetchall()
+        except:
+            Data = []
+        if len(Data) != 0:
+            for i in Data:
+                alias = i[0]
+                # update status --> SUBMITTED
+                cur.execute('UPDATE {0} SET {0}.Status=\"SUBMITTED\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(args.table, alias, args.box))  
+                conn.commit()
+        conn.close()
+        
+        
+  
 # use this function to list files on the staging servers
 def FileInfoStagingServer(args):
     '''
@@ -2472,13 +2754,14 @@ if __name__ == '__main__':
     FormAnalysesJsonParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
     FormAnalysesJsonParser.add_argument('--MaxFootPrint', dest='maxfootprint', default=15, type=int, help='Maximum footprint of non-registered files on the box\'s staging sever. Default is 15Tb')
     FormAnalysesJsonParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
-    FormAnalysesJsonParser.set_defaults(func=FormAnalysesJson)
+    FormAnalysesJsonParser.set_defaults(func=CreateJson)
 
     # check encryption
     CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help='Check that encryption is done for a given alias', parents = [parent_parser])
     CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
+    CheckEncryptionParser.add_argument('--ReUpload', dest='reupload', action='store_true', help='Re-encryption and re-upload of registered files if True. False by default')
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
     # check upload
@@ -2486,6 +2769,7 @@ if __name__ == '__main__':
     CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for uploading all files under a given alias', required=True)
+    CheckUploadParser.add_argument('--ReUpload', dest='reupload', action='store_true', help='ReUpload of registered files if True. False by default')
     CheckUploadParser.add_argument('--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     CheckUploadParser.set_defaults(func=IsUploadDone)
     
@@ -2505,6 +2789,23 @@ if __name__ == '__main__':
     StagingServerParser.add_argument('--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
     StagingServerParser.set_defaults(func=FileInfoStagingServer)
    
+    # re-upload registered files that cannot be archived       
+    ReUploadParser = subparsers.add_parser('ReUploadFiles', help ='Encryot and re-upload files that are registered but cannot be archived', parents = [parent_parser])
+    ReUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
+    ReUploadParser.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
+    ReUploadParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
+    ReUploadParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
+    ReUploadParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
+    ReUploadParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
+    ReUploadParser.add_argument('--Alias', dest='alias', help='File with aliases of files that need to be re-uploaded', required=True)
+    ReUploadParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
+    ReUploadParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
+    ReUploadParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
+    ReUploadParser.add_argument('--MaxFootPrint', dest='maxfootprint', default=15, type=int, help='Maximum footprint of non-registered files on the box\'s staging sever. Default is 15Tb')
+    ReUploadParser.add_argument('--ReUpload', dest='reupload', action='store_true', help='ReUpload of registered files if True. False by default')
+    ReUploadParser.add_argument('--Remove', dest='remove', action='store_true', help='Delete encrypted and md5 files when analyses are successfully submitted. Do not delete by default')
+    ReUploadParser.set_defaults(func=ReUploadRegisteredFiles)
+
     # get arguments from the command line
     args = main_parser.parse_args()
     # pass the args to the default function
