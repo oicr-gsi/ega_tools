@@ -2614,6 +2614,7 @@ if __name__ == '__main__':
     FormAnalysesJsonParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
     FormAnalysesJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormAnalysesJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
+    FormAnalysesJsonParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets'], help='Object to register', required=True)
     FormAnalysesJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
     FormAnalysesJsonParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     FormAnalysesJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
