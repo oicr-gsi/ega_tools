@@ -2604,8 +2604,7 @@ if __name__ == '__main__':
     parent_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     parent_parser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     parent_parser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    parent_parser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
-    
+        
     # create main parser
     main_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages EGA submissions')
     subparsers = main_parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
@@ -2630,6 +2629,7 @@ if __name__ == '__main__':
 
     # form analyses to EGA       
     FormAnalysesJsonParser = subparsers.add_parser('FormAnalysesJson', help ='Form Analyses json for submission to EGA', parents = [parent_parser])
+    FormAnalysesJsonParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     FormAnalysesJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     FormAnalysesJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
     FormAnalysesJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
@@ -2649,6 +2649,7 @@ if __name__ == '__main__':
 
     # check encryption
     CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help='Check that encryption is done for a given alias', parents = [parent_parser])
+    CheckEncryptionParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
@@ -2656,6 +2657,7 @@ if __name__ == '__main__':
     
     # check upload
     CheckUploadParser = subparsers.add_parser('CheckUpload', help='Check that upload is done for a given alias', parents = [parent_parser])
+    CheckUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for uploading all files under a given alias', required=True)
@@ -2664,6 +2666,7 @@ if __name__ == '__main__':
     
     # register analyses to EGA       
     RegisterAnalysesParser = subparsers.add_parser('RegisterAnalyses', help ='Submit Analyses json to EGA', parents = [parent_parser])
+    RegisterAnalysesParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     RegisterAnalysesParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
     RegisterAnalysesParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='EGA object to register', required=True)
     RegisterAnalysesParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
@@ -2679,6 +2682,7 @@ if __name__ == '__main__':
    
     # re-upload registered files that cannot be archived       
     ReUploadParser = subparsers.add_parser('ReUploadFiles', help ='Encrypt and re-upload files that are registered but cannot be archived', parents = [parent_parser])
+    ReUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     ReUploadParser.add_argument('-t', '--Table', dest='table', help='Database table', required=True)
     ReUploadParser.add_argument('--Alias', dest='aliasfile', help='File with aliases of files that need to be re-uploaded')
     ReUploadParser.set_defaults(func=ReUploadRegisteredFiles)
