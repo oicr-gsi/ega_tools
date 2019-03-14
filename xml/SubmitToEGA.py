@@ -2488,7 +2488,7 @@ def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
         for file in files:
             fileTypeId, fileName, filePath = files[file]['fileTypeId'], files[file]['encryptedName'], files[file]['filePath']
             assert fileName[-4:] == '.gpg'
-            fileName = fileName[-4:]
+            fileName = fileName[:-4]
             NewFiles[file] = {'filePath': filePath, 'fileName': fileName, 'fileTypeId': fileTypeId}
         
         if WorkingDir in ['', 'NULL', None, 'None']:
