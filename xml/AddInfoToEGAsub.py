@@ -977,6 +977,112 @@ def AddStudyInfo(args):
     conn.close()            
 
 
+
+# use this function to parse the DAC input file
+def ParseDACInputTable(Table):
+    '''
+    (file) -> list
+    Return a list of dictionaries with key:values pairs with keys in header
+    of Table file
+    '''
+    
+    infile = open(Table)
+    Header = infile.read().rstrip().split('\t')
+    Content = infile.read().rstrip().split('\n')
+    infile.close()
+    # create a list [{key: value}]
+    L = []
+    # check that required fields are present
+    Expected = ["contactName", "email", "organisation", "phoneNumber", "mainContact"]
+    Missing = [i for i in Expected if i not in Header]    
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        for S in Content:
+            D = {}
+            S = list(map(lambda x: x.strip(), S.split('\t')))
+            for i in range(len(Header)):
+                D[Header[i]] = S[i]
+            L.append(D)
+    return L        
+            
+    
+# use this function to add DAC info
+def AddDACInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add DAC information into the DAC 
+    Table of the EGAsub database
+    '''
+    
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    
+    if args.table not in Tables:
+        Fields = ["alias", "title", "contacts", "Json", "submissionStatus", "errorMessages",
+                  "Receipt", "CreationTime", "egaAccessionId", "egaBox",  "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] in ['Json', 'Receipt', 'title' 'contacts']:
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # parse input file
+    Data = list(map(lambda x: str(x), ParseDACInputTable(args.input)))    
+    
+    # pull down alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accessions}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+            
+    # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    # create a dict {alias: accession}
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
+    
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
+        # check if alias is unique
+        if args.alias in Registered:
+            # skip, already registered in EGA
+            print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
+        elif args.alias in Recorded:
+            # skip, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(args.alias, args.box))
+        else:
+            # create dict and add command line arguments
+            D = {'alias': args.alias, 'title': args.title, 'contacts': ';'.join(Data), 'egaBox': args.box, 'Status': 'start'}
+            # list values according to the table column order
+            L = [str(D[field]) if field in D else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL                    L
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    conn.close()            
+
+
 if __name__ == '__main__':
 
     # create top-level parser
@@ -1011,7 +1117,7 @@ if __name__ == '__main__':
     AddAnalysesParser.add_argument('-a', '--Attributes', dest='attributes', help='Primary key in the AnalysesAttributes table', required=True)
     AddAnalysesParser.set_defaults(func=AddAnalysesInfo)
 
-    # add analyses to Analyses Table
+    # add analyses attributes or projects to corresponding Table
     AddAttributesProjectsParser = subparsers.add_parser('AddAttributesProjects', help ='Add information to AnalysesAttributes or AnalysesProjects Tables', parents = [parent_parser])
     AddAttributesProjectsParser.add_argument('-t', '--Table', dest='table', choices = ['AnalysesAttributes', 'AnalysesProjects'], help='Database Tables AnalysesAttributes or AnalysesProjects', required=True)
     AddAttributesProjectsParser.add_argument('-i', '--Input', dest='input', help='Input table with attributes or projects information to load to submission database', required=True)
@@ -1046,6 +1152,14 @@ if __name__ == '__main__':
     AddExperimentParser.add_argument('--Protocol', dest='protocol', help='Library construction protocol.', required=True)
     AddExperimentParser.add_argument('--Layout', dest='library', help='0 for aired and 1 for single end sequencing', required=True)
     AddDatasetsParser.set_defaults(func=AddExperimentInfo)
+    
+    # add DAC info to DACs Table
+    AddDACsParser = subparsers.add_parser('AddDAC', help ='Add DAC information to DACs Table', parents = [parent_parser])
+    AddDACsParser.add_argument('-t', '--Table', dest='table', default='DACs', help='DACs table. Default is DACs')
+    AddDACsParser.add_argument('-i', '--Input', dest='input', help='Input table with contact information', required=True)
+    AddDACsParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the DAC', required=True)
+    AddDACsParser.add_argument('--Title', dest='title', help='Short title for the DAC', required=True)
+    AddDACsParser.set_defaults(func=AddDACInfo)
     
     # get arguments from the command line
     args = main_parser.parse_args()
