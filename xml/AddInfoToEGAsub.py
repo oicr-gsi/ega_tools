@@ -433,7 +433,7 @@ def AddDatasetInfo(args):
                     "policyId": args.policy, "runsReferences": ';'.join(runsReferences),
                     "analysisReferences": ';'.join(analysisReferences), "title": args.title,
                     "description": args.description, "datasetLinks": ';'.join(datasetslinks),
-                    "attributes": ';'.join(attributes)}            
+                    "attributes": ';'.join(attributes), 'Status': 'start', 'egaBox': args.box}            
             # list values according to the table column order
             L = [D[field] if field in D else '' for field in Fields]
             # convert data to strings, converting missing values to NULL
@@ -968,6 +968,7 @@ def AddStudyInfo(args):
             print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
         else:
             Data["Status"] = "start"
+            Data["egaBox"] = args.box
             # list values according to the table column order
             L = [str(Data[field]) if field in Data else '' for field in Fields]
             # convert data to strings, converting missing values to NULL                    L
