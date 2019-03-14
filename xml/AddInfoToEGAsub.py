@@ -1031,7 +1031,7 @@ def AddDACInfo(args):
         for i in range(len(Fields)):
             if Fields[i] == 'Status':
                 Columns.append(Fields[i] + ' TEXT NULL')
-            elif Fields[i] in ['Json', 'Receipt', 'title' 'contacts']:
+            elif Fields[i] in ['Json', 'Receipt', 'title', 'contacts']:
                 Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
             elif Fields[i] == 'alias':
                 Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
@@ -1082,6 +1082,117 @@ def AddDACInfo(args):
             cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
             conn.commit()
     conn.close()            
+
+
+# use this function to parse Policy info
+def ParsePolicyInfo(Table):
+    '''
+    (file) -> dict
+    Return a dictionary with policy information extracted from Table file   
+    '''
+    
+    infile = open(Table)
+    Content = infile.read().rstrip().split('\n')
+    infile.close()
+    # create a dict {key: value}
+    D = {}
+    # check that required fields are present
+    Expected = ["title", "policyText", "url"]
+    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
+    Missing = [i for i in Expected if i not in Fields]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        for S in Content:
+            S = list(map(lambda x: x.strip(), S.split(':')))
+            # values may contain multiple colons. need to put them back together
+            D[S[0]] = ':'.join([str(S[i]) for i in range(1, len(S))])
+    infile.close()
+    return D
+    
+    
+      
+# use this function to add DAC info
+def AddPolicyInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add Policy information into the Policy 
+    Table of the EGAsub database
+    '''
+    
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    
+    if args.table not in Tables:
+        Fields = ["alias", "dacId", "title", "policyText", "url", "Json",
+                  "submissionStatus", "errorMessages", "Receipt", "CreationTime",
+                  "egaAccessionId", "egaBox",  "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] in ['Json', 'Receipt', 'title']:
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'policyText':
+                Columns.append(Fields[i] + ' LONGTEXT NULL,')             
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # parse input file
+    Data = ParsePolicyInfo(args.input)    
+    
+    # pull down alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accessions}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+            
+    # pull down alias from submission db. alias may be recorded but not submitted yet. aliases must be unique and not already recorded in the same box
+    # create a dict {alias: accession}
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
+    
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
+        # check if alias is unique
+        if args.alias in Registered:
+            # skip, already registered in EGA
+            print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
+        elif args.alias in Recorded:
+            # skip, already recorded in submission database
+            print('{0} is already recorded for box {1} in the submission database'.format(args.alias, args.box))
+        else:
+            # add fields from the command
+            # create dict and add command line arguments
+            Data['alias'], Data['dacId'] = args.alias, args.dacid
+            # set status --> start
+            Data['Status'] = 'start'
+            # list values according to the table column order
+            L = [str(Data[field]) if field in Data else '' for field in Fields]
+            # convert data to strings, converting missing values to NULL
+            Values = FormatData(L)        
+            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+            conn.commit()
+    conn.close()            
+
 
 
 if __name__ == '__main__':
@@ -1161,6 +1272,14 @@ if __name__ == '__main__':
     AddDACsParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the DAC', required=True)
     AddDACsParser.add_argument('--Title', dest='title', help='Short title for the DAC', required=True)
     AddDACsParser.set_defaults(func=AddDACInfo)
+    
+    # add Policy info to Policy Table
+    AddPolicyParser = subparsers.add_parser('AddPolicy', help ='Add Policy information to Policy Table', parents = [parent_parser])
+    AddPolicyParser.add_argument('-t', '--Table', dest='table', default='Policy', help='Policy table. Default is Policy')
+    AddPolicyParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
+    AddPolicyParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the Policy', required=True)
+    AddPolicyParser.add_argument('-d', '--DacId', dest='dacid', help='DAC Id or DAC alias', required=True)
+    AddPolicyParser.set_defaults(func=AddPolicyInfo)
     
     # get arguments from the command line
     args = main_parser.parse_args()
