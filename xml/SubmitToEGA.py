@@ -1356,6 +1356,23 @@ def GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrint, Box):
     return Data
 
 
+# use this function to get the column header of a given table in database
+def RetrieveColumnHeader(CredentialFile, DataBase, Table):
+    '''
+    (str, str, str) -> list
+    Connect to Database using credentials and return a list of column names
+    in Table from Database
+    '''
+    
+    # connect to database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+    cur.execute('SHOW COLUMNS FROM {0} FROM {1}'.format(Table, DataBase))
+    Header = list(map(lambda x: x[0], cur.fetchall()))
+    conn.close()
+    return Header
+
+
 ## functions specific to Analyses objects =====================================
     
 
@@ -1445,9 +1462,12 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
     Tables = ListTables(CredentialFile, MetDataBase)
     # extract accessions for each table
     for i in Tables:
-        # extract accessions for that table
-        accessions = ExtractAccessions(CredentialFile, MetDataBase, Box, i)         
-        EgaAccessions.extend(list(accessions.values()))
+        # check if accessions are part of the column header
+        Header = RetrieveColumnHeader(CredentialFile, MetDataBase, i)
+        if 'egaAccessionId' in Header:
+            # extract accessions for that table
+            accessions = ExtractAccessions(CredentialFile, MetDataBase, Box, i)         
+            EgaAccessions.extend(list(accessions.values()))
     
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
@@ -2565,26 +2585,25 @@ def FileInfoStagingServer(args):
     including size and accessions Ids of files on the staging servers of available boxes
     '''
 
-    # extract all available boxes
-    Boxes = []
-    # extract boxes from metadata db    
-    Tables = ListTables(args.credential, args.metadatadb)
     # connect to db
     conn = EstablishConnection(args.credential, args.metadatadb)
     cur = conn.cursor()
-    for i in Tables:
-        cur.execute('SELECT {0}.egaBox FROM {0}'.format(i))
-        Boxes.extend([j[0] for j in cur])
-    conn.close()
-
-    # extract boxes from sibmission db
-    Tables = ListTables(args.credential, args.subdb)
-    # connect to db
-    conn = EstablishConnection(args.credential, args.subdb)
-    cur = conn.cursor()
-    for i in Tables:
-        cur.execute('SELECT {0}.egaBox FROM {0}'.format(i))
-        Boxes.extend([j[0] for j in cur])
+    
+    # extract all available boxes
+    Boxes = []
+    DB = [args.metadatadb, args.subdb]
+    Tables = []
+    for i in range(len(DB)):
+        # extract boxes from each db    
+        Tables.append(ListTables(args.credential, DB[i]))
+    # loop over tables from each db
+    for i in range(len(Tables)):
+        for j in range(len(Tables[i])):
+            # check if box is in the table's header
+            Header = RetrieveColumnHeader(args.credential, DB[i], Tables[i][j])
+            if 'egaBox' in Header:
+                cur.execute('SELECT {0}.egaBox FROM {0}'.format(Tables[i][j]))
+                Boxes.extend([k[0] for k in cur])
     conn.close()
 
     # make a non-redundant list of boxes
