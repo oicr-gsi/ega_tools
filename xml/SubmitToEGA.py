@@ -2565,8 +2565,32 @@ def FileInfoStagingServer(args):
     including size and accessions Ids of files on the staging servers of available boxes
     '''
 
+    # extract all available boxes
+    Boxes = []
+    # extract boxes from metadata db    
+    Tables = ListTables(args.credential, args.metadatadb)
+    # connect to db
+    conn = EstablishConnection(args.credential, args.metadatadb)
+    cur = conn.cursor()
+    for i in Tables:
+        cur.execute('SELECT {0}.egaBox FROM {0}'.format(i))
+        Boxes.extend([j[0] for j in cur])
+    conn.close()
+
+    # extract boxes from sibmission db
+    Tables = ListTables(args.credential, args.subdb)
+    # connect to db
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    for i in Tables:
+        cur.execute('SELECT {0}.egaBox FROM {0}'.format(i))
+        Boxes.extend([j[0] for j in cur])
+    conn.close()
+
+    # make a non-redundant list of boxes
+    Boxes = list(set(Boxes))    
     # add file info from each box
-    for i in args.box:
+    for i in Boxes:
         AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, i)
     # add data into footprint table
     AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable)
@@ -2647,7 +2671,6 @@ if __name__ == '__main__':
 
     # list files on the staging servers
     StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers', parents = [parent_parser])
-    StagingServerParser.add_argument('--Boxes', dest='box', nargs='*', help='Boxes where samples will be registered. One more boxes are required', required=True)
     StagingServerParser.add_argument('--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
     StagingServerParser.add_argument('--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
     StagingServerParser.add_argument('--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
