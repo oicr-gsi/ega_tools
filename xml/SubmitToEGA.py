@@ -191,14 +191,14 @@ def ListEnumerations(MyScript, MyPython):
     return a dictionary with enumeration as key and corresponding dictionary of metadata as value
     Precondition: the list of enumerations available from EGA is hard-coded
     '''
-    
+        
     # list all enumerations available from EGA
     url = 'https://ega-archive.org/submission-api/v1/enums/'
     L = ['analysis_file_types', 'analysis_types', 'case_control', 'dataset_types', 'experiment_types',
          'file_types', 'genders', 'instrument_models', 'library_selections', 'library_sources',
          'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types']
     URLs = [os.path.join(url, i) for i in L]
-
+    
     # create a dictionary to store each enumeration
     Enums = {}
     for URL in URLs:
@@ -494,7 +494,20 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, \
         {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'Policy':
+        Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
+        WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+    
 
+
+    ### continue here
+
+
+
+
+
+
+    
     # extract data 
     try:
         cur.execute(Cmd)
@@ -508,7 +521,8 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
                "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
                "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies",
-               "studyTypeId": "StudyTypes"}
+               "studyTypeId": "StudyTypes", "chromosomeReferences": "ReferenceChromosomes",
+               "genomeId": "ReferenceGenomes", "fileTypeId": "AnalysisFileTypes", "runFileTypeId": "FileTypes"}
 
     # check info
     if len(Data) != 0:
@@ -544,6 +558,9 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             Keys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
                     "ownTerm", "pubMedIds", "customTags", "egaBox"]
             Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
+        elif Object == 'policy':
+            Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
+            Required = ["alias", "dacId", "title", "policyText", "egaBox"]
             
         for i in range(len(Data)):
             # set up boolean. update if missing values
@@ -761,7 +778,8 @@ def FormatJson(D, Object, MyScript, MyPython):
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
                "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
                "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies",
-               "studyTypeId": "StudyTypes"}
+               "studyTypeId": "StudyTypes", "chromosomeReferences": "ReferenceChromosomes",
+               "genomeId": "ReferenceGenomes", "fileTypeId": "AnalysisFileTypes", "runFileTypeId": "FileTypes"}
 
     # loop over required json keys
     for field in JsonKeys:
@@ -793,14 +811,14 @@ def FormatJson(D, Object, MyScript, MyPython):
                     for filePath in files:
                         # create a dict to store file info
                         # check that fileTypeId is valid
-                        if files[filePath]["fileTypeId"].lower() not in Enums['FileTypes']:
+                        if files[filePath]["fileTypeId"].lower() not in Enums[MapEnum['fileTypeId']]:
                             # cannot obtain fileTypeId. erase dict and add alias
                             J = {}
                             J["alias"] = D["alias"]
                             # return dict with alias only if required fields are missing
                             return J
                         else:
-                            fileTypeId = Enums['FileTypes'][files[filePath]["fileTypeId"].lower()]
+                            fileTypeId = Enums[MapEnums['fileTypeId']][files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -853,7 +871,9 @@ def FormatJson(D, Object, MyScript, MyPython):
                             J[field] = Enums[MapEnum[field]][D[field]]
                 elif field == 'sampleReferences':
                     # populate with sample accessions
-                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(';')]
+                    J[field] = [{"value": accession.strip(), "label":""} for accession in D[field].split(';')]
+                elif field == 'chromosomeReferences':
+                    J[field] = [{"value": accession.strip(), "label": Enums[MapEnum[field]][accession.strip()]} for accession in D[field].split(';')]
                 else:
                     J[field] = D[field]
     return J                
@@ -2331,8 +2351,20 @@ def GrabEgaEnums(args):
     if response.status_code == requests.codes.ok:
         # loop over dict in list
         for i in response.json()['response']['result']:
-            assert i['value'] not in Enum
-            Enum[i['value']] = i['tag']
+            if 'instrument_models' in args.url:
+                if i['value'] == 'unspecified':
+                    # grab label instead of value
+                    assert i['label'] not in Enum
+                    Enum[i['label']] = i['tag']
+                else:
+                    assert i['value'] not in Enum
+                    Enum[i['value']] = i['tag']
+            elif 'reference_chromosomes' in args.url:
+                # grab value : label
+                Enum[i['value']] = str(i['label'])
+            else:
+                assert i['value'] not in Enum
+                Enum[i['value']] = i['tag']
     print(Enum)    
     
 
@@ -2413,7 +2445,7 @@ def CreateJson(args):
         ## form json and add to table and update status --> submit or keep current status
         if args.object == 'analyses':
             ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, project = args.projects, attributes = args.attributes)
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, projects = args.projects, attributes = args.attributes)
 
         elif args.object == 'samples':
              # update status valid -> submit if no error of keep status --> valid and record errorMessage
@@ -2630,7 +2662,7 @@ if __name__ == '__main__':
 
     # collect enumerations from EGA
     CollectEnumParser = subparsers.add_parser('Enums', help ='Collect enumerations from EGA')
-    CollectEnumParser.add_argument('--URL', dest='url', choices=['https://ega-archive.org/submission-api/v1/enums/path/enums/analysis_file_types',
+    CollectEnumParser.add_argument('--URL', dest='url', choices=['https://ega-archive.org/submission-api/v1/enums/analysis_file_types',
                                                                  'https://ega-archive.org/submission-api/v1/enums/analysis_types',
                                                                  'https://ega-archive.org/submission-api/v1/enums/case_control',
                                                                  'https://ega-archive.org/submission-api/v1/enums/dataset_types',
@@ -2647,7 +2679,7 @@ if __name__ == '__main__':
     CollectEnumParser.set_defaults(func=GrabEgaEnums)
 
     # form analyses to EGA       
-    FormJsonParser = subparsers.add_parser('FormAnalysesJson', help ='Form Analyses json for submission to EGA', parents = [parent_parser])
+    FormJsonParser = subparsers.add_parser('FormJson', help ='Form Analyses json for submission to EGA', parents = [parent_parser])
     FormJsonParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     FormJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     FormJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
@@ -2684,7 +2716,7 @@ if __name__ == '__main__':
     CheckUploadParser.set_defaults(func=IsUploadDone)
     
     # register analyses to EGA       
-    RegisterObjectParser = subparsers.add_parser('RegisterAnalyses', help ='Submit Analyses json to EGA', parents = [parent_parser])
+    RegisterObjectParser = subparsers.add_parser('RegisterObject', help ='Submit Analyses json to EGA', parents = [parent_parser])
     RegisterObjectParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     RegisterObjectParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
     RegisterObjectParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='EGA object to register', required=True)
