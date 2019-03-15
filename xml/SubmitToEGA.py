@@ -818,7 +818,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                             # return dict with alias only if required fields are missing
                             return J
                         else:
-                            fileTypeId = Enums[MapEnums['fileTypeId']][files[filePath]["fileTypeId"].lower()]
+                            fileTypeId = Enums[MapEnum['fileTypeId']][files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
