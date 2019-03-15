@@ -2347,11 +2347,18 @@ def GrabEgaEnums(args):
     if response.status_code == requests.codes.ok:
         # loop over dict in list
         for i in response.json()['response']['result']:
-            if i['value'] in Enum:
-                print(i['value'], i['tag'])
-                print(Enum[i['value']])
-            assert i['value'] not in Enum
-            Enum[i['value']] = i['tag']
+            if 'instrument_models' in args.url:
+                if i['value'] == 'unspecified':
+                    # grab label instead of value
+                    assert i['label'] not in Enum
+                    Enum[i['label']] = i['tag']
+                else:
+                    assert i['value'] not in Enum
+                    Enum[i['value']] = i['tag']
+            else:
+                if i['value'] in Enum:
+                    assert i['value'] not in Enum
+                    Enum[i['value']] = i['tag']
     print(Enum)    
     
 
