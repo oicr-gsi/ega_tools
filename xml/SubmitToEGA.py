@@ -191,14 +191,14 @@ def ListEnumerations(MyScript, MyPython):
     return a dictionary with enumeration as key and corresponding dictionary of metadata as value
     Precondition: the list of enumerations available from EGA is hard-coded
     '''
-    
+        
     # list all enumerations available from EGA
     url = 'https://ega-archive.org/submission-api/v1/enums/'
     L = ['analysis_file_types', 'analysis_types', 'case_control', 'dataset_types', 'experiment_types',
          'file_types', 'genders', 'instrument_models', 'library_selections', 'library_sources',
          'library_strategies', 'reference_chromosomes', 'reference_genomes', 'study_types']
     URLs = [os.path.join(url, i) for i in L]
-
+    
     # create a dictionary to store each enumeration
     Enums = {}
     for URL in URLs:
@@ -521,7 +521,8 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
                "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
                "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies",
-               "studyTypeId": "StudyTypes"}
+               "studyTypeId": "StudyTypes", "chromosomeReferences": "ReferenceChromosomes",
+               "genomeId": "ReferenceGenomes", "fileTypeId": "AnalysisFileTypes", "runFileTypeId": "FileTypes"}
 
     # check info
     if len(Data) != 0:
@@ -777,7 +778,8 @@ def FormatJson(D, Object, MyScript, MyPython):
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
                "instrumentModelId": "InstrumentModels", "librarySourceId": "LibrarySources",
                "librarySelectionId": "LibrarySelections",  "libraryStrategyId": "LibraryStrategies",
-               "studyTypeId": "StudyTypes"}
+               "studyTypeId": "StudyTypes", "chromosomeReferences": "ReferenceChromosomes",
+               "genomeId": "ReferenceGenomes", "fileTypeId": "AnalysisFileTypes", "runFileTypeId": "FileTypes"}
 
     # loop over required json keys
     for field in JsonKeys:
@@ -809,14 +811,14 @@ def FormatJson(D, Object, MyScript, MyPython):
                     for filePath in files:
                         # create a dict to store file info
                         # check that fileTypeId is valid
-                        if files[filePath]["fileTypeId"].lower() not in Enums['FileTypes']:
+                        if files[filePath]["fileTypeId"].lower() not in Enums[MapEnum['fileTypeId']]:
                             # cannot obtain fileTypeId. erase dict and add alias
                             J = {}
                             J["alias"] = D["alias"]
                             # return dict with alias only if required fields are missing
                             return J
                         else:
-                            fileTypeId = Enums['FileTypes'][files[filePath]["fileTypeId"].lower()]
+                            fileTypeId = Enums[MapEnums['fileTypeId']][files[filePath]["fileTypeId"].lower()]
                         # create dict with file info, add path to file names
                         d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                              "checksum": files[filePath]['checksum'],
@@ -869,7 +871,9 @@ def FormatJson(D, Object, MyScript, MyPython):
                             J[field] = Enums[MapEnum[field]][D[field]]
                 elif field == 'sampleReferences':
                     # populate with sample accessions
-                    J[field] = [{"value": accession.strip(), "label":""} for accession in D['sampleReferences'].split(';')]
+                    J[field] = [{"value": accession.strip(), "label":""} for accession in D[field].split(';')]
+                elif field == 'chromosomeReferences':
+                    J[field] = [{"value": accession.strip(), "label": Enums[MapEnum[field]][accession.strip()]} for accession in D[field].split(';')]
                 else:
                     J[field] = D[field]
     return J                
@@ -2355,10 +2359,12 @@ def GrabEgaEnums(args):
                 else:
                     assert i['value'] not in Enum
                     Enum[i['value']] = i['tag']
+            elif 'reference_chromosomes' in args.url:
+                # grab value : label
+                Enum[i['value']] = str(i['label'])
             else:
-                if i['value'] in Enum:
-                    assert i['value'] not in Enum
-                    Enum[i['value']] = i['tag']
+                assert i['value'] not in Enum
+                Enum[i['value']] = i['tag']
     print(Enum)    
     
 
