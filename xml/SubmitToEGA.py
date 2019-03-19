@@ -498,16 +498,6 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
     
-
-
-    ### continue here
-
-
-
-
-
-
-    
     # extract data 
     try:
         cur.execute(Cmd)
@@ -611,9 +601,14 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
                     if 'EGAS' not in d[key]:
                         Missing = True
                         Error.append(key)
-                # chyeck policy Id
+                # check policy Id
                 if key == 'policyId':
                     if 'EGAP' not in d[key]:
+                        Missing = True
+                        Error.append(key)
+                # check dac Id
+                if key == 'dacId':
+                    if 'EGAC' not in d[key]:
                         Missing = True
                         Error.append(key)
                 # check library layout
@@ -772,7 +767,11 @@ def FormatJson(D, Object, MyScript, MyPython):
     elif Object == 'study':
         JsonKeys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract", "ownTerm", "pubMedIds", "customTags", "egaBox"]
         Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
-        
+    elif Object == 'policy':
+        JsonKeys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
+        Required = ["alias", "dacId", "title", "policyText", "egaBox"]
+            
+   
     # map typeId with enumerations
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
@@ -927,6 +926,10 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
     elif Object == 'study':
         Cmd = 'SELECT {0}.alias, {0}studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
         {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box) 
+    elif Object == 'Policy':
+        Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
+        WHERE {0}.Status=\"valid\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+    
     
     # extract information to for json    
     try:
@@ -2423,7 +2426,7 @@ def CreateJson(args):
             AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
         
         ## check that EGA accessions that object depends on are available metadata and change status --> valid or keep clean --> clean
-        if args.object in ['analyses', 'datasets', 'experiments']:
+        if args.object in ['analyses', 'datasets', 'experiments', 'policies']:
             CheckEgaAccessionId(args.credential, args.subdb, args.metadatadb, args.object, args.table, args.box)
         
         ## encrypt and upload files
