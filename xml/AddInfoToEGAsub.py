@@ -1097,7 +1097,7 @@ def ParsePolicyInfo(Table):
     # create a dict {key: value}
     D = {}
     # check that required fields are present
-    Expected = ["title", "policyText", "url"]
+    Expected = ["title", "policyText"]
     Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
     Missing = [i for i in Expected if i not in Fields]
     if len(Missing) != 0:
@@ -1194,6 +1194,149 @@ def AddPolicyInfo(args):
     conn.close()            
 
 
+# use this function to parse run table info
+def ParseRunInfo(Table):
+    '''
+    (file) -> dict
+    Return a dictionary with run info from the Table file
+    '''
+    
+    # create a dict to store the information about the files
+    D = {}
+    
+    infile = open(Table)
+    # get file header
+    Header = infile.readline().rstrip().split('\t')
+    # check that required fields are present
+    Expected = ['alias', 'sampleId', 'experimentId', 'filePath']
+    Missing =  [i for i in Expected if i not in Header]
+    if len(Missing) != 0:
+        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+    else:
+        # required fields are present, read the content of the file
+        Content = infile.read().rstrip().split('\n')
+        for S in Content:
+            S = S.split('\t')
+            # missing values are not permitted
+            assert len(Header) == len(S), 'missing values should be "" or NA'
+            # extract variables from line
+            if 'fileName' not in Header:
+                # upload file under the same name
+                L = ['alias', 'sampleId', 'filePath']
+                alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+                assert filePath != '/' and filePath[-1] != '/'
+                fileName = os.path.basename(filePath)                
+            else:
+                # file name is supplied at least for some runs, upload as fileName if provided
+                L = ['alias', 'sampleId', 'filePath', 'fileName']
+                alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
+                # get fileName from path if fileName not provided for that alias
+                if fileName in ['', 'NULL', 'NA']:
+                    fileName = os.path.basename(filePath)
+            # check if alias already recorded ( > 1 files for this alias)
+            if alias not in D:
+                # create inner dict, record sampleAlias and create files dict
+                D[alias] = {}
+                # record alias
+                D[alias]['alias'] = alias
+                # record sampleAlias
+                D[alias]['sampleId'] = sampleAlias
+                D[alias]['files'] = {}
+                D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
+            else:
+                assert D[alias]['alias'] == alias
+                # check that aliass is the same
+                assert D[alias]['sampleId'] == sampleAlias
+                # record file info, filepath shouldn't be recorded already 
+                assert filePath not in D[alias]['files']
+                D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
+    infile.close()
+
+    
+# use this function to add data to the runs table
+def AddRunsInfo(args):
+    '''
+    (list) -> None
+    Take a list of command line arguments and add runs information to the Runs
+    Table of the EGAsub database if files are not already registered
+    '''
+    
+    # pull down alias and egaId from metadata db, alias should be unique
+    # create a dict {alias: accessions}
+    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    
+    # connect to submission database
+    conn = EstablishConnection(args.credential, args.subdb)
+    cur = conn.cursor()
+    # pull down alias from submission db. alias may be recorded but not submitted yet.
+    # aliases must be unique and not already recorded in the same box
+    # create a dict {alias: accession}
+    cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+    Recorded = [i[0] for i in cur]
+    
+    # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {'filePath': filePath, 'fileName': fileName}}}}]
+    Data = ParseRunInfo(args.input)
+    # make a list of dictionary holding info for a single alias
+    Data = [{alias: Data[alias]} for alias in Data]             
+        
+    # create table if table doesn't exist
+    Tables = ListTables(args.credential, args.subdb)
+    
+    # create table if it doesn't exist
+    if args.table not in Tables:
+        Fields = ["alias", "sampleId", "runFileTypeId", "experimentId", "files",
+                  "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
+                  "CreationTime", "egaAccessionId", "egaBox", "Status"]
+        # format colums with datatype
+        Columns = []
+        for i in range(len(Fields)):
+            if Fields[i] == 'Status':
+                Columns.append(Fields[i] + ' TEXT NULL')
+            elif Fields[i] in ['Json', 'Receipt', 'files']:
+                Columns.append(Fields[i] + ' MEDIUMTEXT NULL,')
+            elif Fields[i] == 'alias':
+                Columns.append(Fields[i] + ' VARCHAR(100) PRIMARY KEY UNIQUE,')
+            else:
+                Columns.append(Fields[i] + ' TEXT NULL,')
+        # convert list to string    
+        Columns = ' '.join(Columns)        
+        # create table with column headers
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE {0} ({1})'.format(args.table, Columns))
+        conn.commit()
+    else:
+        # get the column headers from the table
+        cur.execute("SELECT * FROM {0}".format(args.table))
+        Fields = [i[0] for i in cur.description]
+    
+    # create a string with column headers
+    ColumnNames = ', '.join(Fields)
+    
+    # record objects only if input table has been provided with required fields
+    if len(Data) != 0:
+        # check that runs are not already in the database for that box
+        for D in Data:
+            # get run alias
+            alias = list(D.keys())[0]
+            if alias in Registered:
+                # skip, already registered in EGA
+                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+            elif alias in Recorded:
+                # skip, already recorded in submission database
+                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+            else:
+                # add fields from the command
+                D[alias]['runFileTypeId'], D[alias]['egaBox'] = args.filetype, args.box
+                # set Status to start
+                D[alias]["Status"] = "start"
+                # list values according to the table column order
+                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                # convert data to strings, converting missing values to NULL                    L
+                Values = FormatData(L)        
+                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                conn.commit()
+    conn.close()            
+
 
 if __name__ == '__main__':
 
@@ -1281,6 +1424,13 @@ if __name__ == '__main__':
     AddPolicyParser.add_argument('-d', '--DacId', dest='dacid', help='DAC Id or DAC alias', required=True)
     AddPolicyParser.set_defaults(func=AddPolicyInfo)
     
+    # add Run info to Runs Table
+    AddRunsParser = subparsers.add_parser('AddRuns', help ='Add Policy information to Policy Table', parents = [parent_parser])
+    AddRunsParser.add_argument('-t', '--Table', dest='table', default='Runs', help='Run table. Default is Runs')
+    AddRunsParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
+    AddRunsParser.add_argument('-f', '--FileTypeId', dest='filetype', help='Controlled vocabulary decribing the file type. Example: "One Fastq file (Single)" or "Two Fastq files (Paired)"', required=True)
+    AddRunsParser.set_defaults(func=AddRunsInfo)
+                  
     # get arguments from the command line
     args = main_parser.parse_args()
     # pass the args to the default function
