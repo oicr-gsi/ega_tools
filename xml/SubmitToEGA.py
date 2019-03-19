@@ -467,37 +467,61 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
             AttributesTable = KeyWordParams['attributes']
             Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
             FROM {0} JOIN {1} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+            Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
+            Required = ['title', 'description', 'genomeId', 'StagePath']
         elif 'projects' in KeyWordParams:
             ProjectsTable = KeyWordParams['projects']
             Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
             FROM {0} JOIN {1} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
+            Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+            Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
         else:
             Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.files, {0}.egaBox, \
             {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+            Keys = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
+            Required = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
     elif Object == 'samples':
         if 'attributes' in KeyWordParams:
             AttributesTable = KeyWordParams['attributes']
             Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
             {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
+            Keys = ['alias', 'title', 'description', 'attributes']
+            Required = ['title', 'description']
         else:
             Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
             {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+            Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+            Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
         {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
+        Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
+                'description', 'datasetLinks', 'attributes', 'egaBox']     
+        Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
     elif Object == 'experiments':
         Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
         {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        Keys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
+                "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
+        Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
+                    "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
+                    "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
     elif Object == 'study':
         Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, \
         {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Keys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
+                "ownTerm", "pubMedIds", "customTags", "egaBox"]
+        Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
     elif Object == 'policy':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
-    
+        Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
+        Required = ["alias", "dacId", "title", "policyText", "egaBox"]
+        
     # extract data 
     try:
         cur.execute(Cmd)
@@ -516,42 +540,6 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
 
     # check info
     if len(Data) != 0:
-        if Object == 'analyses':
-            if 'attributes' in KeyWordParams:
-                Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
-                Required = ['title', 'description', 'genomeId', 'StagePath']
-            elif 'projects' in KeyWordParams:
-                Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-                Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-            else:
-                Keys = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
-                Required = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
-        elif Object == 'samples':
-            if 'attributes' in KeyWordParams:
-                Keys = ['alias', 'title', 'description', 'attributes']
-                Required = ['title', 'description']
-            else:
-                Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-                Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-        elif Object == 'datasets':
-            Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
-                    'description', 'datasetLinks', 'attributes', 'egaBox']     
-            Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
-        elif Object == 'experiments':
-            Keys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
-                    "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
-                    "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
-            Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
-                        "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
-                        "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
-        elif Object == 'study':
-            Keys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
-                    "ownTerm", "pubMedIds", "customTags", "egaBox"]
-            Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
-        elif Object == 'policy':
-            Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
-            Required = ["alias", "dacId", "title", "policyText", "egaBox"]
-            
         for i in range(len(Data)):
             # set up boolean. update if missing values
             Missing = False
