@@ -509,19 +509,19 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
                     "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
                     "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
-    elif Object == 'study':
+    elif Object == 'studies':
         Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, \
         {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         Keys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
                 "ownTerm", "pubMedIds", "customTags", "egaBox"]
         Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
-    elif Object == 'policy':
+    elif Object == 'policies':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
         Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
         Required = ["alias", "dacId", "title", "policyText", "egaBox"]
-    elif Object == 'DAC':
+    elif Object == 'dacs':
         Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts FROM {0} WHERE {0}.status=\"start\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
         Keys = ["alias", "title", "contacts", "egaBox"]
         Required = ["alias", "title", "contacts", "egaBox"]        
@@ -756,13 +756,13 @@ def FormatJson(D, Object, MyScript, MyPython):
         Required = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
                     "libraryStrategyId", "designDescription", "libraryName", "libraryLayoutId",
                     "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
-    elif Object == 'study':
+    elif Object == 'studies':
         JsonKeys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract", "ownTerm", "pubMedIds", "customTags", "egaBox"]
         Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
-    elif Object == 'policy':
+    elif Object == 'policies':
         JsonKeys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
         Required = ["alias", "dacId", "title", "policyText", "egaBox"]
-    elif Object == 'DAC':
+    elif Object == 'dacs':
         JsonKeys = ["alias", "title", "contacts", "egaBox"]
         Required = ["alias", "title", "contacts", "egaBox"]    
         
@@ -2690,7 +2690,7 @@ if __name__ == '__main__':
     FormJsonParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
     FormJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
-    FormJsonParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets'], help='Object to register', required=True)
+    FormJsonParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='Object to register', required=True)
     FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
     FormJsonParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     FormJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
@@ -2720,7 +2720,7 @@ if __name__ == '__main__':
     RegisterObjectParser = subparsers.add_parser('RegisterObject', help ='Submit Analyses json to EGA', parents = [parent_parser])
     RegisterObjectParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     RegisterObjectParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
-    RegisterObjectParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses'], help='EGA object to register', required=True)
+    RegisterObjectParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='EGA object to register', required=True)
     RegisterObjectParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
     RegisterObjectParser.set_defaults(func=SubmitMetadata)
 
