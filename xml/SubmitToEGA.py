@@ -494,7 +494,7 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, \
         {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'Policy':
+    elif Object == 'policy':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
     
