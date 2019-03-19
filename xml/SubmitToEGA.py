@@ -521,6 +521,10 @@ def IsInfoValid(CredentialFile, SubDataBase, Table, Box, Object, MyScript, MyPyt
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
         Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
         Required = ["alias", "dacId", "title", "policyText", "egaBox"]
+    elif Object == 'DAC':
+        Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts FROM {0} WHERE {0}.status=\"start\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
+        Keys = ["alias", "title", "contacts", "egaBox"]
+        Required = ["alias", "title", "contacts", "egaBox"]        
         
     # extract data 
     try:
@@ -758,8 +762,10 @@ def FormatJson(D, Object, MyScript, MyPython):
     elif Object == 'policy':
         JsonKeys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
         Required = ["alias", "dacId", "title", "policyText", "egaBox"]
-            
-   
+    elif Object == 'DAC':
+        JsonKeys = ["alias", "title", "contacts", "egaBox"]
+        Required = ["alias", "title", "contacts", "egaBox"]    
+        
     # map typeId with enumerations
     MapEnum = {"experimentTypeId": "ExperimentTypes", "analysisTypeId": "AnalysisTypes",
                "caseOrControlId": "CaseControl", "genderId": "Genders", "datasetTypeIds": "DatasetTypes",
@@ -861,6 +867,8 @@ def FormatJson(D, Object, MyScript, MyPython):
                     J[field] = [{"value": accession.strip(), "label":""} for accession in D[field].split(';')]
                 elif field == 'chromosomeReferences':
                     J[field] = [{"value": accession.strip(), "label": Enums[MapEnum[field]][accession.strip()]} for accession in D[field].split(';')]
+                elif field == 'contacts':
+                    J[field] = [json.loads(contact.replace("'", "\"")) for contact in D[field].split(';')]
                 else:
                     J[field] = D[field]
     return J                
@@ -917,6 +925,8 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
     elif Object == 'Policy':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"valid\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+    elif Object == 'DAC':
+        Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts FROM {0} WHERE {0}.status=\"clean\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
     
     
     # extract information to for json    
