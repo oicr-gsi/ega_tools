@@ -854,7 +854,7 @@ def AddAnalysesInfo(args):
                     D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
                 # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
                 sampleIds = ';'.join(list(set(D[alias]['sampleReferences'])))
-                D[alias]['sampleRefefences'] = sampleIds    
+                D[alias]["sampleReferences"] = sampleIds    
                 # set Status to start
                 D[alias]["Status"] = "start"
                 # list values according to the table column order
