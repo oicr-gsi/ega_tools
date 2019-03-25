@@ -1285,7 +1285,7 @@ def AddRunsInfo(args):
     # create table if it doesn't exist
     if args.table not in Tables:
         Fields = ["alias", "sampleId", "runFileTypeId", "experimentId", "files",
-                  "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
+                  "WorkingDirectory", "StagePath", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "Status"]
         # format colums with datatype
         Columns = []
@@ -1326,7 +1326,7 @@ def AddRunsInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                D[alias]['runFileTypeId'], D[alias]['egaBox'] = args.filetype, args.box
+                D[alias]['runFileTypeId'], D[alias]['egaBox'], D[alias]['StagePath'] = args.filetype, args.box, args.stagepath
                 # set Status to start
                 D[alias]["Status"] = "start"
                 # list values according to the table column order
@@ -1429,6 +1429,7 @@ if __name__ == '__main__':
     AddRunsParser.add_argument('-t', '--Table', dest='table', default='Runs', help='Run table. Default is Runs')
     AddRunsParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
     AddRunsParser.add_argument('-f', '--FileTypeId', dest='filetype', help='Controlled vocabulary decribing the file type. Example: "One Fastq file (Single)" or "Two Fastq files (Paired)"', required=True)
+    AddRunsParser.add_argument('--StagePath', dest='stagepath', help='Directory on the staging server where files are uploaded', required=True)
     AddRunsParser.set_defaults(func=AddRunsInfo)
                   
     # get arguments from the command line
