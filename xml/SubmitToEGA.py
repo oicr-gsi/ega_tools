@@ -693,7 +693,12 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
     # record error messages
     if len(Data) != 0:
         for i in Data:
-            K[i[0]] = i[1].split('|')
+            error = i[1].split('|')
+            # remove NULL. NULL is part of the error message at first iteration
+            while 'NULL' in error:
+                error.remove('NULL')
+            K[i[0]] = error
+            
         # check Table
         D = IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams)
         # record error messages
