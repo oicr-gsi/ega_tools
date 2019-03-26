@@ -711,7 +711,7 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
         for alias in K:
             Error = '|'.join(K[alias])
             # record error message
-            cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
             conn.commit()
         conn.close()
 
