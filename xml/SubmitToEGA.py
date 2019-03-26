@@ -1550,7 +1550,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
         Cmd = 'SELECT {0}.alias, {0}.runsReferences, {0}.analysisReferences, {0}.policyId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
     try:
-        cur.excecute(Cmd)
+        cur.execute(Cmd)
         Data = cur.fetchall()
     except:
         Data = []
