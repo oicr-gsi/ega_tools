@@ -1467,7 +1467,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
         Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         
     try:
-        cur.excecute(Cmd)
+        cur.execute(Cmd)
         Data = cur.fetchall()
     except:
         Data = []
@@ -2497,8 +2497,6 @@ def CreateJson(args):
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
-        
-        
         ## grab aliases with start status and check if required information is present in table 
         # check information in main table main table
         CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
