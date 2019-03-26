@@ -1431,7 +1431,7 @@ def RetrieveColumnHeader(CredentialFile, DataBase, Table):
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
-    cur.execute('SHOW COLUMNS FROM {0} FROM {1}'.format(Table, DataBase))
+    cur.execute('SHOW COLUMNS FROM {0}'.format(Table))
     Header = list(map(lambda x: x[0], cur.fetchall()))
     conn.close()
     return Header
