@@ -693,7 +693,12 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
     # record error messages
     if len(Data) != 0:
         for i in Data:
-            K[i[0]] = i[1].split('|')
+            error = i[1].split('|')
+            # remove NULL. NULL is part of the error message at first iteration
+            while 'NULL' in error:
+                error.remove('NULL')
+            K[i[0]] = error
+            
         # check Table
         D = IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams)
         # record error messages
@@ -711,7 +716,7 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
         for alias in K:
             Error = '|'.join(K[alias])
             # record error message
-            cur.execute('UPDATE {0} {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
             conn.commit()
         conn.close()
 
@@ -737,11 +742,11 @@ def CheckObjectInformation(CredentialFile, DataBase, Table, Box):
         for i in Data:
             alias, Error = i[0], i[1].split('|')
             # check error message and update status only if no error found
-            if len(list(set(Error))) == 1:
-                if list(set(Error)) == 'NoError':
-                    # update status
-                    cur.execute('UPDATE {0} SET {0}.Status=\"clean\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
-                    conn.commit()
+            Error = '|'.join(list(set(Error)))
+            if Error == 'NoError':
+                # update status
+                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"clean\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                conn.commit()
     conn.close()        
     
 
@@ -1462,7 +1467,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
         Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         
     try:
-        cur.excecute(Cmd)
+        cur.execute(Cmd)
         Data = cur.fetchall()
     except:
         Data = []
@@ -2492,8 +2497,6 @@ def CreateJson(args):
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
-        
-        
         ## grab aliases with start status and check if required information is present in table 
         # check information in main table main table
         CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
