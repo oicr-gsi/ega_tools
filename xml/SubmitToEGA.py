@@ -742,11 +742,11 @@ def CheckObjectInformation(CredentialFile, DataBase, Table, Box):
         for i in Data:
             alias, Error = i[0], i[1].split('|')
             # check error message and update status only if no error found
-            if len(list(set(Error))) == 1:
-                if list(set(Error)) == 'NoError':
-                    # update status
-                    cur.execute('UPDATE {0} SET {0}.Status=\"clean\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box))
-                    conn.commit()
+            Error = '|'.join(list(set(Error)))
+            if Error == 'NoError':
+                # update status
+                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"clean\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+                conn.commit()
     conn.close()        
     
 
