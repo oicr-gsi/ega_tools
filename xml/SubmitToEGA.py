@@ -1573,10 +1573,14 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
             for alias in Verify:
                 if False in list(map(lambda x, y: x in y, Verify[alias], EgaAccessions)):
                     Error = 'EGA accession(s) not available as metadata' 
+                    # record error and keep status unchanged
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                    conn.commit()
                 else:
                     Error = 'NoError'
-                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"valid\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
-                conn.commit()
+                    # set error to NoError and update status 
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"valid\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                    conn.commit()
     conn.close()    
 
 
