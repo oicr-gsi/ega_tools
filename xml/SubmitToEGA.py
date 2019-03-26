@@ -2019,8 +2019,8 @@ def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, B
             conn.close()
             
             # upload files
-            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, AttributesTable, Box, Queue, Mem, UploadMode, MyScript)
-                      
+            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, Object, Box, Queue, Mem, UploadMode, MyScript, **KeyWordParams)
+                        
             # check if upload launched properly for all files under that alias
             if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                 # record error message, reset status same uploading --> upload
@@ -2524,25 +2524,25 @@ def CreateJson(args):
         if args.object in ['analyses', 'datasets', 'experiments', 'policies', 'runs']:
             CheckEgaAccessionId(args.credential, args.subdb, args.metadatadb, args.object, args.table, args.box)
         
-#        ## encrypt and upload files for analyses and runs 
-#        if args.object in ['analyses', 'runs']:
-#            ## set up working directory, add to analyses table and update status valid --> encrypt
-#            AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
-#        
-#            ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
-#            ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-#            EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
-#        
-#            ## upload files and change the status upload -> uploading 
-#            ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-#            if args.object == 'analyses':
-#                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript, attributes = args.attributes)
-#            elif args.object == 'runs':
-#                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
-#            
-#            ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
-#            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
-#
+        ## encrypt and upload files for analyses and runs 
+        if args.object in ['analyses', 'runs']:
+            ## set up working directory, add to analyses table and update status valid --> encrypt
+            AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
+        
+            ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
+            ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
+            EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
+        
+            ## upload files and change the status upload -> uploading 
+            ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
+            if args.object == 'analyses':
+                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript, attributes = args.attributes)
+            elif args.object == 'runs':
+                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
+            
+            ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
+            RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
+
 #        ## form json and add to table and update status --> submit or keep current status
 #        if args.object == 'analyses':
 #            ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
