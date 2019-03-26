@@ -2708,10 +2708,6 @@ def FileInfoStagingServer(args):
     including size and accessions Ids of files on the staging servers of available boxes
     '''
 
-    # connect to db
-    conn = EstablishConnection(args.credential, args.metadatadb)
-    cur = conn.cursor()
-    
     # extract all available boxes
     Boxes = []
     DB = [args.metadatadb, args.subdb]
@@ -2725,10 +2721,13 @@ def FileInfoStagingServer(args):
             # check if box is in the table's header
             Header = RetrieveColumnHeader(args.credential, DB[i], Tables[i][j])
             if 'egaBox' in Header:
+                # connect to db
+                conn = EstablishConnection(args.credential, DB[i])
+                cur = conn.cursor()
                 cur.execute('SELECT {0}.egaBox FROM {0}'.format(Tables[i][j]))
                 Boxes.extend([k[0] for k in cur])
-    conn.close()
-
+                conn.close()
+    
     # make a non-redundant list of boxes
     Boxes = list(set(Boxes))    
     # add file info from each box
