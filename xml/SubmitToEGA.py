@@ -1924,9 +1924,9 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     if Object == 'analyses':
         if 'attributes' in KeyWordParams:
             AttributesTable = KeyWordParams['attributes']
-        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} --Attributes {7}'
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} -o {7} --Attributes {8}'
     elif Object == 'runs':
-        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6}'
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} -o {7}' 
     
     # do not check job used to make destination directory
     JobNames = JobNames[1:]
@@ -1934,9 +1934,9 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
         if Object == 'analyses':
-            newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames), AttributesTable) + '\n')
+            newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames), Object, AttributesTable) + '\n')
         elif Object == 'runs':
-            newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
+            newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames), Object) + '\n')
             
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
@@ -2487,9 +2487,9 @@ def IsUploadDone(args):
     
     if args.object == 'analyses':
         # check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.alias, args.jobnames, attributes = args.attributes)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.object, args.alias, args.jobnames, attributes = args.attributes)
     elif args.object == 'runs':
-        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.alias, args.jobnames)
+        CheckUploadFiles(args.credential, args.subdb, args.table, args.box, args.object, args.alias, args.jobnames)
     
 # use this function to form json for a given object
 def CreateJson(args):
