@@ -1924,7 +1924,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     if Object == 'analyses':
         if 'attributes' in KeyWordParams:
             AttributesTable = KeyWordParams['attributes']
-        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} --Attributes {6} -j {7}'
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} --Attributes {7}'
     elif Object == 'runs':
         CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6}'
     
@@ -1934,7 +1934,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     BashScript = os.path.join(qsubdir, alias + '_check_upload.sh')
     with open(BashScript, 'w') as newfile:
         if Object == 'analyses':
-            newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, AttributesTable, ';'.join(JobNames)) + '\n')
+            newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames), AttributesTable) + '\n')
         elif Object == 'runs':
             newfile.write(CheckCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
             
