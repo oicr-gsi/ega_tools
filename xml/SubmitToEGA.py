@@ -494,7 +494,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
             Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
-        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)            
+        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes , {0}.egaBox FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)            
         Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
                 'description', 'datasetLinks', 'attributes', 'egaBox']     
         Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
@@ -502,7 +502,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
         Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
-        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId, {0}.egaBox FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
         Keys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
                 "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
                 "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
@@ -511,23 +511,23 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                     "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
     elif Object == 'studies':
         Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, \
-        {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} \
+        {0}.studyAbstract, {0}.ownTerm, {0}.pubMedIds, {0}.customTags, {0}.egaBox FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         Keys = ["alias", "studyTypeId", "shortName", "title", "studyAbstract",
                 "ownTerm", "pubMedIds", "customTags", "egaBox"]
         Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
     elif Object == 'policies':
-        Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
+        Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url, {0}.egaBox FROM {0} \
         WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
         Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
         Required = ["alias", "dacId", "title", "policyText", "egaBox"]
     elif Object == 'dacs':
-        Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts FROM {0} WHERE {0}.status=\"start\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts, {0}.egaBox FROM {0} WHERE {0}.status=\"start\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
         Keys = ["alias", "title", "contacts", "egaBox"]
         Required = ["alias", "title", "contacts", "egaBox"]        
     elif Object == 'runs':
         Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.runFileTypeId, {0}.experimentId, \
-        {0}.files FROM {0} WHERE {0}.status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        {0}.files, {0}.egaBox FROM {0} WHERE {0}.status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         Keys = ["alias", "sampleId", "runFileTypeId", "experimentId", "files", "egaBox"]
         Required = ["alias", "sampleId", "runFileTypeId", "experimentId", "files", "egaBox"]
 
