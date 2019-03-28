@@ -1406,7 +1406,7 @@ if __name__ == '__main__':
     AddExperimentParser.add_argument('--Strategy', dest='strategy', help='Library strategy. Controlled vocabulary from EGA', required=True)
     AddExperimentParser.add_argument('--Protocol', dest='protocol', help='Library construction protocol.', required=True)
     AddExperimentParser.add_argument('--Layout', dest='library', help='0 for aired and 1 for single end sequencing', required=True)
-    AddDatasetsParser.set_defaults(func=AddExperimentInfo)
+    AddExperimentParser.set_defaults(func=AddExperimentInfo)
     
     # add DAC info to DACs Table
     AddDACsParser = subparsers.add_parser('AddDAC', help ='Add DAC information to DACs Table', parents = [parent_parser])
