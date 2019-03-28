@@ -494,7 +494,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
             Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
-        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1)\"'.format(Table, Box)            
+        {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)            
         Keys = ['alias', 'datasetTypeIds', 'policyId', 'runsReferences', 'analysisReferences', 'title',
                 'description', 'datasetLinks', 'attributes', 'egaBox']     
         Required = ['alias', 'datasetTypeIds', 'policyId', 'title', 'description', 'egaBox']
@@ -2543,17 +2543,17 @@ def CreateJson(args):
             ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
             RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
 
-#        ## form json and add to table and update status --> submit or keep current status
-#        if args.object == 'analyses':
-#            ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
-#            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, projects = args.projects, attributes = args.attributes)
-#        elif args.object == 'samples':
-#             # update status valid -> submit if no error of keep status --> valid and record errorMessage
-#             AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, attributes = args.attributes)
-#        else:
-#            ## form json for all other objects in valid status and add to table
-#            # update status valid -> submit if no error or leep status --> and record errorMessage
-#            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython)
+        ## form json and add to table and update status --> submit or keep current status
+        if args.object == 'analyses':
+            ## form json for analyses in uploaded mode, add to table and update status uploaded -> submit
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, projects = args.projects, attributes = args.attributes)
+        elif args.object == 'samples':
+             # update status valid -> submit if no error of keep status --> valid and record errorMessage
+             AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython, attributes = args.attributes)
+        else:
+            ## form json for all other objects in valid status and add to table
+            # update status valid -> submit if no error or leep status --> and record errorMessage
+            AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython)
 
         
 # use this function to submit object metadata 
