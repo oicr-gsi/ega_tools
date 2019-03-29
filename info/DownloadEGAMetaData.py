@@ -202,7 +202,7 @@ def SpecifyColumnType(L):
                 Cols.append(L[i] + ' TEXT NULL')
             else:
                 Cols.append(L[i] + ' TEXT NULL,')
-        elif L[i] in ('files', 'xml'):
+        elif L[i] in ('files', 'xml', 'policyText'):
             if i == len(L) -1:
                 Cols.append(L[i] + ' MEDIUMTEXT NULL')
             else:
@@ -255,7 +255,7 @@ TokenBox137 = LogData2['response']['result'][0]['session']['sessionToken']
 ### 3) extract metadata for all objects
 
 # make a list of objects of interest
-Objects = ["studies", "runs", "samples", "experiments", "datasets", "analyses"]
+Objects = ["studies", "runs", "samples", "experiments", "datasets", "analyses", "policies"]
 
 # make a parallel list of dicts for each object in list Objects
 MetaDataBox12 = []
@@ -308,9 +308,11 @@ AnalysisFields = ['alias', 'analysisCenter', 'analysisDate', 'analysisFileType',
                   'studyId', 'title', 'xml']
 DataSetFields = ['alias', 'attributes', 'centerName', 'creationTime', 'datasetTypes',
                  'description', 'egaAccessionId', 'ebiId', 'policyId', 'status', 'title', 'xml']
+PolicyFields = ['alias', 'ebiId', 'centerName', 'egaAccessionId', 'title', 'policyText', 'url', 
+                'status', 'creationTime', 'xml', 'dacId']
 
 # make a list for each object 
-Fields = [StudyFields, RunFields, SampleFields, ExperimentFields, DataSetFields, AnalysisFields]
+Fields = [StudyFields, RunFields, SampleFields, ExperimentFields, DataSetFields, AnalysisFields, PolicyFields]
 
 # capture the fields of interest for each object 
 InfoBox12, InfoBox137 = [], []
@@ -361,7 +363,8 @@ Fields[3] = ReorderFields(Fields[3], 'sampleId')
 Fields[3] = ReorderFields(Fields[3], 'studyId')
 Fields[1] = ReorderFields(Fields[1], 'sampleId')
 Fields[1] = ReorderFields(Fields[1], 'experimentId')
-Fields[-1] = ReorderFields(Fields[-1], 'studyId')
+Fields[5] = ReorderFields(Fields[5], 'studyId')
+Fields[6] = ReorderFields(Fields[6], 'dacId')
 
 # make SQL command to specifiy the columns datatype    
 Columns = []
@@ -373,10 +376,11 @@ conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = D
 
 SqlCommand = ['DROP TABLE IF EXISTS Experiments', 'DROP TABLE IF EXISTS Runs', 'DROP TABLE IF EXISTS Samples',
               'DROP TABLE IF EXISTS Analyses', 'DROP TABLE IF EXISTS Datasets', 'DROP TABLE IF EXISTS Studies',
-              'DROP TABLE IF EXISTS Datasets_RunsAnalysis', 'DROP TABLE IF EXISTS Analyses_Samples',
+              'DROP TABLE IF EXISTS Policies', 'DROP TABLE IF EXISTS Datasets_RunsAnalysis', 'DROP TABLE IF EXISTS Analyses_Samples',
               'CREATE TABLE Studies ({0})'.format(Columns[0]), 'CREATE TABLE Runs ({0})'.format(Columns[1]),
               'CREATE TABLE Samples ({0})'.format(Columns[2]), 'CREATE TABLE Experiments ({0})'.format(Columns[3]),
               'CREATE TABLE Datasets ({0})'.format(Columns[4]), 'CREATE TABLE Analyses ({0})'.format(Columns[5]),
+              'CREATE TABLE Policies ({0})'.format(Columns[6]), 
               'CREATE TABLE Datasets_RunsAnalysis (datasetId VARCHAR(100), ebiId VARCHAR(100), PRIMARY KEY (datasetId, ebiId))',
               'CREATE TABLE Analyses_Samples (analysisId VARCHAR(100), sampleId  VARCHAR(100), PRIMARY KEY (analysisId, sampleId))']
 
@@ -393,7 +397,7 @@ print('Dropped existing tables and created new tables')
 cur = conn.cursor()
 
 # make a list of table names parallel to object lists
-Tables = ['Studies', 'Runs', 'Samples', 'Experiments', 'Datasets', 'Analyses']
+Tables = ['Studies', 'Runs', 'Samples', 'Experiments', 'Datasets', 'Analyses', 'Policies']
 
 # Insert data into tables
 # loop over objects
