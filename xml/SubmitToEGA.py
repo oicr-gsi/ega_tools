@@ -646,6 +646,12 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                         Error.append(key)
                 # check enumerations
                 if key in MapEnum:
+                    # datasetTypeIds can be a list of multiple Ids
+                    if key == 'datasetTypeIds':
+                        for k in d[key].split(';'):
+                            if k not in Enums[MapEnum[key]]:
+                                Missing = True
+                                Error.append(key)
                     # check that enumeration is valid
                     if d[key] not in Enums[MapEnum[key]]:
                         Missing = True
