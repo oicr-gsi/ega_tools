@@ -1566,7 +1566,10 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
             accessions = []
             for j in range(1, len(i)):
                 accessions.extend(list(map(lambda x: x.strip(), i[j].split(';'))))
-            Verify[alias] = accessions    
+            # remove NULL from list when only analysis or runs are included in the dataset 
+            while 'NULL' in accessions:
+                accessions.remove('NULL')
+            Verify[alias] = accessions
             
         if len(Verify) != 0:
             # check if all accessions are readily available from metadata db
