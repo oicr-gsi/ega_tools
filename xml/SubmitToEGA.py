@@ -1565,7 +1565,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
             # make a list with all other accessions
             accessions = []
             for j in range(1, len(i)):
-                accessions.extend(i[j].split(';'))
+                accessions.extend(list(map(lambda x: x.strip(), i[j].split(';'))))
             Verify[alias] = accessions    
             
         if len(Verify) != 0:

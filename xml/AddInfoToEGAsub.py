@@ -425,8 +425,8 @@ def AddDatasetInfo(args):
             print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
         else:
             # sort Runs and Analyses Id
-            runsReferences = [i for i in AccessionIds if i.startswith('EGAR')]
-            analysisReferences = [i for i in AccessionIds if i.startswith('EGAZ')]
+            runsReferences = [i.strip() for i in AccessionIds if i.startswith('EGAR')]
+            analysisReferences = [i.strip() for i in AccessionIds if i.startswith('EGAZ')]
             
             # make a list of data ordered according to columns
             D = {"alias": args.alias, "datasetTypeIds": ';'.join(args.datasetTypeIds),
