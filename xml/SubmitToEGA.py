@@ -358,6 +358,10 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                     # record error message
                                     RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot create an object', 'Error') 
                                 else:
+                                    
+                                    print('creation', submissionStatus)
+                                    
+                                    
                                     # store submission json and status (DRAFT) in db table
                                     RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], submissionStatus, 'Status') 
                                     # validate object
@@ -905,6 +909,9 @@ def FormatJson(D, Object, MyScript, MyPython):
                         # check field to add enumeration to json
                         if field == "experimentTypeId":
                             J[field] = [Enums[MapEnum[field]][D[field]]]
+                        elif field == "datasetTypeIds":
+                            # multiple Ids can be stored
+                            J[field] = [Enums[MapEnum[field]][k] for k in D[field].split(';')]
                         else:
                             J[field] = Enums[MapEnum[field]][D[field]]
                 elif field == 'sampleReferences':
