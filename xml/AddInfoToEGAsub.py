@@ -1182,7 +1182,7 @@ def AddPolicyInfo(args):
         else:
             # add fields from the command
             # create dict and add command line arguments
-            Data['alias'], Data['dacId'] = args.alias, args.dacid
+            Data['alias'], Data['dacId'], Data['egaBox'] = args.alias, args.dacid, args.box
             # set status --> start
             Data['Status'] = 'start'
             # list values according to the table column order
