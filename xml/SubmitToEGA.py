@@ -522,7 +522,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
         Required = ["alias", "studyTypeId", "title", "studyAbstract", "egaBox"]
     elif Object == 'policies':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url, {0}.egaBox FROM {0} \
-        WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         Keys = ["alias", "dacId", "title", "policyText", "url", "egaBox"]
         Required = ["alias", "dacId", "title", "policyText", "egaBox"]
     elif Object == 'dacs':
