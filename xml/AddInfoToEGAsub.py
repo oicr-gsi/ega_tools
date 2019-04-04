@@ -1106,7 +1106,7 @@ def ParsePolicyInfo(Table):
         for S in Content:
             S = list(map(lambda x: x.strip(), S.split(':')))
             # values may contain multiple colons. need to put them back together
-            D[S[0]] = ':'.join([str(S[i]) for i in range(1, len(S))])
+            D[S[0]] = ': '.join([str(S[i]) for i in range(1, len(S))])
     infile.close()
     return D
     
@@ -1418,7 +1418,7 @@ if __name__ == '__main__':
     
     # add Policy info to Policy Table
     AddPolicyParser = subparsers.add_parser('AddPolicy', help ='Add Policy information to Policy Table', parents = [parent_parser])
-    AddPolicyParser.add_argument('-t', '--Table', dest='table', default='Policy', help='Policy table. Default is Policy')
+    AddPolicyParser.add_argument('-t', '--Table', dest='table', default='Policies', help='Policy table. Default is Policies')
     AddPolicyParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
     AddPolicyParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the Policy', required=True)
     AddPolicyParser.add_argument('-d', '--DacId', dest='dacid', help='DAC Id or DAC alias', required=True)
