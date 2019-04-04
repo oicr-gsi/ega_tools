@@ -1106,7 +1106,7 @@ def ParsePolicyInfo(Table):
         for S in Content:
             S = list(map(lambda x: x.strip(), S.split(':')))
             # values may contain multiple colons. need to put them back together
-            D[S[0]] = ':'.join([str(S[i]) for i in range(1, len(S))])
+            D[S[0]] = ': '.join([str(S[i]) for i in range(1, len(S))])
     infile.close()
     return D
     
