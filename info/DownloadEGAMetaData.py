@@ -202,7 +202,7 @@ def SpecifyColumnType(L):
                 Cols.append(L[i] + ' TEXT NULL')
             else:
                 Cols.append(L[i] + ' TEXT NULL,')
-        elif L[i] in ('files', 'xml', 'policyText'):
+        elif L[i] in ('files', 'xml', 'policyText', 'contact'):
             if i == len(L) -1:
                 Cols.append(L[i] + ' MEDIUMTEXT NULL')
             else:
@@ -217,6 +217,21 @@ def SpecifyColumnType(L):
     return ' '.join(Cols)
 
 
+# use this function to extract contact information from dac object
+def GetContactInfo(S):
+    '''
+    (str) -> str
+    Take a string representation of an xml and return a semi-colon separated string
+    of dictionaries with contact infor for each person in the DAC    
+    '''
+    
+    # parse the xml string into a xml tree object
+    root = ET.fromstring(S)
+    # make a list of contacts
+    contacts = [str(name.attrib) for name in root.iter('CONTACT')]
+    return ';'.join(contacts)    
+    
+    
 ### 1) set up credentials
 URL = "https://ega.crg.eu/submitterportal/v1"
 
@@ -255,7 +270,7 @@ TokenBox137 = LogData2['response']['result'][0]['session']['sessionToken']
 ### 3) extract metadata for all objects
 
 # make a list of objects of interest
-Objects = ["studies", "runs", "samples", "experiments", "datasets", "analyses", "policies"]
+Objects = ["studies", "runs", "samples", "experiments", "datasets", "analyses", "policies", "dacs"]
 
 # make a parallel list of dicts for each object in list Objects
 MetaDataBox12 = []
@@ -288,6 +303,15 @@ for name in Objects:
 
 print('fetched metadata from the API')
 
+
+# reformat dac data to add contact info as a field in jsons
+for i in range(len(MetaDataBox12[-1]['response']['result'])):
+    contacts = GetContactInfo(MetaDataBox12[-1]['response']['result'][i]['xml'])
+    MetaDataBox12[-1]['response']['result'][i]['contact'] = contacts
+for i in range(len(MetaDataBox137[-1]['response']['result'])):
+    contacts = GetContactInfo(MetaDataBox137[-1]['response']['result'][i]['xml'])
+    MetaDataBox137[-1]['response']['result'][i]['contact'] = contacts
+
 ### 4) capture the fields of interest for each EGA object
 
 # make lists of fields of interest for each object
@@ -310,15 +334,17 @@ DataSetFields = ['alias', 'attributes', 'centerName', 'creationTime', 'datasetTy
                  'description', 'egaAccessionId', 'ebiId', 'policyId', 'status', 'title', 'xml']
 PolicyFields = ['alias', 'ebiId', 'centerName', 'egaAccessionId', 'title', 'policyText', 'url', 
                 'status', 'creationTime', 'xml', 'dacId']
+DacFields = ['ebiId', 'alias', 'title', 'egaAccessionId', 'contact', 'creationTime']
 
 # make a list for each object 
-Fields = [StudyFields, RunFields, SampleFields, ExperimentFields, DataSetFields, AnalysisFields, PolicyFields]
+Fields = [StudyFields, RunFields, SampleFields, ExperimentFields, DataSetFields, AnalysisFields, PolicyFields, DacFields]
 
 # capture the fields of interest for each object 
 InfoBox12, InfoBox137 = [], []
 for i in range(len(Fields)):
     InfoBox12.append(GetObjectFields(Fields[i], MetaDataBox12[i]))
     InfoBox137.append(GetObjectFields(Fields[i], MetaDataBox137[i]))
+
 
 ### 5) add fields to link tables that are found only in the xml
 
@@ -376,11 +402,12 @@ conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd, db = D
 
 SqlCommand = ['DROP TABLE IF EXISTS Experiments', 'DROP TABLE IF EXISTS Runs', 'DROP TABLE IF EXISTS Samples',
               'DROP TABLE IF EXISTS Analyses', 'DROP TABLE IF EXISTS Datasets', 'DROP TABLE IF EXISTS Studies',
-              'DROP TABLE IF EXISTS Policies', 'DROP TABLE IF EXISTS Datasets_RunsAnalysis', 'DROP TABLE IF EXISTS Analyses_Samples',
+              'DROP TABLE IF EXISTS Policies', 'DROP TABLE IF EXISTS Dacs',
+              'DROP TABLE IF EXISTS Datasets_RunsAnalysis', 'DROP TABLE IF EXISTS Analyses_Samples',
               'CREATE TABLE Studies ({0})'.format(Columns[0]), 'CREATE TABLE Runs ({0})'.format(Columns[1]),
               'CREATE TABLE Samples ({0})'.format(Columns[2]), 'CREATE TABLE Experiments ({0})'.format(Columns[3]),
               'CREATE TABLE Datasets ({0})'.format(Columns[4]), 'CREATE TABLE Analyses ({0})'.format(Columns[5]),
-              'CREATE TABLE Policies ({0})'.format(Columns[6]), 
+              'CREATE TABLE Policies ({0})'.format(Columns[6]), 'CREATE TABLE Dacs ({0})'.format(Columns[7]),
               'CREATE TABLE Datasets_RunsAnalysis (datasetId VARCHAR(100), ebiId VARCHAR(100), PRIMARY KEY (datasetId, ebiId))',
               'CREATE TABLE Analyses_Samples (analysisId VARCHAR(100), sampleId  VARCHAR(100), PRIMARY KEY (analysisId, sampleId))']
 
@@ -397,7 +424,7 @@ print('Dropped existing tables and created new tables')
 cur = conn.cursor()
 
 # make a list of table names parallel to object lists
-Tables = ['Studies', 'Runs', 'Samples', 'Experiments', 'Datasets', 'Analyses', 'Policies']
+Tables = ['Studies', 'Runs', 'Samples', 'Experiments', 'Datasets', 'Analyses', 'Policies', 'Dacs']
 
 # Insert data into tables
 # loop over objects
