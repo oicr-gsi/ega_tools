@@ -230,7 +230,30 @@ def GetContactInfo(S):
     # make a list of contacts
     contacts = [str(name.attrib) for name in root.iter('CONTACT')]
     return ';'.join(contacts)    
+ 
     
+# use this function to get the dacId from the policy xml
+def ExtractDacId(S):
+   '''
+   (str) -> str
+   Take a string representation of a policy xml and return the dacId accession string 
+   corresponding to that policy
+   '''    
+
+   root = ET.fromstring(S)
+   accession = [item.attrib for item in root.iter('DAC_REF')][0]['accession']
+   return accession
+
+# use this function to get the policy Id from the dataset xml
+def ExtractPolicyId(S):
+    '''
+    Take a string representation of a dataset xml and return the policy accession string 
+    corresponding to that dataset
+    '''
+    root = ET.fromstring(S)
+    accession = [item.attrib for item in root.iter('POLICY_REF')][0]['accession']
+    return accession
+
     
 ### 1) set up credentials
 URL = "https://ega.crg.eu/submitterportal/v1"
@@ -347,6 +370,24 @@ for i in range(len(Fields)):
 
 
 ### 5) add fields to link tables that are found only in the xml
+
+# dacId is an empty field for EGA policy but it can be retrieved from the xml
+# loop over policies in each box, extract dacId and replace empty field with accession    
+for i in range(len(InfoBox12[6])):    
+    accession = ExtractDacId(InfoBox12[6][i]['xml'])
+    InfoBox12[6][i]['dacId'] = accession
+for i in range(len(InfoBox137[6])):    
+    accession = ExtractDacId(InfoBox137[6][i]['xml'])
+    InfoBox137[6][i]['dacId'] = accession
+
+# policyId is an empty field for EGA datasets but it can retrieved from the xml
+# loop over datsets in each box, extraxt policyId and replace empty field with accession
+for i in range(len(InfoBox12[4])):    
+    accession = ExtractPolicyId(InfoBox12[4][i]['xml'])
+    InfoBox12[4][i]['policyId'] = accession
+for i in range(len(InfoBox137[4])):    
+    accession = ExtractPolicyId(InfoBox137[4][i]['xml'])
+    InfoBox137[4][i]['policyId'] = accession
 
 # runId is not a field for EGA dataset but can found in the xml FOR SOME DATASETS
 # the run ID in the dataset xml is EGAR, it needs to be mapped to ERR ID
