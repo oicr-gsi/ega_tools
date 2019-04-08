@@ -679,6 +679,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                 Error = 'NoError'
             assert d['alias'] not in D
             D[d['alias']] = Error
+    
     return D
 
 
@@ -1538,19 +1539,31 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
     metadata in MetDataBase and update status of aliases in Table for Box or keep the same status 
     '''
     
-    # collect egaAccessionIds for all tables in EGA metadata db
+    # collect all egaAccessionIds for all tables in EGA metadata db
+    # accessions may be egaAccessionIds or may be accessions of dependencies
+    # eg. dac EGAC00001000010 is not in any egaAccessionId because it was registered in a different box
+    # but policy EGAP00001000077 depends on this dac. it can be retrieved in dacId of the policy table
+    
     EgaAccessions = []
     # list all tables in EGA metadata db
     Tables = ListTables(CredentialFile, MetDataBase)
     # extract accessions for each table
     for i in Tables:
-        # check if accessions are part of the column header
-        Header = RetrieveColumnHeader(CredentialFile, MetDataBase, i)
-        if 'egaAccessionId' in Header:
-            # extract accessions for that table
-            accessions = ExtractAccessions(CredentialFile, MetDataBase, Box, i)         
-            EgaAccessions.extend(list(accessions.values()))
-    
+        # connect to metadata database
+        conn = EstablishConnection(CredentialFile, MetDataBase)
+        cur = conn.cursor()
+        # extract egaAccessions and Ids of dependencies
+        for j in ['egaAccessionId', 'dacId', 'policyId']:
+            try:
+                cur.execute('SELECT {0}.{1} from {0} WHERE {0}.egaBox=\"{2}\"'.format(Table, j, Box)) 
+                Data = [i[0] for i in cur]   
+            except:
+                Data = []
+            # dump egaAccessions for that table to master list
+            EgaAccessions.extend(Data)
+        conn.close()
+        
+   
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
