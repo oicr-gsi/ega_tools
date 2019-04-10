@@ -227,12 +227,12 @@ def RecordMessage(CredentialFile, DataBase, Table, Box, Alias, Message, Status):
  
     
 # use this function to delete objects with VALIDATED_WITH_ERRORS status    
-def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Object, Portal):
+def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Object, Portal, SubmissionStatus):
     '''
     (str, str, str, str, str, str) - > None
     Connect to Database using CredentialFile, extract all aliases with submit status
     and Box from Table, connect to the API and delete the corresponding Object
-    if submissionStatus is VALIDATED_WITH ERRORS 
+    with submissionStatus (VALIDATED_WITH_ERRORS, VALIDATED, DRAFT) 
     '''
 
     # grab all aliases with submit status
@@ -267,7 +267,7 @@ def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Objec
         Token = Login.json()['response']['result'][0]['session']['sessionToken']
         headers = {"Content-type": "application/json", "X-Token": Token}
         # retrieve all objects with VALIDATED_WITH ERRORS status
-        response = requests.get(URL + '/{0}?status=VALIDATED_WITH_ERRORS&skip=0&limit=0'.format(Object), headers=headers, data=data)
+        response = requests.get(URL + '/{0}?status={1}&skip=0&limit=0'.format(Object, SubmissionStatus), headers=headers, data=data)
         
         # loop over aliases
         for i in range(len(Aliases)):
@@ -2584,8 +2584,9 @@ def SubmitMetadata(args):
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
     if args.table in Tables:
-        # clean up objects with VALIDATED_WITH_ERRORS submission status
-        DeleteValidatedObjectsWithErrors(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
+        # clean up objects with VALIDATED_WITH_ERRORS, VALIDATED and DRAFT submission status
+        for i in ['VALIDATED_WITH_ERRORS', 'VALIDATED', 'DRAFT']:
+            DeleteValidatedObjectsWithErrors(args.credential, args.subdb, args.table, args.box, args.object, args.portal, i)
         # submit analyses with submit status                
         RegisterObjects(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
 
