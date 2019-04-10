@@ -1541,7 +1541,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
         # extract egaAccessions and Ids of dependencies
         for j in ['egaAccessionId', 'dacId', 'policyId']:
             try:
-                cur.execute('SELECT {0}.{1} from {0} WHERE {0}.egaBox=\"{2}\"'.format(Table, j, Box)) 
+                cur.execute('SELECT {0}.{1} from {0} WHERE {0}.egaBox=\"{2}\"'.format(i, j, Box)) 
                 Data = [i[0] for i in cur]   
             except:
                 Data = []
