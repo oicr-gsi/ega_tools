@@ -1942,9 +1942,9 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     if Object == 'analyses':
         if 'attributes' in KeyWordParams:
             AttributesTable = KeyWordParams['attributes']
-        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} -o {7} --Attributes {8}'
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j \"{6}\" -o {7} --Attributes {8}'
     elif Object == 'runs':
-        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j {6} -o {7}' 
+        CheckCmd = 'sleep 600; module load python-gsi/3.6.4; python3.6 {0} CheckUpload -c {1} -s {2} -t {3} -b {4} -a {5} -j \"{6}\" -o {7}' 
     
     # do not check job used to make destination directory
     JobNames = JobNames[1:]
