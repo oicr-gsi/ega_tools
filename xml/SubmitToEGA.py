@@ -2661,69 +2661,73 @@ def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
 def ReUploadRegisteredFiles(args):
     '''
     (list) -> None
-    take a list of command-line arguments and change the status of registered
-    file objects to encrypt for re-encryption and re-uploading (by the main tool),
-    also create working directories if they don't exist and change the status
-    from submit to SUBMITTED when re-upload is done and json is updated
+    Take a list of command-line arguments and change the status of registered
+    file objects to encrypt for re-encryption and re-uploading (by the main tool)
+    if action is reupload or change the status from submit to SUBMITTED
+    when re-upload is done and json is updated if action is update
     '''
     
-    # grab alias and EGA accessions from metadata database, create a dict {alias: accession}
-    Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
+    # check action to be performed
+    if args.action == 'reupload':
+        # grab alias and EGA accessions from metadata database, create a dict {alias: accession}
+        Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
     
-    # get the list of aliases from the command or from a file
-    # aliases cannot be mixed between analyses and runs object
-    if args.aliasfile:
-        try:
-            infile = open(args.aliasfile)
-            Aliases = list(map(lambda x: x.strip(), infile.read().rstrip().split('\n')))
-            infile.close()
-        except:
+        # get the list of aliases from file
+        # aliases cannot be mixed between analyses and runs object
+        if args.aliasfile:
+            try:
+                infile = open(args.aliasfile)
+                Aliases = list(map(lambda x: x.strip(), infile.read().rstrip().split('\n')))
+                infile.close()
+            except:
+                Aliases = []
+        else:
             Aliases = []
-    else:
-        Aliases = []
     
-    # change status of registered aliases to encrypt
-    if len(Aliases) != 0:
-        for alias in Aliases:
-            # make sure the object is already registered
-            if alias in Registered:
-                # change status SUBMITTED --> encrypt and create working directory if doesn't exist    
-                EditSubmittedStatus(args.credential, args.subdb, args.table, alias, args.box)
+        # change status of registered aliases to encrypt
+        if len(Aliases) != 0:
+            for alias in Aliases:
+                # make sure the object is already registered
+                if alias in Registered:
+                    # change status SUBMITTED --> encrypt and create working directory if doesn't exist    
+                    EditSubmittedStatus(args.credential, args.subdb, args.table, alias, args.box)
         
-        # the following is run through the main tool
-        # 1. encrypt new files only if diskspace is available. update status encrypt --> encrypting
-        # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
+            # the following is run through the main tool
+            # 1. encrypt new files only if diskspace is available. update status encrypt --> encrypting
+            # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
         
-        # 2. upload files and change the status upload -> uploading 
-        # check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
+            # 2. upload files and change the status upload -> uploading 
+            # check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
                 
-        # 3. remove files with uploaded status. does not change status. keep status uploaded --> uploaded
+            # 3. remove files with uploaded status. does not change status. keep status uploaded --> uploaded
         
-        # 4. form json and store in db and update status --> submit
-        # file objects with submit status already registered are filtered out and not submitted
-             
-    # change status submit --> SUBMITTED when file objects are already registered
-    # connect to db
-    conn = EstablishConnection(args.credential, args.subdb)
-    cur = conn.cursor()
+            # 4. form json and store in db and update status --> submit
+            # file objects with submit status already registered are filtered out and not submitted
+            
+            
+    elif args.action == 'update':
+        # change status submit --> SUBMITTED when re-upload of registered file objects is done
+        # connect to db
+        conn = EstablishConnection(args.credential, args.subdb)
+        cur = conn.cursor()
         
-    try:
-        cur.execute('SELECT {0}.alias, {0}.egaAccessionId FROM {0} WHERE {0}.Status=\"submit\" AND {0}.egaBox=\"{1}\"'.format(args.table, args.box))
-        # extract all information 
-        Data = cur.fetchall()
-    except:
-        # record error message
-        Data = []
+        try:
+            cur.execute('SELECT {0}.alias, {0}.egaAccessionId FROM {0} WHERE {0}.Status=\"submit\" AND {0}.submissionStatus=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(args.table, args.box))
+            # extract all information 
+            Data = cur.fetchall()
+        except:
+            # record error message
+            Data = []
     
-    if len(Data) != 0:
-        for i in Data:
-            alias, accession = i[0], i[1]
-            # check that accession exists and object is already registered
-            if accession.startswith('EGA'):
-                # object already registered update status submit --> SUBMITTED 
-                cur.execute('UPDATE {0} SET {0}.Status=\"SUBMITTED\" WHERE {0}.alias=\"{1}\" AND {0}.egaAccessionId=\"{2}\" AND {0}.Status=\"submit\" AND {0}.egaBox=\"{3}\"'.format(args.table, alias, accession, args.box))  
-                conn.commit()
-    conn.close()
+        if len(Data) != 0:
+            for i in Data:
+                alias, accession = i[0], i[1]
+                # check that accession exists and object is already registered
+                if accession.startswith('EGA'):
+                    # object already registered update status submit --> SUBMITTED 
+                    cur.execute('UPDATE {0} SET {0}.Status=\"SUBMITTED\" WHERE {0}.alias=\"{1}\" AND {0}.egaAccessionId=\"{2}\" AND {0}.Status=\"submit\" AND {0}.submissionStatus=\"SUBMITTED\" AND {0}.egaBox=\"{3}\"'.format(args.table, alias, accession, args.box))  
+                    conn.commit()
+        conn.close()
         
         
   
@@ -2851,6 +2855,7 @@ if __name__ == '__main__':
    
     # re-upload registered files that cannot be archived       
     ReUploadParser = subparsers.add_parser('ReUploadFiles', help ='Encrypt and re-upload files that are registered but cannot be archived', parents = [parent_parser])
+    ReUploadParser.add_argument('-a', '--Action', dest='action', choices=['reupload', 'update'], help='Action to be performed: set status to encrypt if reupload or set status to SUBMITTED if update', required=True)
     ReUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     ReUploadParser.add_argument('-t', '--Table', dest='table', help='Database table', required=True)
     ReUploadParser.add_argument('--Alias', dest='aliasfile', help='File with aliases of files that need to be re-uploaded')
