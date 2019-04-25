@@ -333,7 +333,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
             else:
                 # open a submission with token
                 headers = {"Content-type": "application/json", "X-Token": Token}
-                submissionJson = {"title": "{0} submission", "description": "opening a submission for {0} {1}".format(Object, J["alias"])}
+                submissionJson = {"title": "{0} submission".format(Object), "description": "opening a submission for {0} {1}".format(Object, J["alias"])}
                 OpenSubmission = requests.post(URL + '/submissions', headers=headers, data=str(submissionJson).replace("'", "\""))
                 # record error if submission Id is not retrieved or create object if submission successfully open
                 try:
