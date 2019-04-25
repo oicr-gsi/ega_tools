@@ -492,7 +492,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
         Cmd  = 'SELECT {0}.alias, {0}.title, {0}.instrumentModelId, {0}.librarySourceId, \
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
-        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId, {0}.egaBox FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\{1}\"'.format(Table, Box)
+        {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId, {0}.egaBox FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         Keys = ["alias", "title", "instrumentModelId", "librarySourceId", "librarySelectionId",
                 "libraryStrategyId", "designDescription", "libraryName", "libraryConstructionProtocol",
                 "libraryLayoutId", "pairedNominalLength", "pairedNominalSdev", "sampleId", "studyId", "egaBox"]
