@@ -615,10 +615,6 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                     if 'EGAC' not in d[key]:
                         Missing = True
                         Error.append(key)
-                if key == 'experimentId':
-                    if 'EGAX' not in d[key]:
-                        Missing = True
-                        Error.append(key)
                 # check library layout
                 if key == "libraryLayoutId":
                     if str(d[key]) not in ['0', '1']:
