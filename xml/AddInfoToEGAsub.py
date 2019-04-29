@@ -1221,14 +1221,14 @@ def ParseRunInfo(Table):
             # extract variables from line
             if 'fileName' not in Header:
                 # upload file under the same name
-                L = ['alias', 'sampleId', 'filePath']
-                alias, sampleAlias, filePath = [S[Header.index(L[i])] for i in range(len(L))]
+                L = ['alias', 'sampleId', 'experimentId', 'filePath']
+                alias, sampleAlias, experimentId, filePath = [S[Header.index(L[i])] for i in range(len(L))]
                 assert filePath != '/' and filePath[-1] != '/'
                 fileName = os.path.basename(filePath)                
             else:
                 # file name is supplied at least for some runs, upload as fileName if provided
-                L = ['alias', 'sampleId', 'filePath', 'fileName']
-                alias, sampleAlias, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
+                L = ['alias', 'sampleId', 'experimentId', 'filePath', 'fileName']
+                alias, sampleAlias, experimentId, filePath, fileName = [S[Header.index(L[i])] for i in range(len(L))]
                 # get fileName from path if fileName not provided for that alias
                 if fileName in ['', 'NULL', 'NA']:
                     fileName = os.path.basename(filePath)
@@ -1236,10 +1236,9 @@ def ParseRunInfo(Table):
             if alias not in D:
                 # create inner dict, record sampleAlias and create files dict
                 D[alias] = {}
-                # record alias
                 D[alias]['alias'] = alias
-                # record sampleAlias
                 D[alias]['sampleId'] = sampleAlias
+                D[alias]['experimentId'] = experimentId
                 D[alias]['files'] = {}
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
             else:
@@ -1316,6 +1315,10 @@ def AddRunsInfo(args):
         Data = [{alias: Data[alias]} for alias in Data]
     except:
         Data = []
+        
+        
+    print('data', len(Data))    
+        
            
     # record objects only if input table has been provided with required fields
     if len(Data) != 0:
