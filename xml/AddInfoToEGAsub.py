@@ -1250,7 +1250,7 @@ def ParseRunInfo(Table):
                 assert filePath not in D[alias]['files']
                 D[alias]['files'][filePath] = {'filePath': filePath, 'fileName': fileName}
     infile.close()
-
+    return D
     
 # use this function to add data to the runs table
 def AddRunsInfo(args):
@@ -1310,10 +1310,13 @@ def AddRunsInfo(args):
     Recorded = [i[0] for i in cur]
     
     # parse input table [{alias: {'sampleAlias':[sampleAlias], 'files': {filePath: {'filePath': filePath, 'fileName': fileName}}}}]
-    Data = ParseRunInfo(args.input)
-    # make a list of dictionary holding info for a single alias
-    Data = [{alias: Data[alias]} for alias in Data]             
-        
+    try:
+        Data = ParseRunInfo(args.input)
+        # make a list of dictionary holding info for a single alias
+        Data = [{alias: Data[alias]} for alias in Data]
+    except:
+        Data = []
+           
     # record objects only if input table has been provided with required fields
     if len(Data) != 0:
         # check that runs are not already in the database for that box
