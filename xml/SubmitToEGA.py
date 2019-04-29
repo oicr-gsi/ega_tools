@@ -1446,25 +1446,29 @@ def RetrieveColumnHeader(CredentialFile, DataBase, Table):
     
 
 # use this function to add sample accessions to Analysis Table in the submission database
-def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, Box):
+def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, Box):
     '''
     (file, str, str, str, str, str) -> None
     Take a file with credentials to connect to metadata and submission databases
-    and update the Table in the submission table with the sample accessions
+    and update the Table in the submission table with the accessions od dependencies (samples/experiments)
     and update the Object status 
     '''
     
     # grab sample EGA accessions from metadata database, create a dict {alias: accession}
-    Registered = ExtractAccessions(CredentialFile, MetadataDataBase, Box, 'Samples')
-            
+    RegisteredSamples = ExtractAccessions(CredentialFile, MetadataDataBase, Box, 'Samples')
+    # grab experiments EGA accessions from metadata database, create a dict {aias:accession}        
+    RegisteredExperiments = ExtractAccessions(CredentialFile, MetadataDataBase, Box, 'Experiments')
+    
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     # pull alias, sampleIds for given box
     if Object == 'analyses':
         Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'experiments' or Object == 'runs':
+    elif Object == 'experiments':
         Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    elif Object == 'runs':
+        Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.experimentId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         
     try:
         cur.execute(Cmd)
@@ -1473,6 +1477,7 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
         Data = []
     
     # create a dict {alias: [sampleaccessions, ErrorMessage]}
+    # or {alias: [sampleaccessions, experimentaccessions, ErrorMessage]} for runs
     Samples = {}
     # check if alias are in start status
     if len(Data) != 0:
@@ -1484,38 +1489,62 @@ def AddSampleAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, T
             for j in sampleAlias:
                 if j.startswith('EGAN'):
                     sampleAccessions.append(j)
-                elif j in Registered:
-                    sampleAccessions.append(Registered[j])
+                elif j in RegisteredSamples:
+                    sampleAccessions.append(RegisteredSamples[j])
+            if Object == 'runs':
+                # make a list of experimentAlias
+                experimentAlias = i[2].split(';')
+                # make a list of experiment accessions
+                experimentAccessions = []
+                for j in experimentAlias:
+                    if j.startswith('EGAX'):
+                        experimentAccessions.append(j)
+                    elif j in RegisteredExperiments:
+                        experimentAccessions.append(RegisteredExperiments[j])
             # record error if sample aliases have missing accessions
             if len(sampleAlias) != len(sampleAccessions):
                 Error = 'Sample accessions not available'
             else:
                 Error = ''
-            Samples[i[0]] = [';'.join(sampleAccessions), Error]
+            if Object == 'runs':
+                # record error is experiment alias have missing accessions
+                if len(experimentAlias) != len(experimentAccessions):
+                    Error = Error + '; Experiment accessions not available'             
+            if Object in ['analyses', 'experiments']:
+                Samples[i[0]] = [';'.join(sampleAccessions), Error]
+            elif Object == 'runs':
+                Samples[i[0]] = [';'.join(sampleAccessions), ';'.join(experimentAccessions), Error]
         if len(Samples) != 0:
             for alias in Samples:
+                Error = Samples[alias][-1]
                 # check Object for updated status
                 if Object == 'analyses':
-                    # update status start --> encrypt if no error
-                    if Samples[alias][1] == '':
+                    # update status start --> ready if no error
+                    if Error == '':
                         # update sample accessions and status
                         cur.execute('UPDATE {0} SET {0}.sampleReferences=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
-                        conn.commit()
                     else:
                         # record error message and keep status start --> start
                         cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
-                elif Object == 'experiments' or Object == 'runs':
-                    if Samples[alias][1] == '':
-                        # update sample accessions and status start --> encrypt
+                elif Object == 'experiments':
+                    if Error == '':
+                        # update sample accessions and status start --> ready
                         cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
-                        conn.commit()
+                    else:
+                        # record error message and keep status start --> start
+                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                    conn.commit()
+                elif Object == 'runs':
+                    if Error == '':
+                        # update sample accessions and status start --> ready
+                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.experimentId=\"{2}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], Samples[alias][1], alias, Box)) 
                     else:
                         # record error message and keep status start --> start
                         cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
                     conn.commit()
     conn.close()    
-
+    
 
 # use this function to check availability of Object egaAccessionId
 def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table, Box):
@@ -2534,9 +2563,9 @@ def CreateJson(args):
         # change status start --> clean if no error or keep status start --> start
         CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
         
-        ## replace sample aliases with sample accessions and change status clean --> ready or keep clean --> clean
+        ## replace aliases with accessions (sample and/or experiments) and change status clean --> ready or keep clean --> clean
         if args.object in ['analyses', 'experiments', 'runs']:
-            AddSampleAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
         
         ## check that EGA accessions that object depends on are available metadata and change status --> valid or keep clean --> clean
         if args.object in ['analyses', 'datasets', 'experiments', 'policies', 'runs']:
