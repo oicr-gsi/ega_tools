@@ -582,11 +582,6 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                     if d[key] in ['', 'None', None, 'NULL']:
                         Missing = True
                         Error.append(key)
-                # check valid boxes. currently only 2 valid boxes ega-box-12 and ega-box-137
-                if key == 'egaBox':
-                    if d['egaBox'] not in ['ega-box-12', 'ega-box-137']:
-                        Missing = True
-                        Error.append(key)
                 # check files
                 if key == 'files':
                     files = json.loads(d['files'].replace("'", "\""))
