@@ -762,7 +762,7 @@ def FormatJson(D, Object, MyScript, MyPython):
     elif Object == 'samples':
         JsonKeys = ["alias", "title", "description", "caseOrControlId", "genderId",
                     "organismPart", "cellLine", "region", "phenotype", "subjectId",
-                    "anonymizedName", "biosampleId", "sampleAge", "sampleDetail", "attributes"]
+                    "anonymizedName", "bioSampleId", "sampleAge", "sampleDetail", "attributes"]
         Required = ["alias", "title", "description", "caseOrControlId", "genderId", "phenotype"] 
     elif Object == 'datasets':
         JsonKeys = ["alias", "datasetTypeIds", "policyId", "runsReferences", "analysisReferences",
@@ -943,7 +943,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box)
     elif Object == 'samples':
         Cmd = 'SELECT {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.organismPart, \
-        {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.biosampleId, \
+        {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.bioSampleId, \
         {0}.sampleAge, {0}.sampleDetail, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} \
         WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
     elif Object == 'datasets':
@@ -1493,13 +1493,15 @@ def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, 
                     elif j in RegisteredExperiments:
                         experimentAccessions.append(RegisteredExperiments[j])
             # record error if sample aliases have missing accessions
-            if len(sampleAlias) != len(sampleAccessions):
+            # alias may be in medata table but accession may be NULL is EGA Id is not yet available
+            if len(sampleAlias) != len(sampleAccessions) or 'NULL' in sampleAccessions:
                 Error = 'Sample accessions not available'
             else:
                 Error = ''
             if Object == 'runs':
-                # record error is experiment alias have missing accessions
-                if len(experimentAlias) != len(experimentAccessions):
+                # record error if experiment alias have missing accessions
+                # alias may be in medata table but accession may be NULL is EGA Id is not yet available
+                if len(experimentAlias) != len(experimentAccessions) or 'NULL' in experimentAccessions:
                     Error = Error + '; Experiment accessions not available'             
             if Object in ['analyses', 'experiments']:
                 Samples[i[0]] = [';'.join(sampleAccessions), Error]
@@ -2539,6 +2541,7 @@ def CreateJson(args):
 
     # check if Analyses table exists
     Tables = ListTables(args.credential, args.subdb)
+        
     if args.table in Tables:
         ## grab aliases with start status and check if required information is present in table 
         # check information in main table main table
@@ -2557,11 +2560,10 @@ def CreateJson(args):
         ## replace aliases with accessions (sample and/or experiments) and change status clean --> ready or keep clean --> clean
         if args.object in ['analyses', 'experiments', 'runs']:
             AddAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
-        
         ## check that EGA accessions that object depends on are available metadata and change status --> valid or keep clean --> clean
         if args.object in ['analyses', 'datasets', 'experiments', 'policies', 'runs']:
             CheckEgaAccessionId(args.credential, args.subdb, args.metadatadb, args.object, args.table, args.box)
-        
+                
         ## encrypt and upload files for analyses and runs 
         if args.object in ['analyses', 'runs']:
             ## set up working directory, add to analyses table and update status valid --> encrypt
