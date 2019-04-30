@@ -1578,20 +1578,21 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
     # pull alias and egaAccessionIds to be verified
     if Object == 'analyses':
         Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'experiments' or Object == 'runs':
+    elif Object == 'experiments':
         Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.runsReferences, {0}.analysisReferences, {0}.policyId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'policies':
         Cmd = 'SELECT {0}.alias, {0}.dacId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    
+    elif Object == 'runs':
+        Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.experimentId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
     try:
         cur.execute(Cmd)
         Data = cur.fetchall()
     except:
         Data = []
-    
+       
     # create a dict to collect all accessions to be verified for a given alias
     Verify = {}
     # check if alias are in start status
@@ -1607,7 +1608,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
             while 'NULL' in accessions:
                 accessions.remove('NULL')
             Verify[alias] = accessions
-            
+        
         if len(Verify) != 0:
             # check if all accessions are readily available from metadata db
             for alias in Verify:
@@ -2568,7 +2569,7 @@ def CreateJson(args):
         if args.object in ['analyses', 'runs']:
             ## set up working directory, add to analyses table and update status valid --> encrypt
             AddWorkingDirectory(args.credential, args.subdb, args.table, args.box)
-        
+                   
             ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
             ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
             EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
