@@ -553,7 +553,7 @@ def AddSampleInfo(args):
     
     if args.table not in Tables:
         Fields = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
-                  "region", "phenotype", "subjectId", "anonymizedName", "biosampleId",
+                  "region", "phenotype", "subjectId", "anonymizedName", "bioSampleId",
                   "sampleAge", "sampleDetail", "Json", "submissionStatus", "errorMessages", "Receipt",
                   "CreationTime", "egaAccessionId", "egaBox", "attributes", "Status"]
         # format colums with datatype
@@ -1316,10 +1316,6 @@ def AddRunsInfo(args):
     except:
         Data = []
         
-        
-    print('data', len(Data))    
-        
-           
     # record objects only if input table has been provided with required fields
     if len(Data) != 0:
         # check that runs are not already in the database for that box
