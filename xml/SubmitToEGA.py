@@ -847,7 +847,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                         # loop over file name
                         for filePath in files:
                             # create a dict with file info, add stagepath to file name
-                            d = {"fileName": os.path.join(D['StagePath'], files[filePath]['fileName']),
+                            d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                                  "checksum": files[filePath]['checksum'], "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
                                  "checksumMethod": 'md5'}
                             J[field].append(d)
