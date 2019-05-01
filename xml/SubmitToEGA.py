@@ -1627,14 +1627,14 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript):
+def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript):
     '''
-    (file, str, str, str, str, list, list, str, str, str, int, str) -> list
-    Take the file with credential to connect to db, a given alias for Box in Table,
-    lists with file paths and names, the path to the encryption keys, the directory
-    where encrypted and cheksums are saved, the queue and memory allocated to run
-    the jobs and return a list of exit codes specifying if the jobs were launched
-    successfully or not
+    (file, str, str, str, str, str, list, list, str, str, str, int, str) -> list
+    Take the file with Credential to connect to db, a given alias for Object
+    for Box in Table, lists with file paths and names, the path to the encryption
+    keys, the directory where encrypted and cheksums are saved, the queue and 
+    memory allocated to run the jobs and return a list of exit codes specifying
+    if the jobs were launched successfully or not
     '''
 
     MyCmd1 = 'md5sum {0} | cut -f1 -d \' \' > {1}.md5'
@@ -1704,11 +1704,11 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
                     JobNames.extend([JobName1, JobName2, JobName3])
         
         # launch check encryption job
-        MyCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckEncryption -c {1} -s {2} -t {3} -b {4} -a {5} -j \"{6}\"'
+        MyCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckEncryption -c {1} -s {2} -t {3} -b {4} -a {5} -o {6} -j \"{7}\"'
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
-            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, ';'.join(JobNames)) + '\n')
+            newfile.write(MyCmd.format(MyScript, CredentialFile, DataBase, Table, Box, alias, Object, ';'.join(JobNames)) + '\n')
                 
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
@@ -1723,13 +1723,13 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, DiskSpace, MyScript):
+def EncryptFiles(CredentialFile, DataBase, Table, Object, Box, KeyRing, Queue, Mem, DiskSpace, MyScript):
     '''
-    (file, str, str, str, str, str, int) -> None
+    (file, str, str, str, str, str, str, int, str, str) -> None
     Take a file with credentials to connect to Database, encrypt files of aliases
-    only if DiskSpace (in TB) is available in scratch after encryption and update
-    file status to encrypting if encryption and md5sum jobs are successfully
-    launched using the specified queue and memory
+    of Object (analyses or runs) only if DiskSpace (in TB) is available in scratch
+    after encryption and update file status to encrypting if encryption and md5sum
+    jobs are successfully launched using the specified queue and memory
     '''
     
     # create a list of aliases for encryption 
@@ -1776,7 +1776,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
                     conn.close()
 
                     # encrypt and run md5sums on original and encrypted files and check encryption status
-                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem, MyScript)
+                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem, MyScript)
                     # check if encription was launched successfully
                     if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                         # store error message, reset status encrypting --> encrypt
@@ -1789,13 +1789,13 @@ def EncryptFiles(CredentialFile, DataBase, Table, Box, KeyRing, Queue, Mem, Disk
  
         
 # use this function to check that encryption is done for a given alias
-def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
+def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, Object, JobNames):
     '''
-    (file, str, str, str, str, str) -> None
+    (file, str, str, str, str, str, str) -> None
     Take the file with DataBase credentials, a semicolon-seprated string of job
-    names used for encryption and md5sum of all files under Alias, extract information
-    from Table regarding Alias with encrypting Status and update status to upload and
-    files with md5sums when encrypting is done
+    names used for encryption and md5sum of all files under the Alias of Object,
+    extract information from Table regarding Alias with encrypting Status and update
+    status to upload and files with md5sums when encrypting is done
     '''        
         
     # make a list of job names
@@ -1834,7 +1834,8 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
         for file in files:
             # get the fileName
             fileName = files[file]['fileName']
-            fileTypeId = files[file]['fileTypeId']
+            if Object == 'analyses':
+                fileTypeId = files[file]['fileTypeId']
             # check that encryoted and md5sum files do exist
             originalMd5File = os.path.join(WorkingDir, fileName + '.md5')
             encryptedMd5File = os.path.join(WorkingDir, fileName + '.gpg.md5')
@@ -1847,7 +1848,10 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, JobNames):
                 originalMd5 = subprocess.check_output('cat {0}'.format(originalMd5File), shell = True).decode('utf-8').rstrip()
                 if encryptedMd5 != '' and originalMd5 != '':
                     # capture md5sums, build updated dict
-                    Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
+                    if Object == 'analyses':
+                        Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5, 'fileTypeId': fileTypeId} 
+                    elif Object == 'runs':
+                        Files[file] = {'filePath': file, 'unencryptedChecksum': originalMd5, 'encryptedName': encryptedName, 'checksum': encryptedMd5}
                 else:
                     # update boolean
                     Encrypted = False
@@ -2515,7 +2519,7 @@ def IsEncryptionDone(args):
     '''
     # check that encryption is done, store md5sums and path to encrypted file in db
     # update status encrypting -> upload
-    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias, args.jobnames)
+    CheckEncryption(args.credential, args.subdb, args.table, args.box, args.alias, args.object, args.jobnames)
   
         
 # use this function to check upload    
@@ -2572,7 +2576,7 @@ def CreateJson(args):
                    
             ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
             ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-            EncryptFiles(args.credential, args.subdb, args.table, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
+            EncryptFiles(args.credential, args.subdb, args.table, args.object, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
         
             ## upload files and change the status upload -> uploading 
             ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
@@ -2847,6 +2851,7 @@ if __name__ == '__main__':
     CheckEncryptionParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137'], help='Box where samples will be registered', required=True)
     CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
+    CheckEncryptionParser.add_argument('-o', '--Object', dest='object', choices=['analyses', 'runs'], help='Object files to encrypt', required=True)
     CheckEncryptionParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for encryption and md5sums of all files under a given alias', required=True)
     CheckEncryptionParser.set_defaults(func=IsEncryptionDone)
     
