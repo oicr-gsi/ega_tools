@@ -1704,7 +1704,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, filePaths, f
                     JobNames.extend([JobName1, JobName2, JobName3])
         
         # launch check encryption job
-        MyCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckEncryption -c {1} -s {2} -t {3} -b {4} -a {5} -j {6}'
+        MyCmd = 'sleep 300; module load python-gsi/3.6.4; python3.6 {0} CheckEncryption -c {1} -s {2} -t {3} -b {4} -a {5} -j \"{6}\"'
         # put commands in shell script
         BashScript = os.path.join(qsubdir, alias + '_check_encryption.sh')
         with open(BashScript, 'w') as newfile:
