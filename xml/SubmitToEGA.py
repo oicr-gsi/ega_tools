@@ -2027,7 +2027,7 @@ def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, B
         # extract files
         try:
             # extract files for alias in upload mode for given box
-            cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {0}.StagePath FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\" AND {0}.attributes = {1}.alias'.format(Table, Box))
+            cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {0}.StagePath FROM {0} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
             # check that some alias are in upload mode
             Data = cur.fetchall()
         except:
