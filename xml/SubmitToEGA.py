@@ -387,7 +387,12 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                                     if ObjectStatus == 'SUBMITTED':
                                         # get the receipt, and the accession id
                                         try:
-                                            Receipt, egaAccessionId = str(ObjectSubmission.json()).replace("\"", ""), ObjectSubmission.json()['response']['result'][0]['egaAccessionId']
+                                            Receipt = str(ObjectSubmission.json()).replace("\"", "")
+                                            # egaAccessionId is None for experiments, but can be obtained from the list of egaAccessionIds
+                                            if Object == 'experiments':
+                                                egaAccessionId = ObjectSubmission.json()['response']['result'][0]['egaAccessionIds'][0]
+                                            else:
+                                                egaAccessionId = ObjectSubmission.json()['response']['result'][0]['egaAccessionId']
                                         except:
                                             # record error message
                                             RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain receipt and/or accession Id', 'Error')
