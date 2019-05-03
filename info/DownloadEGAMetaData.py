@@ -90,6 +90,25 @@ def GetObjectFields(L, Data):
     return Entries
 
 
+
+# use this function to capture egaAccessionId for Experiment Objects
+def CaptureExperimentAccession(D):
+    '''
+    (dict) --> dict
+    Take a dictionary with information for a single experiment and replace
+    egaAccessionId with accession in egaAccessionIds field if None and return a 
+    modified dictionary D
+    '''
+    if D['egaAccessionId'] == None and 'egaAccessionIds' in D:
+        # get accession fron egaAccessionIds
+        egaAccessionId  = D['egaAccessionIds'][0]
+        assert egaAccessionId.startswith('EGAX')
+        # replace accession
+        D['egaAccessionId'] = egaAccessionId
+    assert D['egaAccessionId'].startswith('EGAX')
+    return D
+
+
 # use this function to add box of origin to an object
 def AddBoxOrigin(Info, BoxName):
     '''
@@ -344,9 +363,10 @@ SampleFields = ['alias', 'attributes', 'caseOrControl', 'centerName',
                 'creationTime', 'description', 'egaAccessionId', 'gender',
                 'ebiId', 'phenotype', 'status', 'subjectId', 'title', 'xml']
 ExperimentFields = ['alias', 'centerName', 'creationTime', 'designDescription',
-                    'egaAccessionId', 'ebiId', 'instrumentModel', 'instrumentPlatform',
-                    'libraryLayout', 'libraryName', 'librarySelection', 'librarySource',
-                    'libraryStrategy', 'pairedNominalLength', 'sampleId', 'status', 'studyId', 'title', 'xml']
+                    'egaAccessionId', 'egaAccessionIds', 'ebiId', 'instrumentModel',
+                    'instrumentPlatform', 'libraryLayout', 'libraryName', 'librarySelection',
+                    'librarySource', 'libraryStrategy', 'pairedNominalLength', 'sampleId',
+                    'status', 'studyId', 'title', 'xml']
 RunFields = ['alias', 'centerName', 'creationTime', 'egaAccessionId', 'experimentId',
              'files', 'ebiId', 'runFileType', 'sampleId', 'status', 'xml']
 AnalysisFields = ['alias', 'analysisCenter', 'analysisDate', 'analysisFileType',
@@ -368,6 +388,16 @@ for i in range(len(Fields)):
     InfoBox12.append(GetObjectFields(Fields[i], MetaDataBox12[i]))
     InfoBox137.append(GetObjectFields(Fields[i], MetaDataBox137[i]))
 
+# capture experiment egaAccessionId 
+# experiments submitted through the api have egaAccessionid set to None
+# but the Id can be retrieved from a list, in the egaAccessionIds field
+for i in range(len(InfoBox12[3])):
+    InfoBox12[3][i] = CaptureExperimentAccession(InfoBox12[3][i])
+for i in range(len(InfoBox137[3])):
+    InfoBox137[3][i] = CaptureExperimentAccession(InfoBox137[3][i])
+
+# remove egaAccessionIds from field list
+ExperimentFields.remove('egaAccessionIds')
 
 ### 5) add fields to link tables that are found only in the xml
 
