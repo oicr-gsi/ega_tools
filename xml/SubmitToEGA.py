@@ -2290,8 +2290,10 @@ def CheckUploadSuccess(LogDir, alias, FileName):
     # loop over the out log
     for filepath in logfiles:
         # extract logname and split to get alias and file name
-        logname = os.path.basename(filepath).split('__') 
-        if alias == logname[0].replace('Upload.', '') and FileName == logname[1][:logname[1].rfind('.o')]:
+        # '__' may be present in file name, '__' is not allowed in alias
+        logname = os.path.basename(filepath).split('__')
+        i, j = logname[0], '__'.join(logname[1:])
+        if alias == i.replace('Upload.', '') and FileName == j[:j.rfind('.o')]:
             # update boolean and exit
             Found = True
             break   
