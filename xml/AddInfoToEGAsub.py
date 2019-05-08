@@ -829,39 +829,44 @@ def AddAnalysesInfo(args):
         for D in Data:
             # get analysis alias
             alias = list(D.keys())[0]
-            if alias in Registered:
-                # skip analysis, already registered in EGA
-                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
-            elif alias in Recorded:
-                # skip analysis, already recorded in submission database
-                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
-            else:
-                # add fields from the command
-                D[alias]['projects'], D[alias]['attributes'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
-                # check if analysisDate is provided in input table
-                if 'analysisDate' not in D[alias]:
-                    D[alias]['analysisDate'] = ''
-                # add fileTypeId to each file
-                for filePath in D[alias]['files']:
-                    fileTypeId = ''
-                    fileTypeId = filePath[-3:].lower()
-                    assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf and bai'
-                    # check that file type Id is also in the filename
-                    assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
-                    # add fileTypeId to dict
-                    assert 'fileTypeId' not in D[alias]['files'][filePath] 
-                    D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
-                # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
-                sampleIds = ';'.join(list(set(D[alias]['sampleReferences'])))
-                D[alias]["sampleReferences"] = sampleIds    
-                # set Status to start
-                D[alias]["Status"] = "start"
-                # list values according to the table column order
-                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
-                # convert data to strings, converting missing values to NULL                    L
-                Values = FormatData(L)        
-                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-                conn.commit()
+            # double undersocre is not allowed because alias and file names are
+            # retrieved from job name split on double underscore for checking upload and encryption
+            if '__' in alias:
+                print('double underscore is not allowed in alias bame')
+            else:               
+                if alias in Registered:
+                    # skip analysis, already registered in EGA
+                    print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+                elif alias in Recorded:
+                    # skip analysis, already recorded in submission database
+                    print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+                else:
+                    # add fields from the command
+                    D[alias]['projects'], D[alias]['attributes'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
+                    # check if analysisDate is provided in input table
+                    if 'analysisDate' not in D[alias]:
+                        D[alias]['analysisDate'] = ''
+                    # add fileTypeId to each file
+                    for filePath in D[alias]['files']:
+                        fileTypeId = ''
+                        fileTypeId = filePath[-3:].lower()
+                        assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf and bai'
+                        # check that file type Id is also in the filename
+                        assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
+                        # add fileTypeId to dict
+                        assert 'fileTypeId' not in D[alias]['files'][filePath] 
+                        D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
+                    # check if multiple sample alias/Ids are used. store sample aliases/Ids as string
+                    sampleIds = ';'.join(list(set(D[alias]['sampleReferences'])))
+                    D[alias]["sampleReferences"] = sampleIds    
+                    # set Status to start
+                    D[alias]["Status"] = "start"
+                    # list values according to the table column order
+                    L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                    # convert data to strings, converting missing values to NULL                    L
+                    Values = FormatData(L)        
+                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                    conn.commit()
     conn.close()            
 
 
@@ -1322,23 +1327,28 @@ def AddRunsInfo(args):
         for D in Data:
             # get run alias
             alias = list(D.keys())[0]
-            if alias in Registered:
-                # skip, already registered in EGA
-                print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
-            elif alias in Recorded:
-                # skip, already recorded in submission database
-                print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+            # double underscore is not allowed in alias name because alias and file name
+            # are retrieved from job name split on double underscore for verificatrion of upload and encryption 
+            if '__' in alias:
+                print('double underscore is not allowed in alias name')
             else:
-                # add fields from the command
-                D[alias]['runFileTypeId'], D[alias]['egaBox'], D[alias]['StagePath'] = args.filetype, args.box, args.stagepath
-                # set Status to start
-                D[alias]["Status"] = "start"
-                # list values according to the table column order
-                L = [D[alias][field] if field in D[alias] else '' for field in Fields]
-                # convert data to strings, converting missing values to NULL                    L
-                Values = FormatData(L)        
-                cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-                conn.commit()
+                if alias in Registered:
+                    # skip, already registered in EGA
+                    print('{0} is already registered in box {1} under accession {2}'.format(alias, args.box, Registered[alias]))
+                elif alias in Recorded:
+                    # skip, already recorded in submission database
+                    print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
+                else:
+                    # add fields from the command
+                    D[alias]['runFileTypeId'], D[alias]['egaBox'], D[alias]['StagePath'] = args.filetype, args.box, args.stagepath
+                    # set Status to start
+                    D[alias]["Status"] = "start"
+                    # list values according to the table column order
+                    L = [D[alias][field] if field in D[alias] else '' for field in Fields]
+                    # convert data to strings, converting missing values to NULL                    L
+                    Values = FormatData(L)        
+                    cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+                    conn.commit()
     conn.close()            
 
 

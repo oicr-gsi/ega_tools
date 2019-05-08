@@ -568,6 +568,12 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                         # alias already used for the same table and box
                         Missing = True
                         Error.append(key)
+                    if Object in ['runs', 'analyses'] and '__' in d[key]:
+                        # double underscore is not allowed in runs and analyses alias
+                        # because alias and file name are retrieved from job name
+                        # split on double underscore for checking upload and encryption
+                        Missing = True
+                        Error.append(key)
                 # check that references are provided
                 if 'runsReferences' in d and 'analysisReferences' in d:
                     # at least runsReferences or analysesReferences should include some accessions
