@@ -277,7 +277,6 @@ def DeleteValidatedObjectsWithErrors(CredentialFile, DataBase, Table, Box, Objec
                 if j["alias"] == Aliases[i]:
                     ObjectId = j['id']
                     if ObjectId != '':
-                        print(Aliases[i], ObjectId)
                         # delete object
                         requests.delete(URL + '/{0}/{1}'.format(Object, ObjectId), headers=headers)
         # disconnect from api
@@ -1779,6 +1778,13 @@ def EncryptFiles(CredentialFile, DataBase, Table, Object, Box, KeyRing, Queue, M
                         filePaths.append(files[file]['filePath'])
                         fileNames.append(files[file]['fileName'])
 
+                    # remove encrypted files if already exist in working directory
+                    # it generates an error if encrypted files are present and encryption starts again
+                    # make a list of files in working directory
+                    CurrentEncrypted = [os.path.join(WorkingDir, j) for j in os.listdir(WorkingDir) if j[-4:] == '.gpg' in j] 
+                    for j in CurrentEncrypted:
+                        os.remove(j)
+                    
                     # update status -> encrypting
                     conn = EstablishConnection(CredentialFile, DataBase)
                     cur = conn.cursor()
