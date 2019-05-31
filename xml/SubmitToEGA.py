@@ -1054,13 +1054,15 @@ def GetJobExitStatus(JobName):
         for j in i:
             if 'end_time' in j:
                 k = j.split()[2:]
-                # convert date to epoch time
-                date = '.'.join([k[1], Months[k[0]], k[-1]]) + ' ' + k[2] 
-                p = '%d.%m.%Y %H:%M:%S'
-                date = int(time.mktime(time.strptime(date, p)))
+                if len(k) != 0:
+                    # convert date to epoch time
+                    date = '.'.join([k[1], Months[k[0]], k[-1]]) + ' ' + k[2] 
+                    p = '%d.%m.%Y %H:%M:%S'
+                    date = int(time.mktime(time.strptime(date, p)))
+                else:
+                    date = 0
             elif 'exit_status' in j:
                 d[date] = j.split()[1]
-        
         # get the exit status of the most recent job    
         EndJobs = list(d.keys())
         EndJobs.sort()
