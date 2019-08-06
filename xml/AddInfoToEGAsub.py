@@ -1355,11 +1355,11 @@ def AddRunsInfo(args):
 if __name__ == '__main__':
 
     # create top-level parser
-    parent_parser = argparse.ArgumentParser(prog = 'AddInfoToEGAsub.py', description='Add information to the EFAsub tables', add_help=False)
+    parent_parser = argparse.ArgumentParser(prog = 'AddInfoToEGAsub.py', description='Add information to the EGAsub tables', add_help=False)
     parent_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     parent_parser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     parent_parser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-    parent_parser.add_argument('-b', '--Box', dest='box', default='ega-box-12', help='Box where samples will be registered. Default is ega-box-12')
+    parent_parser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered')
     
     # create main parser
     main_parser = argparse.ArgumentParser(prog = 'AddInfoToEGAsub.py', description='Add information to the EFAsub tables')
