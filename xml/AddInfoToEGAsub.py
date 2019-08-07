@@ -1186,7 +1186,7 @@ def AddPolicyInfo(args):
         else:
             # add fields from the command
             # create dict and add command line arguments
-            Data['alias'], Data['dacId'], Data['egaBox'] = args.alias, args.dacid, args.box
+            Data['alias'], Data['dacId'], Data['egaBox'], Data['title'] = args.alias, args.dacid, args.box, args.title
             # set status --> start
             Data['Status'] = 'start'
             # list values according to the table column order
@@ -1436,6 +1436,7 @@ if __name__ == '__main__':
     AddPolicyParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
     AddPolicyParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the Policy', required=True)
     AddPolicyParser.add_argument('-d', '--DacId', dest='dacid', help='DAC Id or DAC alias', required=True)
+    AddPolicyParser.add_argument('-tl', '--Title', dest='title', help='Policy title', required=True)
     AddPolicyParser.set_defaults(func=AddPolicyInfo)
     
     # add Run info to Runs Table
