@@ -1088,31 +1088,31 @@ def AddDACInfo(args):
     conn.close()            
 
 
-# use this function to parse Policy info
-def ParsePolicyInfo(Table):
-    '''
-    (file) -> dict
-    Return a dictionary with policy information extracted from Table file   
-    '''
-    
-    infile = open(Table)
-    Content = infile.read().rstrip().split('\n')
-    infile.close()
-    # create a dict {key: value}
-    D = {}
-    # check that required fields are present
-    Expected = ["title", "policyText"]
-    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
-    Missing = [i for i in Expected if i not in Fields]
-    if len(Missing) != 0:
-        print('These required fields are missing: {0}'.format(', '.join(Missing)))
-    else:
-        for S in Content:
-            S = list(map(lambda x: x.strip(), S.split(':')))
-            # values may contain multiple colons. need to put them back together
-            D[S[0]] = ': '.join([str(S[i]) for i in range(1, len(S))])
-    infile.close()
-    return D
+## use this function to parse Policy info
+#def ParsePolicyInfo(Table):
+#    '''
+#    (file) -> dict
+#    Return a dictionary with policy information extracted from Table file   
+#    '''
+#    
+#    infile = open(Table)
+#    Content = infile.read().rstrip().split('\n')
+#    infile.close()
+#    # create a dict {key: value}
+#    D = {}
+#    # check that required fields are present
+#    Expected = ["title", "policyText"]
+#    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
+#    Missing = [i for i in Expected if i not in Fields]
+#    if len(Missing) != 0:
+#        print('These required fields are missing: {0}'.format(', '.join(Missing)))
+#    else:
+#        for S in Content:
+#            S = list(map(lambda x: x.strip(), S.split(':')))
+#            # values may contain multiple colons. need to put them back together
+#            D[S[0]] = ': '.join([str(S[i]) for i in range(1, len(S))])
+#    infile.close()
+#    return D
     
     
       
@@ -1162,9 +1162,6 @@ def AddPolicyInfo(args):
     # create a string with column headers
     ColumnNames = ', '.join(Fields)
     
-    # parse input file
-    Data = ParsePolicyInfo(args.input)    
-    
     # pull down alias and egaId from metadata db, alias should be unique
     # create a dict {alias: accessions}
     Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
@@ -1174,27 +1171,44 @@ def AddPolicyInfo(args):
     cur.execute('SELECT {0}.alias from {0} WHERE {0}.egaBox=\"{1}\"'.format(args.table, args.box))
     Recorded = [i[0] for i in cur]
     
-    # record objects only if input table has been provided with required fields
-    if len(Data) != 0:
-        # check if alias is unique
-        if args.alias in Registered:
-            # skip, already registered in EGA
-            print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
-        elif args.alias in Recorded:
-            # skip, already recorded in submission database
-            print('{0} is already recorded for box {1} in the submission database'.format(args.alias, args.box))
+    # check if alias is unique
+    if args.alias in Registered:
+        # skip, already registered in EGA
+        print('{0} is already registered in box {1} under accession {2}'.format(args.alias, args.box, Registered[args.alias]))
+    elif args.alias in Recorded:
+        # skip, already recorded in submission database
+        print('{0} is already recorded for box {1} in the submission database'.format(args.alias, args.box))
+    else:
+        
+        # create a dict to store fields
+        Data = {}
+                
+        # add fields from the command
+        # create dict and add command line arguments
+        # get policy text from command or file
+        if args.policyfile:
+            infile = open(args.policyfile)
+            policyText = infile.read().rstrip()
+            infile.close()
+        elif args.policytext:
+            policyText = args.policytext
         else:
-            # add fields from the command
-            # create dict and add command line arguments
-            Data['alias'], Data['dacId'], Data['egaBox'], Data['title'] = args.alias, args.dacid, args.box, args.title
-            # set status --> start
-            Data['Status'] = 'start'
-            # list values according to the table column order
-            L = [str(Data[field]) if field in Data else '' for field in Fields]
-            # convert data to strings, converting missing values to NULL
-            Values = FormatData(L)        
-            cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
-            conn.commit()
+            raise ValueError('Missing policy text')
+            
+        if args.url:
+            Data['url'] = args.url
+            
+        Data['alias'], Data['dacId'], Data['egaBox'] = args.alias, args.dacid, args.box
+        Data['title'], Data['policyText'] = args.title, policyText
+            
+        # set status --> start
+        Data['Status'] = 'start'
+        # list values according to the table column order
+        L = [str(Data[field]) if field in Data else '' for field in Fields]
+        # convert data to strings, converting missing values to NULL
+        Values = FormatData(L)        
+        cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(args.table, ColumnNames, Values))
+        conn.commit()
     conn.close()            
 
 
@@ -1437,6 +1451,8 @@ if __name__ == '__main__':
     AddPolicyParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the Policy', required=True)
     AddPolicyParser.add_argument('-d', '--DacId', dest='dacid', help='DAC Id or DAC alias', required=True)
     AddPolicyParser.add_argument('-tl', '--Title', dest='title', help='Policy title', required=True)
+    AddPolicyParser.add_argument('-pf', '--PolicyFile', dest='policyfile', help='File with policy text')
+    AddPolicyParser.add_argument('-pt', '--PolicyText', dest='policytext', help='Policy text')
     AddPolicyParser.set_defaults(func=AddPolicyInfo)
     
     # add Run info to Runs Table
