@@ -1088,34 +1088,6 @@ def AddDACInfo(args):
     conn.close()            
 
 
-## use this function to parse Policy info
-#def ParsePolicyInfo(Table):
-#    '''
-#    (file) -> dict
-#    Return a dictionary with policy information extracted from Table file   
-#    '''
-#    
-#    infile = open(Table)
-#    Content = infile.read().rstrip().split('\n')
-#    infile.close()
-#    # create a dict {key: value}
-#    D = {}
-#    # check that required fields are present
-#    Expected = ["title", "policyText"]
-#    Fields = [S.split(':')[0].strip() for S in Content if ':' in S]
-#    Missing = [i for i in Expected if i not in Fields]
-#    if len(Missing) != 0:
-#        print('These required fields are missing: {0}'.format(', '.join(Missing)))
-#    else:
-#        for S in Content:
-#            S = list(map(lambda x: x.strip(), S.split(':')))
-#            # values may contain multiple colons. need to put them back together
-#            D[S[0]] = ': '.join([str(S[i]) for i in range(1, len(S))])
-#    infile.close()
-#    return D
-    
-    
-      
 # use this function to add DAC info
 def AddPolicyInfo(args):
     '''
@@ -1447,7 +1419,6 @@ if __name__ == '__main__':
     # add Policy info to Policy Table
     AddPolicyParser = subparsers.add_parser('AddPolicy', help ='Add Policy information to Policy Table', parents = [parent_parser])
     AddPolicyParser.add_argument('-t', '--Table', dest='table', default='Policies', help='Policy table. Default is Policies')
-    AddPolicyParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
     AddPolicyParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the Policy', required=True)
     AddPolicyParser.add_argument('-d', '--DacId', dest='dacid', help='DAC Id or DAC alias', required=True)
     AddPolicyParser.add_argument('-tl', '--Title', dest='title', help='Policy title', required=True)
