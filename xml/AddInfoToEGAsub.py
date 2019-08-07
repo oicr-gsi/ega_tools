@@ -1424,7 +1424,7 @@ if __name__ == '__main__':
     
     # add DAC info to DACs Table
     AddDACsParser = subparsers.add_parser('AddDAC', help ='Add DAC information to DACs Table', parents = [parent_parser])
-    AddDACsParser.add_argument('-t', '--Table', dest='table', default='DACs', help='DACs table. Default is DACs')
+    AddDACsParser.add_argument('-t', '--Table', dest='table', default='Dacs', help='DACs table. Default is Dacs')
     AddDACsParser.add_argument('-i', '--Input', dest='input', help='Input table with contact information', required=True)
     AddDACsParser.add_argument('-a', '--Alias', dest='alias', help='Alias for the DAC', required=True)
     AddDACsParser.add_argument('--Title', dest='title', help='Short title for the DAC', required=True)
