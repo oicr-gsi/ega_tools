@@ -992,8 +992,8 @@ def ParseDACInputTable(Table):
     '''
     
     infile = open(Table)
-    Header = infile.read().rstrip().split('\t')
-    Content = infile.read().rstrip().split('\n')
+    Header = infile.readline().rstrip().split('\t')
+    Content = infile.readline().rstrip().split('\n')
     infile.close()
     # create a list [{key: value}]
     L = []
