@@ -1424,6 +1424,7 @@ if __name__ == '__main__':
     AddPolicyParser.add_argument('-tl', '--Title', dest='title', help='Policy title', required=True)
     AddPolicyParser.add_argument('-pf', '--PolicyFile', dest='policyfile', help='File with policy text')
     AddPolicyParser.add_argument('-pt', '--PolicyText', dest='policytext', help='Policy text')
+    AddPolicyParser.add_argument('-u', '--Url', dest='url', help='Url')
     AddPolicyParser.set_defaults(func=AddPolicyInfo)
     
     # add Run info to Runs Table
