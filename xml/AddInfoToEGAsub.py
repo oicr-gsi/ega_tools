@@ -1433,7 +1433,13 @@ if __name__ == '__main__':
     AddRunsParser.add_argument('-f', '--FileTypeId', dest='filetype', help='Controlled vocabulary decribing the file type. Example: "One Fastq file (Single)" or "Two Fastq files (Paired)"', required=True)
     AddRunsParser.add_argument('--StagePath', dest='stagepath', help='Directory on the staging server where files are uploaded', required=True)
     AddRunsParser.set_defaults(func=AddRunsInfo)
-                  
+                      
+    # add Study in to Studies table
+    AddStudyParser = subparsers.add_parser('AddStudy', help ='Add Study information to Studies Table', parents = [parent_parser])
+    AddStudyParser.add_argument('-t', '--Table', dest='table', default='Studies', help='Studies table. Default is Studies')
+    AddStudyParser.add_argument('-i', '--Input', dest='input', help='Input table with required information', required=True)
+    AddStudyParser.set_defaults(func=AddStudyInfo)
+        
     # get arguments from the command line
     args = main_parser.parse_args()
     # pass the args to the default function
