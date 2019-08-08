@@ -2652,7 +2652,9 @@ def CreateJson(args):
         # replace sample aliases for analyses objects
         AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleReferences', 'EGAN', True, args.box)
         # replace sample aliases for experiments objects
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', True, args.box)
+        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
+        # replace study aliases for experiments objects
+        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Studies', 'studyId', 'EGAS', True, args.box)
         # replace sample aliases for runs objects
         AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
         # replace experiment aliases for runs objects
