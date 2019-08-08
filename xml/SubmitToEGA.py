@@ -2658,7 +2658,7 @@ def CreateJson(args):
         # replace sample aliases for runs objects
         AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
         # replace experiment aliases for runs objects
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Experiments', 'sampleId', 'EGAX', True, args.box)
+        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Experiments', 'experimentId', 'EGAX', True, args.box)
         # replace DAC aliases for policies objects
         AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Dacs', 'DacId', 'EGAC', True, args.box)
         
