@@ -1398,7 +1398,7 @@ if __name__ == '__main__':
     AddExperimentParser.add_argument('-t', '--Table', dest='table', default='Experiments', help='Experiments table. Default is Experiments')
     AddExperimentParser.add_argument('-i', '--Input', dest='input', help='Input table with library and sample information', required=True)
     AddExperimentParser.add_argument('--Title', dest='title', help='Short title', required=True)
-    AddExperimentParser.add_argument('--StudyId', dest='study', help='Study Id. Must start with EGAS', required=True)
+    AddExperimentParser.add_argument('--StudyId', dest='study', help='Study alias or EGA accession Id', required=True)
     AddExperimentParser.add_argument('--Description', dest='description', help='Library description', required=True)
     AddExperimentParser.add_argument('--Instrument', dest='instrument', help='Instrument model. Controlled vocabulary from EGA', required=True)
     AddExperimentParser.add_argument('--Selection', dest='selection', help='Library selection. Controlled vocabulary from EGA', required=True)
