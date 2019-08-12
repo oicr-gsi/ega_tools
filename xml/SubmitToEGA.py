@@ -835,8 +835,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                 if key in Required:
                     if d[key] in ['', 'NULL', None]:
                         Missing = True
-                        Error.append(key)
-                
+                        Error.append('Missing required key {0}'.format(key))
                 # check that alias is not already used
                 if key == 'alias':
                     # extract alias and accessions from table
@@ -844,32 +843,32 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                     if d[key] in Registered:
                         # alias already used for the same table and box
                         Missing = True
-                        Error.append(key)
+                        Error.append('Alias already registered')
                     if Object in ['runs', 'analyses'] and '__' in d[key]:
                         # double underscore is not allowed in runs and analyses alias
                         # because alias and file name are retrieved from job name
                         # split on double underscore for checking upload and encryption
                         Missing = True
-                        Error.append(key)
+                        Error.append('Double underscore not allowed in runs and analyses alias')
                 # check that references are provided for datasets
                 if 'runsReferences' in d and 'analysisReferences' in d:
                     # at least runsReferences or analysesReferences should include some accessions
                     if d['runsReferences'] in ['', 'NULL', None] and d['analysisReferences'] in ['', 'NULL', None]:
                         Missing = True
-                        Error.append('References')
+                        Error.append('Missing runsReferences and analysisReferences')
                     if d['runsReferences'] not in ['', 'NULL', None]:
                         if False in list(map(lambda x: x.startswith('EGAR'), d['runsReferences'].split(';'))):
                             Missing = True
-                            Error.append('runsReferences')
+                            Error.append('Missing runsReferences')
                     if d['analysisReferences'] not in ['', 'NULL', None]:
                         if False in list(map(lambda x: x.startswith('EGAZ'), d['analysisReferences'].split(';'))):
                             Missing = True
-                            Error.append('analysisReferences')
+                            Error.append('Missing analysisReferences')
                 # check that accessions or aliases are provided
                 if key in ['sampleId', 'sampleReferences', 'dacId', 'studyId']:
                     if d[key] in ['', 'None', None, 'NULL']:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Missing alias and or accession for {0}'.format(key))
                 # check files
                 if key == 'files':
                     files = json.loads(d['files'].replace("'", "\""))
@@ -877,28 +876,28 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                         # check if file is valid
                         if os.path.isfile(filePath) == False:
                             Missing = True
-                            Error.append('files')
+                            Error.append('Invalid file paths')
                         # check validity of file type for Analyses objects only. doesn't exist for Runs
                         if Object == 'Analyses':
                             if files[filePath]['fileTypeId'].lower() not in Enums['FileTypes']:
                                 Missing = True
-                                Error.append('fileTypeId')
+                                Error.append('Invalid fileTypeId')
                 # check policy Id
                 if key == 'policyId':
                     if 'EGAP' not in d[key]:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Invalid policyId, should start with EGAP')
                 # check library layout
                 if key == "libraryLayoutId":
                     if str(d[key]) not in ['0', '1']:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Invalid {0}: should be 0 or 1'.format(key))
                 if key in ['pairedNominalLength', 'pairedNominalSdev']:
                     try:
                         float(d[key])
                     except:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Invalid type for {0}, should be a number'.format(key))
                 # check enumerations
                 if key in MapEnum:
                     # datasetTypeIds can be a list of multiple Ids
@@ -906,11 +905,11 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                         for k in d[key].split(';'):
                             if k not in Enums[MapEnum[key]]:
                                 Missing = True
-                                Error.append(key)
+                                Error.append('Invalid enumeration for {0}'.format(key))
                     # check that enumeration is valid
                     if d[key] not in Enums[MapEnum[key]]:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Invalid enumeration for {0}'.format(key))
                 # check custom attributes
                 if key == 'attributes':
                     if d['attributes'] not in ['', 'NULL', None]:
@@ -920,15 +919,15 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                             # do not allow keys other than tag, unit and value
                             if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
                                 Missing = True
-                                Error.append(key)
+                                Error.append('Invalif {0} format'.format(key))
                             # tag and value are required keys
                             if 'tag' not in k.keys() and 'value' not in k.keys():
                                 Missing = True
-                                Error.append(key)
+                                Error.append('Missing tag and value from {0}'.format(key))
 
             # check if object has missing/non-valid information
             if Missing == True:
-                 Error = 'Invalid fields:' + ';'.join(list(set(Error)))
+                 Error = ';'.join(list(set(Error)))
             elif Missing == False:
                 Error = 'NoError'
             assert d['alias'] not in D
