@@ -894,9 +894,9 @@ def ParseStudyInputTable(Table):
             S = list(map(lambda x: x.strip(), S.split(':')))
             # non-attributes may contain multiple colons. need to put them back together
             if S[0] == 'attributes':
-                if 'attributes' not in D:
-                    D['attributes'] = []
-                D['attributes'].append({'tag': str(S[1]), 'value': ':'.join([str(S[i]) for i in range(2, len(S))])})
+                if 'customTags' not in D:
+                    D['customTags'] = []
+                D['customTags'].append({'tag': str(S[1]), 'value': ':'.join([str(S[i]) for i in range(2, len(S))])})
             elif S[0] == 'pubMedIds':
                 D[S[0]] = ';'.join([str(S[i]) for i in range(1, len(S))])
             else:
