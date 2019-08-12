@@ -866,7 +866,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                             Missing = True
                             Error.append('analysisReferences')
                 # check that accessions or aliases are provided
-                if key in ['sampleId', 'sampleReferences', 'dacId']:
+                if key in ['sampleId', 'sampleReferences', 'dacId', 'studyId']:
                     if d[key] in ['', 'None', None, 'NULL']:
                         Missing = True
                         Error.append(key)
@@ -883,11 +883,6 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                             if files[filePath]['fileTypeId'].lower() not in Enums['FileTypes']:
                                 Missing = True
                                 Error.append('fileTypeId')
-                # check study Id
-                if key == 'studyId':
-                    if 'EGAS' not in d[key]:
-                        Missing = True
-                        Error.append(key)
                 # check policy Id
                 if key == 'policyId':
                     if 'EGAP' not in d[key]:
