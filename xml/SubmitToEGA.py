@@ -53,10 +53,12 @@ def ParseCredentials(CredentialFile, Box):
     
     # parse the crdential file, get username and password for given box
     Credentials = ExtractCredentials(CredentialFile)
-    if Box == 'ega-box-12':
-        MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-    elif Box == 'ega-box-137':
-        MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+    
+    # box name is ega-box-xxxx
+    boxname = Box[Box.index('b'):].title().replace('-', '')
+    UserKey, PassWordKey = 'UserName' +  boxname, 'MyPassWord' +  boxname
+    UserName, MyPassword = Credentials[UserKey], Credentials[PassWordKey]
+       
     return UserName, MyPassword
 
 
