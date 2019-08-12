@@ -555,7 +555,7 @@ def AddSampleInfo(args):
         Fields = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
                   "region", "phenotype", "subjectId", "anonymizedName", "bioSampleId",
                   "sampleAge", "sampleDetail", "Json", "submissionStatus", "errorMessages", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "attributes", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "AttributesKey", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -600,7 +600,7 @@ def AddSampleInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                D[alias]['attributes'] = args.attributes
+                D[alias]['AttributesKey'] = args.attributes
                 D[alias]['egaBox'] = args.box 
                 # add alias
                 D[alias]['sampleAlias'] = alias    
@@ -791,8 +791,8 @@ def AddAnalysesInfo(args):
     if args.table not in Tables:
         Fields = ["alias", "sampleReferences", "analysisDate",
                   "files", "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "projects",
-                  "attributes", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "ProjectKey",
+                  "AttributesKey", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -842,7 +842,7 @@ def AddAnalysesInfo(args):
                     print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
                 else:
                     # add fields from the command
-                    D[alias]['projects'], D[alias]['attributes'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
+                    D[alias]['ProjectKey'], D[alias]['AttributesKey'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
                     # check if analysisDate is provided in input table
                     if 'analysisDate' not in D[alias]:
                         D[alias]['analysisDate'] = ''
