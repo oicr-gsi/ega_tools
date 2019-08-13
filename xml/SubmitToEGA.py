@@ -1696,6 +1696,14 @@ def GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrint, Box):
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
+    
+    # make a list of boxes in foorptint table
+    cur.execute('SELECT {0}.egaBox FROM {0}'.format(FootPrint))
+    Boxes = list(set([i[0] for i in cur]))
+    # if Box not in Boxes, footprint is 0
+    if Box not in Boxes:
+        return 0
+      
     try:
         # extract files for alias in upload mode for given box
         cur.execute('SELECT {0}.SizeNotRegistered from {0} WHERE {0}.location=\"All\" AND {0}.egaBox=\"{1}\"'.format(FootPrint, Box))
