@@ -1232,7 +1232,7 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
         {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'studies':
-        Cmd = 'SELECT {0}.alias, {0}studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
+        Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
         {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box) 
     elif Object == 'policies':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
