@@ -1231,13 +1231,13 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
         {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'study':
+    elif Object == 'studies':
         Cmd = 'SELECT {0}.alias, {0}studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
         {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box) 
     elif Object == 'policies':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'DAC':
+    elif Object == 'dacs':
         Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts FROM {0} WHERE {0}.status=\"clean\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
     elif Object == 'runs':
         Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.runFileTypeId, {0}.experimentId, {0}.files, \
