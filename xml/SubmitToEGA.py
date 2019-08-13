@@ -1899,6 +1899,45 @@ def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Table, Associat
                     conn.commit()
     conn.close()    
 
+    
+# use this function to add studyId accession to Analyses Project Table in the submission database
+def AddStudyIdAnalysesProject(CredentialFile, MetadataDataBase, SubDataBase, AnalysisTable, ProjectTable, StudiesTable, Box):
+    '''
+    (str, str, str, str, str, str, str, str) -> None
+    
+    Take a file with credentials to connect to metadata and submission databases
+    and update column studyId in AnalysesProject Table with the study EGA accession if alias is present
+    '''
+    
+    # grab EGA accessions from metadata database, create a dict {alias: accession}
+    Registered = ExtractAccessions(CredentialFile, MetadataDataBase, Box, StudiesTable)
+           
+    # connect to the submission database
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()
+    # pull alias, dependent Ids for given box
+    Cmd = 'SELECT {0}.alias, {0}.studyId FROM {0} JOIN {1} WHERE {1}.ProjectKey={0}.alias AND {1}.egaBox=\"{2}\"'.format(ProjectTable, AnalysisTable, Box)
+        
+    try:
+        cur.execute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
+    
+    # update studyId in project 
+    Data = list(set(Data))
+    # make a new list with [(alias: studyId)]
+    accessions = []
+    for i in Data:
+        if not i[1].startswith('EGAS'):
+            if i[1] in Registered:
+                accessions.append([i[0], Registered[i[1]]])
+    for i in accessions:
+        with conn.cursor() as cur:
+             cur.execute('UPDATE {0} SET {0}.studyId=\"{1}\" WHERE {0}.alias=\"{2}\"'.format(ProjectTable, i[1], i[0])) 
+             conn.commit()
+    conn.close()    
+    
 
 # use this function to check availability of Object egaAccessionId
 def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table, Box):
@@ -2929,6 +2968,10 @@ def CreateJson(args):
             # check if required information is present in object table
             CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
         
+        # replace studyId in Analyses project table if study alias is present
+        if args.object == 'analyses':
+            AddStudyIdAnalysesProject(args.credential, args.metadadb, args.subdb, args.table, 'AnalysesProjects', 'Studies', args.box)
+                
         ## replace aliases with accessions and change status clean --> ready or keep clean --> clean
         # replace sample aliases for analyses objects and update status ir no error
         AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleReferences', 'EGAN', True, args.box)
