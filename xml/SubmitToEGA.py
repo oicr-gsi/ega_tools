@@ -2971,7 +2971,7 @@ def CreateJson(args):
         ## replace aliases with accessions and change status clean --> ready or keep clean --> clean
         if args.object == 'analyses':
             # replace studyId in Analyses project table if study alias is present
-            AddStudyIdAnalysesProject(args.credential, args.metadadb, args.subdb, args.table, 'AnalysesProjects', 'Studies', args.box)
+            AddStudyIdAnalysesProject(args.credential, args.metadatadb, args.subdb, args.table, 'AnalysesProjects', 'Studies', args.box)
             # replace sample aliases for analyses objects and update status ir no error
             AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleReferences', 'EGAN', True, args.box)
         elif args.object == 'experiments':
