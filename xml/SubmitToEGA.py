@@ -1181,6 +1181,19 @@ def FormatJson(D, Object, MyScript, MyPython):
                     J[field] = [{"value": accession.strip(), "label": Enums[MapEnum[field]][accession.strip()]} for accession in D[field].split(';')]
                 elif field == 'contacts':
                     J[field] = [json.loads(contact.replace("'", "\"")) for contact in D[field].split(';')]
+                
+                # fields added as aliases must be replaced with accessions
+                elif field in ['studyId', 'policyId', 'dacId', 'experimentId']:
+                    a = ['studyId', 'policyId', 'dacId', 'experimentId']
+                    b = ['EGAS', 'EGAP', 'EGAC', 'EGAX']
+                    for i in range(len(a)):
+                        if field == a[i]:
+                            if D[field].startswith(b[i]):
+                                J[field] = D[field]
+                        else:
+                            # erase dict and add alias
+                            J = {}
+                            J["alias"] = D["alias"]
                 else:
                     J[field] = D[field]
     return J                
