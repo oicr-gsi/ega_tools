@@ -2968,23 +2968,25 @@ def CreateJson(args):
             # check if required information is present in object table
             CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
         
-        # replace studyId in Analyses project table if study alias is present
-        if args.object == 'analyses':
-            AddStudyIdAnalysesProject(args.credential, args.metadadb, args.subdb, args.table, 'AnalysesProjects', 'Studies', args.box)
-                
         ## replace aliases with accessions and change status clean --> ready or keep clean --> clean
-        # replace sample aliases for analyses objects and update status ir no error
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleReferences', 'EGAN', True, args.box)
-        # replace sample aliases for experiments objects
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
-        # replace study aliases for experiments objects and update status if no error
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Studies', 'studyId', 'EGAS', True, args.box)
-        # replace sample aliases for runs objects
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
-        # replace experiment aliases for runs objects and update status if no error
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Experiments', 'experimentId', 'EGAX', True, args.box)
-        # replace DAC aliases for policies objects and update status if no error
-        AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Dacs', 'DacId', 'EGAC', True, args.box)
+        if args.object == 'analyses':
+            # replace studyId in Analyses project table if study alias is present
+            AddStudyIdAnalysesProject(args.credential, args.metadadb, args.subdb, args.table, 'AnalysesProjects', 'Studies', args.box)
+            # replace sample aliases for analyses objects and update status ir no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleReferences', 'EGAN', True, args.box)
+        elif args.object == 'experiments':
+            # replace sample aliases for experiments objects
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
+            # replace study aliases for experiments objects and update status if no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Studies', 'studyId', 'EGAS', True, args.box)
+        elif args.object == 'runs':
+            # replace sample aliases for runs objects
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
+            # replace experiment aliases for runs objects and update status if no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Experiments', 'experimentId', 'EGAX', True, args.box)
+        elif args.object == 'policies':
+            # replace DAC aliases for policies objects and update status if no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Dacs', 'DacId', 'EGAC', True, args.box)
         
         ## check that EGA accessions that object depends on are available metadata and change status --> valid or keep clean --> clean
         if args.object in ['analyses', 'datasets', 'experiments', 'policies', 'runs']:
