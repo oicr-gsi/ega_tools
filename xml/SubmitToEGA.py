@@ -1190,10 +1190,11 @@ def FormatJson(D, Object, MyScript, MyPython):
                         if field == a[i]:
                             if D[field].startswith(b[i]):
                                 J[field] = D[field]
-                        else:
-                            # erase dict and add alias
-                            J = {}
-                            J["alias"] = D["alias"]
+                            else:
+                                # erase dict and add alias
+                                J = {}
+                                J["alias"] = D["alias"]
+                                return J
                 else:
                     J[field] = D[field]
     return J                
@@ -1932,10 +1933,11 @@ def AddStudyIdAnalysesProject(CredentialFile, MetadataDataBase, SubDataBase, Ana
         if not i[1].startswith('EGAS'):
             if i[1] in Registered:
                 accessions.append([i[0], Registered[i[1]]])
-    for i in accessions:
-        with conn.cursor() as cur:
-             cur.execute('UPDATE {0} SET {0}.studyId=\"{1}\" WHERE {0}.alias=\"{2}\"'.format(ProjectTable, i[1], i[0])) 
-             conn.commit()
+    if len(accessions) != 0:
+        for i in accessions:
+            with conn.cursor() as cur:
+                cur.execute('UPDATE {0} SET {0}.studyId=\"{1}\" WHERE {0}.alias=\"{2}\"'.format(ProjectTable, i[1], i[0])) 
+                conn.commit()
     conn.close()    
     
 
