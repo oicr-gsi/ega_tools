@@ -1920,6 +1920,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
       
     # create parallel lists to store the job names and exit codes
     JobExits, JobNames = [], []
+    
     # make a list of file paths
     filePaths = list(files.keys())
     # loop over filepaths
@@ -1939,11 +1940,12 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             # may produce an error message if directory already exists. do not evaluate command during CheckUpload
             JobNames.append(JobName)
             
-        # get filename
+        # get filename and encryptedname
         fileName = os.path.basename(filePaths[i])
-        encryptedFile = os.path.join(FileDir, files[filePaths[i]]['encryptedName'])
-        originalMd5 = os.path.join(FileDir, fileName + '.md5')
-        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+        encryptedName = files[filePaths[i]]['encryptedName']
+        encryptedFile = os.path.join(FileDir, encryptedName)
+        originalMd5 = os.path.join(FileDir, encryptedName[:-4]  + '.md5')
+        encryptedMd5 = os.path.join(FileDir, encryptedName + '.md5')
         if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
             # upload files
             if UploadMode == 'lftp':
@@ -1951,7 +1953,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             elif UploadMode == 'aspera':
                 MyCmd = UploadCmd.format(MyPassword, encryptedMd5, UserName, StagePath, originalMd5, encryptedFile)
             # put command in a shell script    
-            BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_upload.sh')
+            BashScript = os.path.join(qsubdir, alias + '_' + encryptedName[:-4] + '_upload.sh')
             newfile = open(BashScript, 'w')
             newfile.write(MyCmd + '\n')
             newfile.close()
@@ -2373,9 +2375,15 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Object, Alias, JobNam
             for filePath in files:
                 # get filename
                 fileName = os.path.basename(filePath)
-                assert fileName + '.gpg' == files[filePath]['encryptedName']
+                #assert fileName + '.gpg' == files[filePath]['encryptedName']
                 encryptedFile = files[filePath]['encryptedName']
-                originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                
+                #originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                
+                originalMd5, encryptedMd5 = encryptedFile[:-4] + '.md5', encryptedFile + '.md5'                    
+                
+                
+                
                 for j in [encryptedFile, encryptedMd5, originalMd5]:
                     if j not in FilesBox[StagePath]:
                         Uploaded = False
