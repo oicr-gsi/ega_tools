@@ -308,7 +308,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     # check that objects in submit mode do exist
     if len(Data) != 0:
         # make a list of jsons. filter out filesobjects already registered that have been re-uploaded because not archived
-        L = [json.loads(i[0].replace("'", "\"")) for i in Data if not i[1].startswith('EGA')]
+        L = [json.loads(i[0].replace("'", "\""), strict=False) for i in Data if not i[1].startswith('EGA')]
         
         # connect to EGA and get a token
         # parse credentials to get userName and Password
@@ -2317,7 +2317,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     UserName, MyPassword = ParseCredentials(CredentialFile, Box)
     
     # write shell scripts with command
-    assert os.path.isdir (FileDir)
+    assert os.path.isdir(FileDir)
     # make a directory to save the scripts
     qsubdir = os.path.join(FileDir, 'qsubs')
     if os.path.isdir(qsubdir) == False:
