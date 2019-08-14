@@ -555,7 +555,7 @@ def AddSampleInfo(args):
         Fields = ["alias", "caseOrControlId", "genderId", "organismPart", "cellLine",
                   "region", "phenotype", "subjectId", "anonymizedName", "bioSampleId",
                   "sampleAge", "sampleDetail", "Json", "submissionStatus", "errorMessages", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "attributes", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "AttributesKey", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -600,7 +600,7 @@ def AddSampleInfo(args):
                 print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
             else:
                 # add fields from the command
-                D[alias]['attributes'] = args.attributes
+                D[alias]['AttributesKey'] = args.attributes
                 D[alias]['egaBox'] = args.box 
                 # add alias
                 D[alias]['sampleAlias'] = alias    
@@ -791,8 +791,8 @@ def AddAnalysesInfo(args):
     if args.table not in Tables:
         Fields = ["alias", "sampleReferences", "analysisDate",
                   "files", "WorkingDirectory", "Json", "submissionStatus", "errorMessages", "Receipt",
-                  "CreationTime", "egaAccessionId", "egaBox", "projects",
-                  "attributes", "Status"]
+                  "CreationTime", "egaAccessionId", "egaBox", "ProjectKey",
+                  "AttributesKey", "Status"]
         # format colums with datatype
         Columns = []
         for i in range(len(Fields)):
@@ -842,7 +842,7 @@ def AddAnalysesInfo(args):
                     print('{0} is already recorded for box {1} in the submission database'.format(alias, args.box))
                 else:
                     # add fields from the command
-                    D[alias]['projects'], D[alias]['attributes'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
+                    D[alias]['ProjectKey'], D[alias]['AttributesKey'], D[alias]['egaBox'] = args.projects, args.attributes, args.box 
                     # check if analysisDate is provided in input table
                     if 'analysisDate' not in D[alias]:
                         D[alias]['analysisDate'] = ''
@@ -894,9 +894,9 @@ def ParseStudyInputTable(Table):
             S = list(map(lambda x: x.strip(), S.split(':')))
             # non-attributes may contain multiple colons. need to put them back together
             if S[0] == 'attributes':
-                if 'attributes' not in D:
-                    D['attributes'] = []
-                D['attributes'].append({'tag': str(S[1]), 'value': ':'.join([str(S[i]) for i in range(2, len(S))])})
+                if 'customTags' not in D:
+                    D['customTags'] = []
+                D['customTags'].append({'tag': str(S[1]), 'value': ':'.join([str(S[i]) for i in range(2, len(S))])})
             elif S[0] == 'pubMedIds':
                 D[S[0]] = ';'.join([str(S[i]) for i in range(1, len(S))])
             else:
@@ -1398,7 +1398,7 @@ if __name__ == '__main__':
     AddExperimentParser.add_argument('-t', '--Table', dest='table', default='Experiments', help='Experiments table. Default is Experiments')
     AddExperimentParser.add_argument('-i', '--Input', dest='input', help='Input table with library and sample information', required=True)
     AddExperimentParser.add_argument('--Title', dest='title', help='Short title', required=True)
-    AddExperimentParser.add_argument('--StudyId', dest='study', help='Study Id. Must start with EGAS', required=True)
+    AddExperimentParser.add_argument('--StudyId', dest='study', help='Study alias or EGA accession Id', required=True)
     AddExperimentParser.add_argument('--Description', dest='description', help='Library description', required=True)
     AddExperimentParser.add_argument('--Instrument', dest='instrument', help='Instrument model. Controlled vocabulary from EGA', required=True)
     AddExperimentParser.add_argument('--Selection', dest='selection', help='Library selection. Controlled vocabulary from EGA', required=True)
@@ -1424,6 +1424,7 @@ if __name__ == '__main__':
     AddPolicyParser.add_argument('-tl', '--Title', dest='title', help='Policy title', required=True)
     AddPolicyParser.add_argument('-pf', '--PolicyFile', dest='policyfile', help='File with policy text')
     AddPolicyParser.add_argument('-pt', '--PolicyText', dest='policytext', help='Policy text')
+    AddPolicyParser.add_argument('-u', '--Url', dest='url', help='Url')
     AddPolicyParser.set_defaults(func=AddPolicyInfo)
     
     # add Run info to Runs Table

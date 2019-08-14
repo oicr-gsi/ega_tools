@@ -53,10 +53,12 @@ def ParseCredentials(CredentialFile, Box):
     
     # parse the crdential file, get username and password for given box
     Credentials = ExtractCredentials(CredentialFile)
-    if Box == 'ega-box-12':
-        MyPassword, UserName = Credentials['MyPassWordBox12'], Credentials['UserNameBox12']
-    elif Box == 'ega-box-137':
-        MyPassword, UserName = Credentials['MyPassWordBox137'], Credentials['UserNameBox137']
+    
+    # box name is ega-box-xxxx
+    boxname = Box[Box.index('b'):].title().replace('-', '')
+    UserKey, PassWordKey = 'UserName' +  boxname, 'MyPassWord' +  boxname
+    UserName, MyPassword = Credentials[UserKey], Credentials[PassWordKey]
+       
     return UserName, MyPassword
 
 
@@ -121,7 +123,7 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
         # connect to db
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        # get the title project and the attributes for that alias
+        # get the alias with valid status
         cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"valid\" and {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         if len(Data) != 0:
@@ -141,7 +143,7 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
         # check that working directory was recorded and created
         conn = EstablishConnection(CredentialFile, DataBase)
         cur = conn.cursor()
-        # get the title project and the attributes for that alias
+        # get the alias and working directory with valid status
         cur.execute('SELECT {0}.alias, {0}.WorkingDirectory FROM {0} WHERE {0}.Status=\"valid\" and {0}.egaBox=\"{1}\"'.format(Table, Box))
         Data = cur.fetchall()
         if len(Data) != 0:
@@ -306,7 +308,7 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     # check that objects in submit mode do exist
     if len(Data) != 0:
         # make a list of jsons. filter out filesobjects already registered that have been re-uploaded because not archived
-        L = [json.loads(i[0].replace("'", "\"")) for i in Data if not i[1].startswith('EGA')]
+        L = [json.loads(i[0].replace("'", "\""), strict=False) for i in Data if not i[1].startswith('EGA')]
         
         # connect to EGA and get a token
         # parse credentials to get userName and Password
@@ -455,37 +457,36 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
     # connect to db
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()      
+    
+    # get optional tables
+    if 'attributes' in KeyWordParams:
+        AttributesTable = KeyWordParams['attributes']
+    if 'projects' in KeyWordParams:
+        ProjectsTable = KeyWordParams['projects']
+    
     # get required information
     if Object == 'analyses':
-        if 'attributes' in KeyWordParams:
-            AttributesTable = KeyWordParams['attributes']
-            Cmd = 'SELECT {0}.alias, {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.StagePath \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-            Keys = ['alias', 'title', 'description', 'attributes', 'genomeId', 'StagePath']        
-            Required = ['title', 'description', 'genomeId', 'StagePath']
-        elif 'projects' in KeyWordParams:
-            ProjectsTable = KeyWordParams['projects']
-            Cmd = 'SELECT {0}.alias, {1}.studyId, {1}.analysisCenter, {1}.Broker, {1}.analysisTypeId, {1}.experimentTypeId \
-            FROM {0} JOIN {1} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.projects={1}.alias'.format(Table, ProjectsTable, Box) 
-            Keys = ['alias', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-            Required = ['studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
-        else:
-            Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.files, {0}.egaBox, \
-            {0}.attributes, {0}.projects FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-            Keys = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
-            Required = ['alias', 'sampleReferences', 'files', 'egaBox', 'attributes', 'projects']
+        # extract information from Analyses, atrtibutes and projects tables
+        Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.files, {0}.egaBox, \
+            {0}.AttributesKey, {0}.ProjectKey, {1}.title, {1}.description, {1}.attributes, \
+            {1}.genomeId, {1}.StagePath, {2}.studyId, {2}.analysisCenter, {2}.Broker, \
+            {2}.analysisTypeId, {2}.experimentTypeId FROM {0} JOIN {1} JOIN {2} \
+            WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{3}\" AND {0}.AttributesKey={1}.alias \
+            AND {0}.ProjectKey={2}.alias'.format(Table, AttributesTable, ProjectsTable, Box)
+        Keys = ['alias', 'sampleReferences', 'files', 'egaBox', 'AttributesKey', 
+                'ProjectKey', 'title', 'description', 'attributes', 'genomeId', 
+                'StagePath', 'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']
+        Required = ['alias', 'sampleReferences', 'files', 'egaBox', 'AttributesKey',
+                    'ProjectKey', 'title', 'description', 'genomeId', 'StagePath',
+                    'studyId', 'analysisCenter', 'Broker', 'analysisTypeId', 'experimentTypeId']              
     elif Object == 'samples':
-        if 'attributes' in KeyWordParams:
-            AttributesTable = KeyWordParams['attributes']
-            Cmd = 'Select {0}.alias, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
-            {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.attributes={1}.alias'.format(Table, AttributesTable, Box)
-            Keys = ['alias', 'title', 'description', 'attributes']
-            Required = ['title', 'description']
-        else:
-            Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
-            {0}.attributes FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-            Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
-            Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'attributes']
+        Cmd = 'Select {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.phenotype, {0}.egaBox, \
+              {0}.AttributesKey, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} WHERE \
+              {0}.Status=\"start\" AND {0}.egaBox=\"{2}\" AND {0}.AttributesKey={1}.alias'.format(Table, AttributesTable, Box)
+        Keys = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'AttributesKey',
+                'title', 'description', 'attributes']
+        Required = ['alias', 'caseOrControlId', 'genderId', 'phenotype', 'egaBox', 'AttributesKey',
+                    'title', 'description']
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, {0}.analysisReferences, \
         {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes , {0}.egaBox FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)            
@@ -556,9 +557,7 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                 if key in Required:
                     if d[key] in ['', 'NULL', None]:
                         Missing = True
-                        Error.append(key)
-                
-                
+                        Error.append('Missing required key {0}'.format(key))
                 # check that alias is not already used
                 if key == 'alias':
                     # extract alias and accessions from table
@@ -566,32 +565,32 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                     if d[key] in Registered:
                         # alias already used for the same table and box
                         Missing = True
-                        Error.append(key)
+                        Error.append('Alias already registered')
                     if Object in ['runs', 'analyses'] and '__' in d[key]:
                         # double underscore is not allowed in runs and analyses alias
                         # because alias and file name are retrieved from job name
                         # split on double underscore for checking upload and encryption
                         Missing = True
-                        Error.append(key)
-                # check that references are provided
+                        Error.append('Double underscore not allowed in runs and analyses alias')
+                # check that references are provided for datasets
                 if 'runsReferences' in d and 'analysisReferences' in d:
                     # at least runsReferences or analysesReferences should include some accessions
                     if d['runsReferences'] in ['', 'NULL', None] and d['analysisReferences'] in ['', 'NULL', None]:
                         Missing = True
-                        Error.append('References')
+                        Error.append('Missing runsReferences and analysisReferences')
                     if d['runsReferences'] not in ['', 'NULL', None]:
                         if False in list(map(lambda x: x.startswith('EGAR'), d['runsReferences'].split(';'))):
                             Missing = True
-                            Error.append('runsReferences')
+                            Error.append('Missing runsReferences')
                     if d['analysisReferences'] not in ['', 'NULL', None]:
                         if False in list(map(lambda x: x.startswith('EGAZ'), d['analysisReferences'].split(';'))):
                             Missing = True
-                            Error.append('analysisReferences')
-                # check sample references. accessions or aliases can be provided
-                if key in ['sampleId', 'sampleReferences']:
+                            Error.append('Missing analysisReferences')
+                # check that accessions or aliases are provided
+                if key in ['sampleId', 'sampleReferences', 'dacId', 'studyId']:
                     if d[key] in ['', 'None', None, 'NULL']:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Missing alias and or accession for {0}'.format(key))
                 # check files
                 if key == 'files':
                     files = json.loads(d['files'].replace("'", "\""))
@@ -599,38 +598,28 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                         # check if file is valid
                         if os.path.isfile(filePath) == False:
                             Missing = True
-                            Error.append('files')
+                            Error.append('Invalid file paths')
                         # check validity of file type for Analyses objects only. doesn't exist for Runs
                         if Object == 'Analyses':
                             if files[filePath]['fileTypeId'].lower() not in Enums['FileTypes']:
                                 Missing = True
-                                Error.append('fileTypeId')
-                # check study Id
-                if key == 'studyId':
-                    if 'EGAS' not in d[key]:
-                        Missing = True
-                        Error.append(key)
+                                Error.append('Invalid fileTypeId')
                 # check policy Id
                 if key == 'policyId':
                     if 'EGAP' not in d[key]:
                         Missing = True
-                        Error.append(key)
-                # check dac Id
-                if key == 'dacId':
-                    if 'EGAC' not in d[key]:
-                        Missing = True
-                        Error.append(key)
+                        Error.append('Invalid policyId, should start with EGAP')
                 # check library layout
                 if key == "libraryLayoutId":
                     if str(d[key]) not in ['0', '1']:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Invalid {0}: should be 0 or 1'.format(key))
                 if key in ['pairedNominalLength', 'pairedNominalSdev']:
                     try:
                         float(d[key])
                     except:
                         Missing = True
-                        Error.append(key)
+                        Error.append('Invalid type for {0}, should be a number'.format(key))
                 # check enumerations
                 if key in MapEnum:
                     # datasetTypeIds can be a list of multiple Ids
@@ -638,36 +627,36 @@ def IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Objec
                         for k in d[key].split(';'):
                             if k not in Enums[MapEnum[key]]:
                                 Missing = True
-                                Error.append(key)
+                                Error.append('Invalid enumeration for {0}'.format(key))
                     # check that enumeration is valid
                     if d[key] not in Enums[MapEnum[key]]:
                         Missing = True
-                        Error.append(key)
-                # check attributes of attributes table
+                        Error.append('Invalid enumeration for {0}'.format(key))
+                # check custom attributes
                 if key == 'attributes':
-                    if (Object in ['analyses', 'samples'] and 'attributes' in KeyWordParams) or Object == 'datasets':
-                        if d['attributes'] not in ['', 'NULL', None]:
-                            # check format of attributes
-                            attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
-                            for k in attributes:
-                                # do not allow keys other than tag, unit and value
-                                if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
-                                    Missing = True
-                                    Error.append(key)
-                                # tag and value are required keys
-                                if 'tag' not in k.keys() and 'value' not in k.keys():
-                                    Missing = True
-                                    Error.append(key)
+                    if d['attributes'] not in ['', 'NULL', None]:
+                        # check format of attributes
+                        attributes = [json.loads(j.replace("'", "\"")) for j in d['attributes'].split(';')]
+                        for k in attributes:
+                            # do not allow keys other than tag, unit and value
+                            if set(k.keys()).union({'tag', 'value', 'unit'}) != {'tag', 'value', 'unit'}:
+                                Missing = True
+                                Error.append('Invalif {0} format'.format(key))
+                            # tag and value are required keys
+                            if 'tag' not in k.keys() and 'value' not in k.keys():
+                                Missing = True
+                                Error.append('Missing tag and value from {0}'.format(key))
 
             # check if object has missing/non-valid information
             if Missing == True:
-                 Error = 'In {0} table, '.format(Table) + 'invalid fields:' + ';'.join(list(set(Error)))
+                 Error = ';'.join(list(set(Error)))
             elif Missing == False:
                 Error = 'NoError'
             assert d['alias'] not in D
             D[d['alias']] = Error
     
     return D
+
 
 
 # use this function to check that all information for Analyses objects is available before encrypting files     
@@ -677,76 +666,44 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
     Extract information from Submission Database Tables using credentials in file and update errorMessages for each alias
     '''
 
-    # create dict {alias: [errors]}
-    K = {}
-    # connect to db
+    # check Table information
+    D = IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams)
+      
+    # extract all aliases with start status
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()      
     try:
-        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        Data = cur.fetchall()
+        cur.execute('SELECT {0}.alias FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        Data = [i[0] for i in cur]
     except:
         Data = []
     conn.close()
+    
+    # create dict {alias: errors}
+    K = {}
     # record error messages
-    if len(Data) != 0:
-        for i in Data:
-            error = i[1].split('|')
-            # remove NULL. NULL is part of the error message at first iteration
-            while 'NULL' in error:
-                error.remove('NULL')
-            K[i[0]] = error
-            
-        # check Table
-        D = IsInfoValid(CredentialFile, MetadataDataBase, SubDataBase, Table, Box, Object, MyScript, MyPython, **KeyWordParams)
-        # record error messages
-        for alias in K:
-            if alias in D:
-                K[alias].append(D[alias])
-            else:
-                K[alias].append('In {0} table, no information'.format(Table))
+    for alias in Data:
+        if alias in D:
+            K[alias] = D[alias]
+        else:
+            K[alias] = 'No information. Possible issues with table keys or database connection'
                   
     # update status and record errorMessage
-    if len(K) != 0:
-        # connect to database
-        conn = EstablishConnection(CredentialFile, SubDataBase)
-        cur = conn.cursor()    
-        for alias in K:
-            Error = '|'.join(K[alias])
-            # record error message
-            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()    
+    for alias in K:
+        # record error message and/or update status
+        if K[alias] == 'NoError':
+            # update status
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"clean\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, K[alias], alias, Box))
             conn.commit()
-        conn.close()
+        else:
+            # record error
+            cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, K[alias], alias, Box))
+            conn.commit()
+    conn.close()
 
-
-# use this function to check that all information is required for a given object
-def CheckObjectInformation(CredentialFile, DataBase, Table, Box):
-    '''
-    (str, str, str, str) -> None
-    Extract information from DataBase Table using credentials in file and update
-    status to "clean" if all information is correct or keep status to "start" if incorrect or missing
-    '''
-    
-    # connect to db
-    conn = EstablishConnection(CredentialFile, DataBase)
-    cur = conn.cursor()      
-    try:
-        cur.execute('SELECT {0}.alias, {0}.errorMessages FROM {0} WHERE {0}.Status=\"start\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
-        Data = cur.fetchall()
-    except:
-        Data = []
-    # record error messages
-    if len(Data) != 0:
-        for i in Data:
-            alias, Error = i[0], i[1].split('|')
-            # check error message and update status only if no error found
-            Error = '|'.join(list(set(Error)))
-            if Error == 'NoError':
-                # update status
-                cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\", {0}.Status=\"clean\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box))
-                conn.commit()
-    conn.close()        
-    
+ 
 
 # use this function to format the analysis json
 def FormatJson(D, Object, MyScript, MyPython):
@@ -915,6 +872,20 @@ def FormatJson(D, Object, MyScript, MyPython):
                     J[field] = [{"value": accession.strip(), "label": Enums[MapEnum[field]][accession.strip()]} for accession in D[field].split(';')]
                 elif field == 'contacts':
                     J[field] = [json.loads(contact.replace("'", "\"")) for contact in D[field].split(';')]
+                
+                # fields added as aliases must be replaced with accessions
+                elif field in ['studyId', 'policyId', 'dacId', 'experimentId']:
+                    a = ['studyId', 'policyId', 'dacId', 'experimentId']
+                    b = ['EGAS', 'EGAP', 'EGAC', 'EGAX']
+                    for i in range(len(a)):
+                        if field == a[i]:
+                            if D[field].startswith(b[i]):
+                                J[field] = D[field]
+                            else:
+                                # erase dict and add alias
+                                J = {}
+                                J["alias"] = D["alias"]
+                                return J
                 else:
                     J[field] = D[field]
     return J                
@@ -949,13 +920,13 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         Cmd = 'SELECT {0}.alias, {0}.sampleReferences, {0}.analysisDate, {0}.files, \
         {1}.title, {1}.description, {1}.attributes, {1}.genomeId, {1}.chromosomeReferences, {1}.StagePath, {1}.platform, \
         {2}.studyId, {2}.analysisCenter, {2}.Broker, {2}.analysisTypeId, {2}.experimentTypeId \
-        FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.attributes = {1}.alias \
-        AND {0}.projects = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box)
+        FROM {0} JOIN {1} JOIN {2} WHERE {0}.Status=\"uploaded\" AND {0}.egaBox=\"{3}\" AND {0}.AttributesKey = {1}.alias \
+        AND {0}.ProjectKey = {2}.alias'.format(Table, AttributesTable, ProjectsTable, Box)
     elif Object == 'samples':
         Cmd = 'SELECT {0}.alias, {0}.caseOrControlId, {0}.genderId, {0}.organismPart, \
         {0}.cellLine, {0}.region, {0}.phenotype, {0}.subjectId, {0}.anonymizedName, {0}.bioSampleId, \
         {0}.sampleAge, {0}.sampleDetail, {1}.title, {1}.description, {1}.attributes FROM {0} JOIN {1} \
-        WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box)
+        WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{2}\" AND {0}.AttributesKey = {1}.alias'.format(Table, AttributesTable, Box)
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.datasetTypeIds, {0}.policyId, {0}.runsReferences, \
         {0}.analysisReferences, {0}.title, {0}.description, {0}.datasetLinks, {0}.attributes FROM {0} \
@@ -965,13 +936,13 @@ def AddJsonToTable(CredentialFile, DataBase, Table, Box, Object, MyScript, MyPyt
         {0}.librarySelectionId, {0}.libraryStrategyId, {0}.designDescription, {0}.libraryName, \
         {0}.libraryConstructionProtocol, {0}.libraryLayoutId, {0}.pairedNominalLength, \
         {0}.pairedNominalSdev, {0}.sampleId, {0}.studyId FROM {0} WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'study':
-        Cmd = 'SELECT {0}.alias, {0}studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
+    elif Object == 'studies':
+        Cmd = 'SELECT {0}.alias, {0}.studyTypeId, {0}.shortName, {0}.title, {0}.studyAbstract, \
         {0}.ownTerm, {0}.pubMedIds, {0}.customTags FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box) 
     elif Object == 'policies':
         Cmd = 'SELECT {0}.alias, {0}.dacId, {0}.title, {0}.policyText, {0}.url FROM {0} \
         WHERE {0}.Status=\"valid\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'DAC':
+    elif Object == 'dacs':
         Cmd = 'SELECT {0}.alias, {0}.title, {0}.contacts FROM {0} WHERE {0}.status=\"clean\" AND {0}.egaBox="\{1}\"'.format(Table, Box)
     elif Object == 'runs':
         Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.runFileTypeId, {0}.experimentId, {0}.files, \
@@ -1416,6 +1387,14 @@ def GetDiskSpaceStagingServer(CredentialFile, DataBase, FootPrint, Box):
     # connect to database
     conn = EstablishConnection(CredentialFile, DataBase)
     cur = conn.cursor()
+    
+    # make a list of boxes in foorptint table
+    cur.execute('SELECT {0}.egaBox FROM {0}'.format(FootPrint))
+    Boxes = list(set([i[0] for i in cur]))
+    # if Box not in Boxes, footprint is 0
+    if Box not in Boxes:
+        return 0
+      
     try:
         # extract files for alias in upload mode for given box
         cur.execute('SELECT {0}.SizeNotRegistered from {0} WHERE {0}.location=\"All\" AND {0}.egaBox=\"{1}\"'.format(FootPrint, Box))
@@ -1447,31 +1426,90 @@ def RetrieveColumnHeader(CredentialFile, DataBase, Table):
 
 ## functions specific to Analyses objects =====================================
     
-
 # use this function to add sample accessions to Analysis Table in the submission database
-def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, Box):
+def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Table, AssociatedTable, ColumnName, prefix, UpdateStatus, Box):
     '''
-    (file, str, str, str, str, str) -> None
+    (str, str, str, str, str, str, str, bool, str) -> None
+    
     Take a file with credentials to connect to metadata and submission databases
-    and update the Table in the submission table with the accessions od dependencies (samples/experiments)
-    and update the Object status 
+    and update Table  in the submission database with the accessions of dependent 
+    objects in AssociatedTable using prefix and ColumnName. Update status --> ready
+    if no error and UpdateStatus is True
     '''
     
-    # grab sample EGA accessions from metadata database, create a dict {alias: accession}
-    RegisteredSamples = ExtractAccessions(CredentialFile, MetadataDataBase, Box, 'Samples')
-    # grab experiments EGA accessions from metadata database, create a dict {aias:accession}        
-    RegisteredExperiments = ExtractAccessions(CredentialFile, MetadataDataBase, Box, 'Experiments')
-    
+    # grab EGA accessions from metadata database, create a dict {alias: accession}
+    Registered = ExtractAccessions(CredentialFile, MetadataDataBase, Box, AssociatedTable)
+           
     # connect to the submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
-    # pull alias, sampleIds for given box
-    if Object == 'analyses':
-        Cmd = 'SELECT {0}.alias, {0}.sampleReferences FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'experiments':
-        Cmd = 'SELECT {0}.alias, {0}.sampleId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
-    elif Object == 'runs':
-        Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.experimentId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+    # pull alias, dependent Ids for given box
+    Cmd = 'SELECT {0}.alias, {0}.{1} FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{2}\"'.format(Table, ColumnName, Box)
+    
+    try:
+        cur.execute(Cmd)
+        Data = cur.fetchall()
+    except:
+        Data = []
+    
+    # create a dict {alias: [accessions, ErrorMessage]}
+    Dependent = {}
+    # check if alias are in start status
+    if len(Data) != 0:
+        for i in Data:
+            # make a list of dependent Alias
+            Alias = i[1].split(';')
+            # make a list of dependent accessions
+            Accessions = []
+            for j in Alias:
+                if j.startswith(prefix):
+                    Accessions.append(j)
+                elif j in Registered:
+                    Accessions.append(Registered[j])
+            # record error if aliases have missing accessions
+            # alias may be in medata table but accession may be NULL if EGA Id is not yet available
+            if len(Alias) != len(Accessions) or 'NULL' in Accessions:
+                Error = 'Accessions not available'
+            else:
+                Error = ''
+            Dependent[i[0]] =  [';'.join(Accessions), Error]
+            
+        if len(Dependent) != 0:
+            for alias in Dependent:
+                Error = Dependent[alias][-1]
+                if Error == '':
+                    # update accessions
+                    cur.execute('UPDATE {0} SET {0}.{1}=\"{2}\", {0}.errorMessages=\"None\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, ColumnName, Dependent[alias][0], alias, Box)) 
+                else:
+                    # record error message
+                    cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
+                conn.commit()
+                
+                # check if status can be updated
+                if UpdateStatus == True and Error == '':
+                    # update satus start --> ready
+                    cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                    conn.commit()
+    conn.close()    
+
+    
+# use this function to add studyId accession to Analyses Project Table in the submission database
+def AddStudyIdAnalysesProject(CredentialFile, MetadataDataBase, SubDataBase, AnalysisTable, ProjectTable, StudiesTable, Box):
+    '''
+    (str, str, str, str, str, str, str, str) -> None
+    
+    Take a file with credentials to connect to metadata and submission databases
+    and update column studyId in AnalysesProject Table with the study EGA accession if alias is present
+    '''
+    
+    # grab EGA accessions from metadata database, create a dict {alias: accession}
+    Registered = ExtractAccessions(CredentialFile, MetadataDataBase, Box, StudiesTable)
+           
+    # connect to the submission database
+    conn = EstablishConnection(CredentialFile, SubDataBase)
+    cur = conn.cursor()
+    # pull alias, dependent Ids for given box
+    Cmd = 'SELECT {0}.alias, {0}.studyId FROM {0} JOIN {1} WHERE {1}.ProjectKey={0}.alias AND {1}.egaBox=\"{2}\"'.format(ProjectTable, AnalysisTable, Box)
         
     try:
         cur.execute(Cmd)
@@ -1479,75 +1517,19 @@ def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Object, Table, 
     except:
         Data = []
     
-    # create a dict {alias: [sampleaccessions, ErrorMessage]}
-    # or {alias: [sampleaccessions, experimentaccessions, ErrorMessage]} for runs
-    Samples = {}
-    # check if alias are in start status
-    if len(Data) != 0:
-        for i in Data:
-            # make a list of sampleAlias
-            sampleAlias = i[1].split(';')
-            # make a list of sample accessions
-            sampleAccessions = []
-            for j in sampleAlias:
-                if j.startswith('EGAN'):
-                    sampleAccessions.append(j)
-                elif j in RegisteredSamples:
-                    sampleAccessions.append(RegisteredSamples[j])
-            if Object == 'runs':
-                # make a list of experimentAlias
-                experimentAlias = i[2].split(';')
-                # make a list of experiment accessions
-                experimentAccessions = []
-                for j in experimentAlias:
-                    if j.startswith('EGAX'):
-                        experimentAccessions.append(j)
-                    elif j in RegisteredExperiments:
-                        experimentAccessions.append(RegisteredExperiments[j])
-            # record error if sample aliases have missing accessions
-            # alias may be in medata table but accession may be NULL is EGA Id is not yet available
-            if len(sampleAlias) != len(sampleAccessions) or 'NULL' in sampleAccessions:
-                Error = 'Sample accessions not available'
-            else:
-                Error = ''
-            if Object == 'runs':
-                # record error if experiment alias have missing accessions
-                # alias may be in medata table but accession may be NULL is EGA Id is not yet available
-                if len(experimentAlias) != len(experimentAccessions) or 'NULL' in experimentAccessions:
-                    Error = Error + '; Experiment accessions not available'             
-            if Object in ['analyses', 'experiments']:
-                Samples[i[0]] = [';'.join(sampleAccessions), Error]
-            elif Object == 'runs':
-                Samples[i[0]] = [';'.join(sampleAccessions), ';'.join(experimentAccessions), Error]
-        if len(Samples) != 0:
-            for alias in Samples:
-                Error = Samples[alias][-1]
-                # check Object for updated status
-                if Object == 'analyses':
-                    # update status start --> ready if no error
-                    if Error == '':
-                        # update sample accessions and status
-                        cur.execute('UPDATE {0} SET {0}.sampleReferences=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
-                    else:
-                        # record error message and keep status start --> start
-                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
-                    conn.commit()
-                elif Object == 'experiments':
-                    if Error == '':
-                        # update sample accessions and status start --> ready
-                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Samples[alias][0], alias, Box)) 
-                    else:
-                        # record error message and keep status start --> start
-                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
-                    conn.commit()
-                elif Object == 'runs':
-                    if Error == '':
-                        # update sample accessions and status start --> ready
-                        cur.execute('UPDATE {0} SET {0}.sampleId=\"{1}\", {0}.experimentId=\"{2}\", {0}.errorMessages=\"None\", {0}.Status=\"ready\" WHERE {0}.alias=\"{3}\" AND {0}.egaBox=\"{4}\"'.format(Table, Samples[alias][0], Samples[alias][1], alias, Box)) 
-                    else:
-                        # record error message and keep status start --> start
-                        cur.execute('UPDATE {0} SET {0}.errorMessages=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, Error, alias, Box)) 
-                    conn.commit()
+    # update studyId in project 
+    Data = list(set(Data))
+    # make a new list with [(alias: studyId)]
+    accessions = []
+    for i in Data:
+        if not i[1].startswith('EGAS'):
+            if i[1] in Registered:
+                accessions.append([i[0], Registered[i[1]]])
+    if len(accessions) != 0:
+        for i in accessions:
+            with conn.cursor() as cur:
+                cur.execute('UPDATE {0} SET {0}.studyId=\"{1}\" WHERE {0}.alias=\"{2}\"'.format(ProjectTable, i[1], i[0])) 
+                conn.commit()
     conn.close()    
     
 
@@ -1595,7 +1577,7 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
     elif Object == 'datasets':
         Cmd = 'SELECT {0}.alias, {0}.runsReferences, {0}.analysisReferences, {0}.policyId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'policies':
-        Cmd = 'SELECT {0}.alias, {0}.dacId FROM {0} WHERE {0}.Status=\"clean\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
+        Cmd = 'SELECT {0}.alias, {0}.dacId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     elif Object == 'runs':
         Cmd = 'SELECT {0}.alias, {0}.sampleId, {0}.experimentId FROM {0} WHERE {0}.Status=\"ready\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
     
@@ -1919,7 +1901,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     UserName, MyPassword = ParseCredentials(CredentialFile, Box)
     
     # write shell scripts with command
-    assert os.path.isdir (FileDir)
+    assert os.path.isdir(FileDir)
     # make a directory to save the scripts
     qsubdir = os.path.join(FileDir, 'qsubs')
     if os.path.isdir(qsubdir) == False:
@@ -2037,7 +2019,7 @@ def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, B
         # extract files
         try:
             # extract files for alias in upload mode for given box
-            cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{2}\" AND {0}.attributes = {1}.alias'.format(Table, AttributesTable, Box))
+            cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.Status=\"upload\" AND {0}.egaBox=\"{2}\" AND {0}.AttributesKey = {1}.alias'.format(Table, AttributesTable, Box))
             # check that some alias are in upload mode
             Data = cur.fetchall()
         except:
@@ -2122,7 +2104,7 @@ def ListFilesStagingServer(CredentialFile, DataBase, Table, Box, Object, **KeyWo
                 AttributesTable = KeyWordParams['attributes']
             else:
                 AttributesTable = 'empty'
-            Cmd = 'SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box)
+            Cmd = 'SELECT {0}.alias, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.AttributesKey = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\"'.format(Table, AttributesTable, Box)
         elif Object == 'runs':
             Cmd = 'SELECT {0}.alias, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\"'.format(Table, Box)
         
@@ -2349,7 +2331,7 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Object, Alias, JobNam
             AttributesTable = KeyWordParams['attributes']
         else:
             AttributesTable = 'empty'
-        Cmd = 'SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.attributes = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\" AND {0}.alias=\"{3}\"'.format(Table, AttributesTable, Box, Alias)
+        Cmd = 'SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {1}.StagePath FROM {0} JOIN {1} WHERE {0}.AttributesKey = {1}.alias AND {0}.Status=\"uploading\" AND {0}.egaBox=\"{2}\" AND {0}.alias=\"{3}\"'.format(Table, AttributesTable, Box, Alias)
     elif Object == 'runs':
         Cmd = 'SELECT {0}.alias, {0}.files, {0}.WorkingDirectory, {0}.StagePath FROM {0} WHERE {0}.Status=\"uploading\" AND {0}.egaBox=\"{1}\" AND {0}.alias=\"{2}\"'.format(Table, Box, Alias)
 
@@ -2569,23 +2551,37 @@ def CreateJson(args):
     Tables = ListTables(args.credential, args.subdb)
         
     if args.table in Tables:
-        ## grab aliases with start status and check if required information is present in table 
-        # check information in main table main table
-        CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
-        # check information in attributes table
-        if args.object in ['analyses', 'samples']:
-            ## check if required information is present in attributes table
-            CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, attributes = args.attributes)
-        # check information in projects table
+        ## grab aliases with start status and check if required information is present in table(s) 
         if args.object == 'analyses':
-            ## check if required information is present in attributes table
-            CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, projects = args.projects)
-        # change status start --> clean if no error or keep status start --> start
-        CheckObjectInformation(args.credential, args.subdb, args.table, args.box)
+            # check if required information is present in analyses, attributes and projects tables
+            CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, attributes = args.attributes, projects = args.projects) 
+        elif args.object == 'samples':
+            # check if required information is present in samples and attributes tables
+            CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython, attributes = args.attributes)
+        else:
+            # check if required information is present in object table
+            CheckTableInformation(args.credential, args.metadatadb, args.subdb, args.table, args.object, args.box, args.myscript, args.mypython)
         
-        ## replace aliases with accessions (sample and/or experiments) and change status clean --> ready or keep clean --> clean
-        if args.object in ['analyses', 'experiments', 'runs']:
-            AddAccessions(args.credential, args.metadatadb, args.subdb, args.object, args.table, args.box)
+        ## replace aliases with accessions and change status clean --> ready or keep clean --> clean
+        if args.object == 'analyses':
+            # replace studyId in Analyses project table if study alias is present
+            AddStudyIdAnalysesProject(args.credential, args.metadatadb, args.subdb, args.table, 'AnalysesProjects', 'Studies', args.box)
+            # replace sample aliases for analyses objects and update status ir no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleReferences', 'EGAN', True, args.box)
+        elif args.object == 'experiments':
+            # replace sample aliases for experiments objects
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
+            # replace study aliases for experiments objects and update status if no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Studies', 'studyId', 'EGAS', True, args.box)
+        elif args.object == 'runs':
+            # replace sample aliases for runs objects
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Samples', 'sampleId', 'EGAN', False, args.box)
+            # replace experiment aliases for runs objects and update status if no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Experiments', 'experimentId', 'EGAX', True, args.box)
+        elif args.object == 'policies':
+            # replace DAC aliases for policies objects and update status if no error
+            AddAccessions(args.credential, args.metadatadb, args.subdb, args.table, 'Dacs', 'DacId', 'EGAC', True, args.box)
+        
         ## check that EGA accessions that object depends on are available metadata and change status --> valid or keep clean --> clean
         if args.object in ['analyses', 'datasets', 'experiments', 'policies', 'runs']:
             CheckEgaAccessionId(args.credential, args.subdb, args.metadatadb, args.object, args.table, args.box)
