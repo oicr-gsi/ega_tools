@@ -1384,7 +1384,7 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
                 Values =  FormatData(list(map(lambda x: str(x), L)))
                 cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(FootPrintTable, ColumnNames, Values))
                 conn.commit()
-    conn.close()            
+        conn.close()            
                 
 
 # use this function to get the available disk space on the staging server
@@ -2812,14 +2812,14 @@ def FileInfoStagingServer(args):
 if __name__ == '__main__':
 
     # create top-level parser
-    parent_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages submission to EGA', add_help=False)
+    parent_parser = argparse.ArgumentParser(prog = 'Gaea.py', description='manages submission to EGA', add_help=False)
     parent_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     parent_parser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     parent_parser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
     parent_parser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where objects will be registered', required=True)
     
     # create main parser
-    main_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages EGA submissions')
+    main_parser = argparse.ArgumentParser(prog = 'Gaea.py', description='manages EGA submissions')
     subparsers = main_parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
 
     # collect enumerations from EGA
@@ -2852,7 +2852,7 @@ if __name__ == '__main__':
     FormJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
     FormJsonParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='Object to register', required=True)
-    FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/SubmitToEGA.py')
+    FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/Gaea.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/Gaea.py')
     FormJsonParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     FormJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     FormJsonParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
