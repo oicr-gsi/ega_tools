@@ -1290,18 +1290,18 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
 
 
 # use this function to add information to Footprint table
-def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintTable):
+def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintTable, Box):
     '''
-    (str, str, str, str) -> None
-    Use credentials to connect to SubDatabase, extract file information from StagingServerTable
-    and collapse it per directory in each staging server in FootPrintTable
+    (str, str, str, str, str) -> None
+    Use credentials to connect to SubDatabase, extract file information from
+    StagingServerTable for given Box and collapse it per directory in FootPrintTable
     '''
     
     # connect to submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     try:
-        cur.execute('SELECT * FROM {0}'.format(StagingServerTable))
+        cur.execute('SELECT * FROM {0} WHERE {0}.egaBox=\"{1}\".'.format(StagingServerTable, Box))
         Data = cur.fetchall()
     except:
         Data = []
@@ -1346,21 +1346,32 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
             # correct directory value
             Size[box]['All'][0] = 'All'
         
+        # list all tables in EGA metadata db
+        Tables = ListTables(CredentialFile, SubDataBase)
+
         # connect to submission database
         conn = EstablishConnection(CredentialFile, SubDataBase)
         cur = conn.cursor()
   
-        Fields = ["egaBox", "location", "AllFiles", "Registered", "NotRegistered", "Size", "SizeRegistered", "SizeNotRegistered"]
-        # format colums with datatype - convert to string
-        Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+        # create table if doesn't exist        
+        if FootPrintTable not in Tables:
+            Fields = ["egaBox", "location", "AllFiles", "Registered", "NotRegistered", "Size", "SizeRegistered", "SizeNotRegistered"]
+            # format colums with datatype - convert to string
+            Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+            # create table with column headers
+            cur.execute('CREATE TABLE {0} ({1})'.format(FootPrintTable, Columns))
+            conn.commit()
+        else:
+            # get the column headers from the table
+            cur.execute("SELECT * FROM {0}".format(FootPrintTable))
+            Fields = [i[0] for i in cur.description]
+            
         # create a string with column headers
         ColumnNames = ', '.join(Fields)
-
-        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(FootPrintTable), 'CREATE TABLE {0} ({1})'.format(FootPrintTable, Columns)]
-        for i in SqlCommand:
-            cur.execute(i)
-            conn.commit()
-               
+        # drop all entries for that Box
+        cur.execute('DELETE FROM {0} WHERE {0}.egaBox=\"{1}\"'.format(FootPrintTable, Box))
+        conn.commit()
+    
         # loop over data in boxes
         for box in Size:
             # loop over directory in each box
@@ -2788,36 +2799,13 @@ def FileInfoStagingServer(args):
     '''
     (list) -> None
     Take a list of command line arguments and populate tables with file info
-    including size and accessions Ids of files on the staging servers of available boxes
+    including size and accessions Ids of files on the staging servers for given box
     '''
 
-    # extract all available boxes
-    Boxes = []
-    DB = [args.metadatadb, args.subdb]
-    Tables = []
-    for i in range(len(DB)):
-        # extract boxes from each db    
-        Tables.append(ListTables(args.credential, DB[i]))
-    # loop over tables from each db
-    for i in range(len(Tables)):
-        for j in range(len(Tables[i])):
-            # check if box is in the table's header
-            Header = RetrieveColumnHeader(args.credential, DB[i], Tables[i][j])
-            if 'egaBox' in Header:
-                # connect to db
-                conn = EstablishConnection(args.credential, DB[i])
-                cur = conn.cursor()
-                cur.execute('SELECT {0}.egaBox FROM {0}'.format(Tables[i][j]))
-                Boxes.extend([k[0] for k in cur])
-                conn.close()
-    
-    # make a non-redundant list of boxes
-    Boxes = list(set(Boxes))    
-    # add file info from each box
-    for i in Boxes:
-        AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, i)
-    # add data into footprint table
-    AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable)
+    # add info for all files on staging server for given box
+    AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, args.box)
+    # summarize data into footprint table
+    AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable, args.box)
     
     
     
@@ -2904,6 +2892,7 @@ if __name__ == '__main__':
     StagingServerParser.add_argument('--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
     StagingServerParser.add_argument('--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
     StagingServerParser.add_argument('--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
+    StagingServerParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box of the staging server where files are uploaded')
     StagingServerParser.set_defaults(func=FileInfoStagingServer)
    
     # re-upload registered files that cannot be archived       
