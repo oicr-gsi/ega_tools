@@ -2888,10 +2888,10 @@ if __name__ == '__main__':
 
     # list files on the staging servers
     StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers', parents = [parent_parser])
-    StagingServerParser.add_argument('--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
-    StagingServerParser.add_argument('--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
-    StagingServerParser.add_argument('--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
-    StagingServerParser.add_argument('--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
+    StagingServerParser.add_argument('-rt', '--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
+    StagingServerParser.add_argument('-at', '--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
+    StagingServerParser.add_argument('-st', '--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
+    StagingServerParser.add_argument('-ft', '--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
     StagingServerParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box of the staging server where files are uploaded')
     StagingServerParser.set_defaults(func=FileInfoStagingServer)
    
