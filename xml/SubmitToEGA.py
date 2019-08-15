@@ -2852,7 +2852,7 @@ if __name__ == '__main__':
     FormJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
     FormJsonParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='Object to register', required=True)
-    FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
+    FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/SubmitToEGA.py')
     FormJsonParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     FormJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     FormJsonParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
