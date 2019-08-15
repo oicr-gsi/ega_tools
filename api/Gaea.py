@@ -1290,18 +1290,18 @@ def AddFileInfoStagingServer(CredentialFile, MetDataBase, SubDataBase, AnalysesT
 
 
 # use this function to add information to Footprint table
-def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintTable):
+def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintTable, Box):
     '''
-    (str, str, str, str) -> None
-    Use credentials to connect to SubDatabase, extract file information from StagingServerTable
-    and collapse it per directory in each staging server in FootPrintTable
+    (str, str, str, str, str) -> None
+    Use credentials to connect to SubDatabase, extract file information from
+    StagingServerTable for given Box and collapse it per directory in FootPrintTable
     '''
     
     # connect to submission database
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     try:
-        cur.execute('SELECT * FROM {0}'.format(StagingServerTable))
+        cur.execute('SELECT * FROM {0} WHERE {0}.egaBox=\"{1}\".'.format(StagingServerTable, Box))
         Data = cur.fetchall()
     except:
         Data = []
@@ -1346,21 +1346,32 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
             # correct directory value
             Size[box]['All'][0] = 'All'
         
+        # list all tables in EGA metadata db
+        Tables = ListTables(CredentialFile, SubDataBase)
+
         # connect to submission database
         conn = EstablishConnection(CredentialFile, SubDataBase)
         cur = conn.cursor()
   
-        Fields = ["egaBox", "location", "AllFiles", "Registered", "NotRegistered", "Size", "SizeRegistered", "SizeNotRegistered"]
-        # format colums with datatype - convert to string
-        Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+        # create table if doesn't exist        
+        if FootPrintTable not in Tables:
+            Fields = ["egaBox", "location", "AllFiles", "Registered", "NotRegistered", "Size", "SizeRegistered", "SizeNotRegistered"]
+            # format colums with datatype - convert to string
+            Columns = ' '.join([Fields[i] + ' TEXT NULL,' if i != len(Fields) -1 else Fields[i] + ' TEXT NULL' for i in range(len(Fields))])
+            # create table with column headers
+            cur.execute('CREATE TABLE {0} ({1})'.format(FootPrintTable, Columns))
+            conn.commit()
+        else:
+            # get the column headers from the table
+            cur.execute("SELECT * FROM {0}".format(FootPrintTable))
+            Fields = [i[0] for i in cur.description]
+            
         # create a string with column headers
         ColumnNames = ', '.join(Fields)
-
-        SqlCommand = ['DROP TABLE IF EXISTS {0}'.format(FootPrintTable), 'CREATE TABLE {0} ({1})'.format(FootPrintTable, Columns)]
-        for i in SqlCommand:
-            cur.execute(i)
-            conn.commit()
-               
+        # drop all entries for that Box
+        cur.execute('DELETE FROM {0} WHERE {0}.egaBox=\"{1}\"'.format(FootPrintTable, Box))
+        conn.commit()
+    
         # loop over data in boxes
         for box in Size:
             # loop over directory in each box
@@ -1373,7 +1384,7 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
                 Values =  FormatData(list(map(lambda x: str(x), L)))
                 cur.execute('INSERT INTO {0} ({1}) VALUES {2}'.format(FootPrintTable, ColumnNames, Values))
                 conn.commit()
-    conn.close()            
+        conn.close()            
                 
 
 # use this function to get the available disk space on the staging server
@@ -1920,6 +1931,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
       
     # create parallel lists to store the job names and exit codes
     JobExits, JobNames = [], []
+    
     # make a list of file paths
     filePaths = list(files.keys())
     # loop over filepaths
@@ -1939,11 +1951,12 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             # may produce an error message if directory already exists. do not evaluate command during CheckUpload
             JobNames.append(JobName)
             
-        # get filename
+        # get filename and encryptedname
         fileName = os.path.basename(filePaths[i])
-        encryptedFile = os.path.join(FileDir, files[filePaths[i]]['encryptedName'])
-        originalMd5 = os.path.join(FileDir, fileName + '.md5')
-        encryptedMd5 = os.path.join(FileDir, fileName + '.gpg.md5')
+        encryptedName = files[filePaths[i]]['encryptedName']
+        encryptedFile = os.path.join(FileDir, encryptedName)
+        originalMd5 = os.path.join(FileDir, encryptedName[:-4]  + '.md5')
+        encryptedMd5 = os.path.join(FileDir, encryptedName + '.md5')
         if os.path.isfile(encryptedFile) and os.path.isfile(originalMd5) and os.path.isfile(encryptedMd5):
             # upload files
             if UploadMode == 'lftp':
@@ -1951,7 +1964,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             elif UploadMode == 'aspera':
                 MyCmd = UploadCmd.format(MyPassword, encryptedMd5, UserName, StagePath, originalMd5, encryptedFile)
             # put command in a shell script    
-            BashScript = os.path.join(qsubdir, alias + '_' + fileName + '_upload.sh')
+            BashScript = os.path.join(qsubdir, alias + '_' + encryptedName[:-4] + '_upload.sh')
             newfile = open(BashScript, 'w')
             newfile.write(MyCmd + '\n')
             newfile.close()
@@ -2373,9 +2386,15 @@ def CheckUploadFiles(CredentialFile, DataBase, Table, Box, Object, Alias, JobNam
             for filePath in files:
                 # get filename
                 fileName = os.path.basename(filePath)
-                assert fileName + '.gpg' == files[filePath]['encryptedName']
+                #assert fileName + '.gpg' == files[filePath]['encryptedName']
                 encryptedFile = files[filePath]['encryptedName']
-                originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                
+                #originalMd5, encryptedMd5 = fileName + '.md5', fileName + '.gpg.md5'                    
+                
+                originalMd5, encryptedMd5 = encryptedFile[:-4] + '.md5', encryptedFile + '.md5'                    
+                
+                
+                
                 for j in [encryptedFile, encryptedMd5, originalMd5]:
                     if j not in FilesBox[StagePath]:
                         Uploaded = False
@@ -2780,49 +2799,27 @@ def FileInfoStagingServer(args):
     '''
     (list) -> None
     Take a list of command line arguments and populate tables with file info
-    including size and accessions Ids of files on the staging servers of available boxes
+    including size and accessions Ids of files on the staging servers for given box
     '''
 
-    # extract all available boxes
-    Boxes = []
-    DB = [args.metadatadb, args.subdb]
-    Tables = []
-    for i in range(len(DB)):
-        # extract boxes from each db    
-        Tables.append(ListTables(args.credential, DB[i]))
-    # loop over tables from each db
-    for i in range(len(Tables)):
-        for j in range(len(Tables[i])):
-            # check if box is in the table's header
-            Header = RetrieveColumnHeader(args.credential, DB[i], Tables[i][j])
-            if 'egaBox' in Header:
-                # connect to db
-                conn = EstablishConnection(args.credential, DB[i])
-                cur = conn.cursor()
-                cur.execute('SELECT {0}.egaBox FROM {0}'.format(Tables[i][j]))
-                Boxes.extend([k[0] for k in cur])
-                conn.close()
-    
-    # make a non-redundant list of boxes
-    Boxes = list(set(Boxes))    
-    # add file info from each box
-    for i in Boxes:
-        AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, i)
-    # add data into footprint table
-    AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable)
+    # add info for all files on staging server for given box
+    AddFileInfoStagingServer(args.credential, args.metadatadb, args.subdb, args.analysestable, args.runstable, args.stagingtable, args.box)
+    # summarize data into footprint table
+    AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable, args.box)
     
     
     
 if __name__ == '__main__':
 
     # create top-level parser
-    parent_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages submission to EGA', add_help=False)
+    parent_parser = argparse.ArgumentParser(prog = 'Gaea.py', description='manages submission to EGA', add_help=False)
     parent_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     parent_parser.add_argument('-m', '--MetadataDb', dest='metadatadb', default='EGA', help='Name of the database collection EGA metadata. Default is EGA')
     parent_parser.add_argument('-s', '--SubDb', dest='subdb', default='EGASUB', help='Name of the database used to object information for submission to EGA. Default is EGASUB')
-        
+    parent_parser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where objects will be registered', required=True)
+    
     # create main parser
-    main_parser = argparse.ArgumentParser(prog = 'SubmitToEGA.py', description='manages EGA submissions')
+    main_parser = argparse.ArgumentParser(prog = 'Gaea.py', description='manages EGA submissions')
     subparsers = main_parser.add_subparsers(title='sub-commands', description='valid sub-commands', help = 'sub-commands help')
 
     # collect enumerations from EGA
@@ -2845,7 +2842,7 @@ if __name__ == '__main__':
 
     # form analyses to EGA       
     FormJsonParser = subparsers.add_parser('FormJson', help ='Form Analyses json for submission to EGA', parents = [parent_parser])
-    FormJsonParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
+    #FormJsonParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     FormJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     FormJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
     FormJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
@@ -2855,7 +2852,7 @@ if __name__ == '__main__':
     FormJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
     FormJsonParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='Object to register', required=True)
-    FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/dev/SubmissionDB/SubmitToEGA.py')
+    FormJsonParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/Gaea.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/Gaea.py')
     FormJsonParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     FormJsonParser.add_argument('--Mem', dest='memory', default='10', help='Memory allocated to encrypting files. Default is 10G')
     FormJsonParser.add_argument('--Max', dest='max', default=8, type=int, help='Maximum number of files to be uploaded at once. Default is 8')
@@ -2865,7 +2862,7 @@ if __name__ == '__main__':
 
     # check encryption
     CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help='Check that encryption is done for a given alias', parents = [parent_parser])
-    CheckEncryptionParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
+    #CheckEncryptionParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckEncryptionParser.add_argument('-o', '--Object', dest='object', choices=['analyses', 'runs'], help='Object files to encrypt', required=True)
@@ -2874,7 +2871,7 @@ if __name__ == '__main__':
     
     # check upload
     CheckUploadParser = subparsers.add_parser('CheckUpload', help='Check that upload is done for a given alias', parents = [parent_parser])
-    CheckUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
+    #CheckUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for uploading all files under a given alias', required=True)
@@ -2884,7 +2881,7 @@ if __name__ == '__main__':
     
     # register analyses to EGA       
     RegisterObjectParser = subparsers.add_parser('RegisterObject', help ='Submit Analyses json to EGA', parents = [parent_parser])
-    RegisterObjectParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
+    #RegisterObjectParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     RegisterObjectParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
     RegisterObjectParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='EGA object to register', required=True)
     RegisterObjectParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
@@ -2892,16 +2889,17 @@ if __name__ == '__main__':
 
     # list files on the staging servers
     StagingServerParser = subparsers.add_parser('StagingServer', help ='List file info on the staging servers', parents = [parent_parser])
-    StagingServerParser.add_argument('--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
-    StagingServerParser.add_argument('--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
-    StagingServerParser.add_argument('--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
-    StagingServerParser.add_argument('--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
+    StagingServerParser.add_argument('-rt', '--RunsTable', dest='runstable', default='Runs', help='Submission database table. Default is Runs')
+    StagingServerParser.add_argument('-at', '--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
+    StagingServerParser.add_argument('-st', '--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
+    StagingServerParser.add_argument('-ft', '--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
+    #StagingServerParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box of the staging server where files are uploaded')
     StagingServerParser.set_defaults(func=FileInfoStagingServer)
    
     # re-upload registered files that cannot be archived       
     ReUploadParser = subparsers.add_parser('ReUploadFiles', help ='Encrypt and re-upload files that are registered but cannot be archived', parents = [parent_parser])
     ReUploadParser.add_argument('-a', '--Action', dest='action', choices=['reupload', 'update'], help='Action to be performed: set status to encrypt if reupload or set status to SUBMITTED if update', required=True)
-    ReUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
+    #ReUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     ReUploadParser.add_argument('-t', '--Table', dest='table', help='Database table', required=True)
     ReUploadParser.add_argument('--Alias', dest='aliasfile', help='File with aliases of files that need to be re-uploaded')
     ReUploadParser.set_defaults(func=ReUploadRegisteredFiles)
