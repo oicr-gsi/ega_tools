@@ -1301,7 +1301,7 @@ def AddFootprintData(CredentialFile, SubDataBase, StagingServerTable, FootPrintT
     conn = EstablishConnection(CredentialFile, SubDataBase)
     cur = conn.cursor()
     try:
-        cur.execute('SELECT * FROM {0} WHERE {0}.egaBox=\"{1}\".'.format(StagingServerTable, Box))
+        cur.execute('SELECT * FROM {0} WHERE {0}.egaBox=\"{1}\"'.format(StagingServerTable, Box))
         Data = cur.fetchall()
     except:
         Data = []
