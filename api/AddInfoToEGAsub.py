@@ -5,19 +5,11 @@ Created on Wed Mar  6 18:51:04 2019
 @author: rjovelin
 """
 
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Sep 11 13:37:40 2018
-
-@author: rjovelin
-"""
-
-
 # import modules
 import os
 import argparse
 # import functions 
-from SubmitToEGA import *
+from Gaea import *
 
 # resource for json formatting and api submission
 #https://ega-archive.org/submission/programmatic_submissions/json-message-format
