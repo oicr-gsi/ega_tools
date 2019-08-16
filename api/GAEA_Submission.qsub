@@ -1,0 +1,1 @@
+qsub -b y -cwd -q production -N EGA.Gaea.Submission  "bash GAEA_Submission.sh"
