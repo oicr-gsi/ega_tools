@@ -98,7 +98,7 @@ def ListTables(CredentialFile, DataBase):
 
 
 # use this function to to generate a working directory to save the encrypted and md5sums 
-def GetWorkingDirectory(S, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions'):
+def GetWorkingDirectory(S, WorkingDir = '/scratch2/groups/gsi/general/EGA_Submissions'):
     '''
     (str, str) -> str
     Returns a working directory where to save the encrypted and md5sum files
@@ -136,7 +136,7 @@ def AddWorkingDirectory(CredentialFile, DataBase, Table, Box):
                 cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, UID, alias, Box))  
                 conn.commit()
                 # create working directories
-                WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+                WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/general/EGA_Submissions')
                 os.makedirs(WorkingDir)
         conn.close()
         
@@ -1762,7 +1762,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Object, Box, KeyRing, Queue, M
                     # create working directory if doesn't exist
                     if os.path.isdir(WorkingDir) == False:
                         os.makedirs(WorkingDir)
-                    assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+                    assert '/scratch2/groups/gsi/general/EGA_Submissions' in WorkingDir
                     # convert single quotes to double quotes for str -> json conversion
                     files = json.loads(i[1].replace("'", "\""))
                     # create parallel lists of file paths and names
@@ -2067,7 +2067,7 @@ def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, B
             # get the file information, working directory and stagepath for that alias
             files = json.loads(i[1].replace("'", "\""))
             WorkingDir = GetWorkingDirectory(i[2])
-            assert '/scratch2/groups/gsi/bis/EGA_Submissions' in WorkingDir
+            assert '/scratch2/groups/gsi/general/EGA_Submissions' in WorkingDir
             StagePath  = i[3]
                             
             # update status -> uploading
@@ -2147,11 +2147,11 @@ def GetWorkDirSpace():
     '''
     () -> list
     Return a list with total size, used space and available space (all in Tb)
-    for the working directory /scratch2/groups/gsi/bis/EGA_Submissions/
+    for the working directory /scratch2/groups/gsi/general/EGA_Submissions/
     '''
     
     # get total, free, and used space in working directory
-    Usage = subprocess.check_output('df -h /scratch2/groups/gsi/bis/EGA_Submissions/', shell=True).decode('utf-8').rstrip().split()
+    Usage = subprocess.check_output('df -h /scratch2/groups/gsi/general/EGA_Submissions/', shell=True).decode('utf-8').rstrip().split()
     total, used, available = Usage[8], Usage[9], Usage[10]
     L = [total, used, available]
     for i in range(len(L)):
@@ -2479,13 +2479,13 @@ def RemoveFilesAfterSubmission(CredentialFile, Database, Table, Box, Remove):
                 for i in files:
                     assert i[-4:] == '.gpg'
                     a, b = i + '.md5', i.replace('.gpg', '') + '.md5'
-                    if os.path.isfile(i) and '/scratch2/groups/gsi/bis/EGA_Submissions' in i and '.gpg' in i:
+                    if os.path.isfile(i) and '/scratch2/groups/gsi/general/EGA_Submissions' in i and '.gpg' in i:
                         # remove encrypted file
                         os.system('rm {0}'.format(i))
-                    if os.path.isfile(a) and '/scratch2/groups/gsi/bis/EGA_Submissions' in a and '.md5' in a:
+                    if os.path.isfile(a) and '/scratch2/groups/gsi/general/EGA_Submissions' in a and '.md5' in a:
                         # remove md5sum
                         os.system('rm {0}'.format(a))
-                    if os.path.isfile(b) and '/scratch2/groups/gsi/bis/EGA_Submissions' in b and '.md5' in b:
+                    if os.path.isfile(b) and '/scratch2/groups/gsi/general/EGA_Submissions' in b and '.md5' in b:
                         # remove md5sum
                         os.system('rm {0}'.format(b))
 
@@ -2684,7 +2684,7 @@ def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
             cur.execute('UPDATE {0} SET {0}.WorkingDirectory=\"{1}\" WHERE {0}.alias=\"{2}\" AND {0}.egaBox=\"{3}\"'.format(Table, UID, alias, Box))  
             conn.commit()
             # create working directories
-            WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/bis/EGA_Submissions')
+            WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/general/EGA_Submissions')
             os.makedirs(WorkingDir)
     
     # 2. check that working directory exist. update Status --> encrypt and reformat file json if no error or keep status and record message
