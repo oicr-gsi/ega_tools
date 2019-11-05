@@ -398,8 +398,8 @@ def DownloadMetadata(args):
     # analysisId is not a field for EGA dataset but can be found in the xml FOR SOME DATASETS
     # the analysis ID in the dataset xml is EGAZ, it needs to be mapped to ERZ ID
     # extract analysis IDs for each dataset, map each analysis id (erz) to dataset id (egad)
-    DatasetToAnalysis = RetrieveObjectRef(InfoBox[4], './DATASET/ANALYSIS_REF', MatchIds(MetaData[-1]))
-    
+    DatasetToAnalysis = RetrieveObjectRef(InfoBox[4], './DATASET/ANALYSIS_REF', MatchIds(MetaData[5]))
+        
     # sampleId is not a field for EGA analysis but can be found in the xml
     # because there may be more than 1 sampleId for a given analysisID,
     # a junction table with analysisID and sampleID is necessary
