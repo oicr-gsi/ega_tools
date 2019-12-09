@@ -531,7 +531,7 @@ def DownloadMetadata(args):
 if __name__ == '__main__':
 
     # create main parser
-    main_parser = argparse.ArgumentParser(prog = 'DownloadEGAMetaData.py.py', description='Download metadata from EGA to GSI EGA database', add_help=True)
+    main_parser = argparse.ArgumentParser(prog = 'DownloadEGAMetaData.py', description='Download metadata from EGA to GSI EGA database', add_help=True)
     main_parser.add_argument('-c', '--Credentials', dest='credential', help='file with database credentials', required=True)
     main_parser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='EGA box', required=True)
     main_parser.set_defaults(func=DownloadMetadata)
