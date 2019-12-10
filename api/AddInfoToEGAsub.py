@@ -846,7 +846,10 @@ def AddAnalysesInfo(args):
                             fileTypeId = filePath[-6:]
                         assert fileTypeId in ['bam', 'bai', 'vcf', 'vcf.gz'], 'valid file extensions are bam, vcf, vcf.gz and bai'
                         # check that file type Id is also in the filename
-                        assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
+                        if 'gz' in fileTypeId:
+                            assert D[alias]['files'][filePath]['fileName'][-6:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
+                        else:
+                            assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                         # add fileTypeId to dict
                         assert 'fileTypeId' not in D[alias]['files'][filePath] 
                         D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
