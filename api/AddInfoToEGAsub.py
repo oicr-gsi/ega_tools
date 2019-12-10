@@ -840,14 +840,16 @@ def AddAnalysesInfo(args):
                         D[alias]['analysisDate'] = ''
                     # add fileTypeId to each file
                     for filePath in D[alias]['files']:
-                        fileTypeId = ''
-                        fileTypeId = filePath[filePath.rfind('.'):].lower()
-                        if fileTypeId == '.gz':
-                            fileTypeId = filePath[-6:]
-                        assert fileTypeId in ['bam', 'bai', 'vcf', 'vcf.gz'], 'valid file extensions are bam, vcf, vcf.gz and bai'
+                        extension, fileTypeId = '', ''
+                        extension = filePath[filePath.rfind('.'):].lower()
+                        if extension == '.gz':
+                            fileTypeId = filePath[-6:].replace('.gz', '')
+                        else:
+                            fileTypeId = extension
+                        assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf, and bai'
                         # check that file type Id is also in the filename
-                        if 'gz' in fileTypeId:
-                            assert D[alias]['files'][filePath]['fileName'][-6:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
+                        if 'gz' in extension:
+                            assert D[alias]['files'][filePath]['fileName'][-6:].replace('.gz', '') == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                         else:
                             assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
                         # add fileTypeId to dict
