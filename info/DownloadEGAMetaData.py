@@ -68,7 +68,6 @@ def GetObjectFields(L, Data):
                     else:
                         # convert to string
                         D[field]  = ';'.join(list(map(lambda x: str(x), item[field])))
-                        #D[field] = item[field]
                 else:
                     D[field] = str(item[field])
         Entries.append(D)
