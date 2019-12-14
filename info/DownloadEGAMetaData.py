@@ -205,7 +205,7 @@ def SpecifyColumnType(L):
                 Cols.append(L[i] + ' TEXT NULL')
             else:
                 Cols.append(L[i] + ' TEXT NULL,')
-        elif L[i] in ('files', 'xml', 'policyText', 'contact'):
+        elif L[i] in ('files', 'xml', 'policyText', 'contact', 'attributes'):
             if i == len(L) -1:
                 Cols.append(L[i] + ' MEDIUMTEXT NULL')
             else:
