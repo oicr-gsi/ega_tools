@@ -66,7 +66,9 @@ def GetObjectFields(L, Data):
                     if len(item[field]) == 0:
                         D[field] = None
                     else:
-                        D[field] = item[field]
+                        # convert to string
+                        D[field]  = ';'.join(list(map(lambda x: str(x), item[field])))
+                        #D[field] = item[field]
                 else:
                     D[field] = str(item[field])
         Entries.append(D)
@@ -241,7 +243,6 @@ def ExtractDacId(S):
    Take a string representation of a policy xml and return the dacId accession string 
    corresponding to that policy
    '''    
-
    root = ET.fromstring(S)
    accession = [item.attrib for item in root.iter('DAC_REF')][0]['accession']
    return accession
