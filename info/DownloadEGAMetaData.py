@@ -84,9 +84,12 @@ def CaptureExperimentAccession(D):
     modified dictionary D
     '''
     if D['egaAccessionId'] == None and 'egaAccessionIds' in D:
-        # get accession fron egaAccessionIds
-        egaAccessionId  = D['egaAccessionIds'][0]
-        assert egaAccessionId.startswith('EGAX')
+        if type(D['egaAccessionIds']) == list:
+            # get accession fron egaAccessionIds
+            egaAccessionId  = D['egaAccessionIds'][0]
+            assert egaAccessionId.startswith('EGAX')
+        else:
+            egaAccessionId  = D['egaAccessionIds']
         # replace accession
         D['egaAccessionId'] = egaAccessionId
     assert D['egaAccessionId'].startswith('EGAX')
