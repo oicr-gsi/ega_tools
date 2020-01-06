@@ -15,7 +15,7 @@ import pymysql
 import sys
 import argparse
 import requests
-
+import uuid
 
 # This script is used to pull metadata from the EGA API and store it into a database 
 # usage: python EGAMetDataToDB.py [-h|--Help] -c|--Credentials
@@ -370,6 +370,14 @@ def DownloadMetadata(args):
     for i in range(len(Fields)):
         InfoBox.append(GetObjectFields(Fields[i], MetaData[i]))
     
+    # ebiId is sometimes assigned to None instead to a random string
+    # replace NoneType ebiId with random string (gets replaced once EGA updates)
+    for i in range(len(InfoBox)):
+        for j in range(len(InfoBox[i])):
+            if InfoBox[i][j]['ebiId'] == None:
+                # replace None with random string
+                InfoBox[i][j]['ebiId'] = str(uuid.uuid4())
+       
     # capture experiment egaAccessionId 
     # experiments submitted through the api have egaAccessionid set to None
     # but the Id can be retrieved from a list, in the egaAccessionIds field
