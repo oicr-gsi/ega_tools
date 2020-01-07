@@ -108,16 +108,17 @@ def AddBoxOrigin(Info, BoxName):
     return Info
 
 
-# use this function to match egaAccessionId to id
-def MatchIds(D):
+def MatchIds(L):
     '''
-    (dict) -> dict
-    Take the dictionary of json EGA object and return a dictionary of matching
-    egaAccessionId: id pairs for that object
+    (list) -> dict
+    
+    Take a list of dictionaries with metadata and return a dictionary
+    of matching egaAccessionId: ebiId pairs
     '''    
     Ref = {}
     a, b = [], []
-    for item in D['response']['result']:
+    
+    for item in L:
         # check that egaAccession id is uniquely matched to an id
         Ref[item['egaAccessionId']] = item['ebiId']
         a.append(item['egaAccessionId'])
@@ -404,13 +405,13 @@ def DownloadMetadata(args):
     # runId is not a field for EGA dataset but can found in the xml FOR SOME DATASETS
     # the run ID in the dataset xml is EGAR, it needs to be mapped to ERR ID
     # extract run IDs for each dataset, map each run id (err) to dataset id (egad)    
-    DatasetToRun = RetrieveObjectRef(InfoBox[4], './DATASET/RUN_REF', MatchIds(MetaData[1]))
+    DatasetToRun = RetrieveObjectRef(InfoBox[4], './DATASET/RUN_REF', MatchIds(InfoBox[1]))
     
     # analysisId is not a field for EGA dataset but can be found in the xml FOR SOME DATASETS
     # the analysis ID in the dataset xml is EGAZ, it needs to be mapped to ERZ ID
     # extract analysis IDs for each dataset, map each analysis id (erz) to dataset id (egad)
-    DatasetToAnalysis = RetrieveObjectRef(InfoBox[4], './DATASET/ANALYSIS_REF', MatchIds(MetaData[5]))
-        
+    DatasetToAnalysis = RetrieveObjectRef(InfoBox[4], './DATASET/ANALYSIS_REF', MatchIds(InfoBox[5]))
+    
     # sampleId is not a field for EGA analysis but can be found in the xml
     # because there may be more than 1 sampleId for a given analysisID,
     # a junction table with analysisID and sampleID is necessary
