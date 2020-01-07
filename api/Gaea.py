@@ -16,6 +16,7 @@ import argparse
 import requests
 import uuid
 import xml.etree.ElementTree as ET
+import gzip
 
 
 
@@ -309,6 +310,16 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
     if len(Data) != 0:
         # make a list of jsons. filter out filesobjects already registered that have been re-uploaded because not archived
         L = [json.loads(i[0].replace("'", "\""), strict=False) for i in Data if not i[1].startswith('EGA')]
+        
+        for i in range(len(L)):
+            if 'chromosomeReferences' in L[i]:
+                if L[i]['chromosomeReferences'] != []:
+                    for j in range(len(L[i]['chromosomeReferences'])):
+                        if L[i]['chromosomeReferences'][j]['label'] == 'None':
+                            L[i]['chromosomeReferences'][j]['label'] = None
+        
+        
+        
         
         # connect to EGA and get a token
         # parse credentials to get userName and Password
@@ -703,7 +714,41 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
             conn.commit()
     conn.close()
 
- 
+
+# use this function to extract the chromosome names from the vcf
+def ExtractContigNamesFromVcf(file):
+    '''
+    (str) -> list
+    
+    Take the path to a vcf file (compressed or not) and return a list of contigs
+    specified in the vcf header
+    '''
+    
+    # get the chromosomes
+    contigs = []
+    if file[-4:] == '.vcf':
+        infile = open(file)
+    elif file[-7:] == '.vcf.gz':
+        infile = gzip.open(file, 'rt')
+    # read vcf header  
+    for line in infile:
+        if line.startswith('##'):
+            contigs.append(line)
+        else:
+            # finished reading header
+            break
+    infile.close()
+    
+    chromos = [i for i in contigs if i.startswith('##contig')]
+    for i in range(len(chromos)):
+        contig = chromos[i].split(',')[0].split('=')[-1]
+        if '_' in contig:
+            contig = contig[:contig.index('_')]
+        chromos[i] = contig
+    # remove duplicate names
+    chromos = list(set(chromos))
+           
+    return chromos        
 
 # use this function to format the analysis json
 def FormatJson(D, Object, MyScript, MyPython):
@@ -764,6 +809,16 @@ def FormatJson(D, Object, MyScript, MyPython):
                "studyTypeId": "StudyTypes", "chromosomeReferences": "ReferenceChromosomes",
                "genomeId": "ReferenceGenomes", "fileTypeId": "AnalysisFileTypes", "runFileTypeId": "FileTypes"}
 
+    # map chromosome names for vcf
+    chromoNames = {'chr1': 'CM000663', 'chr2': 'CM000664', 'chr3': 'CM000665',
+                   'chr4': 'CM000666', 'chr5': 'CM000667', 'chr6': 'CM000668',
+                   'chr7': 'CM000669', 'chr8': 'CM000670', 'chr9': 'CM000671',
+                   'chr10': 'CM000672', 'chr11': 'CM000673', 'chr12': 'CM000674',
+                   'chr13': 'CM000675', 'chr14': 'CM000676', 'chr15': 'CM000677',
+                   'chr16': 'CM000678', 'chr17': 'CM000679', 'chr18': 'CM000680',
+                   'chr19': 'CM000681', 'chr20': 'CM000682', 'chr21': 'CM000683',
+                   'chr22': 'CM000684', 'chrX': 'CM000685', 'chrY': 'CM000686'}
+
     # loop over required json keys
     for field in JsonKeys:
         if field in D:
@@ -777,12 +832,14 @@ def FormatJson(D, Object, MyScript, MyPython):
                     return J
                 # other fields can be missing, either as empty list or string
                 else:
-                    # some non-required fields need to be lists
-                    if field in ["chromosomeReferences", "attributes", "datasetLinks",
-                                 "runsReferences", "analysisReferences", "pubMedIds", "customTags"]:
-                        J[field] = []
-                    else:
-                        J[field] = ""
+                    # check if field is already recorded. eg: chromosomeReferences may be set already for vcf
+                    if field not in J:
+                        # some non-required fields need to be lists
+                        if field in ["chromosomeReferences", "attributes", "datasetLinks", "runsReferences",
+                                     "analysisReferences", "pubMedIds", "customTags"]:
+                            J[field] = []
+                        else:
+                            J[field] = ""
             else:
                 if field == 'files':
                     assert D[field] != 'NULL'
@@ -792,6 +849,8 @@ def FormatJson(D, Object, MyScript, MyPython):
                     files = json.loads(files)
                     # file format is different for analyses and runs
                     if Object == 'analyses':
+                        # make a list of contigs used. required for vcf, optional for bam
+                        contigs = []
                         # loop over file name
                         for filePath in files:
                             # create a dict to store file info
@@ -804,12 +863,52 @@ def FormatJson(D, Object, MyScript, MyPython):
                                 return J
                             else:
                                 fileTypeId = Enums[MapEnum['fileTypeId']][files[filePath]["fileTypeId"].lower()]
+                            # check if analysis object is bam or vcf
+                            # chromosomeReferences is optional for bam but required for vcf
+                            if files[filePath]["fileTypeId"].lower() == 'vcf':
+                                 # make a list of contigs from the vcf header
+                                 contigs.extend(ExtractContigNamesFromVcf(filePath))
                             # create dict with file info, add path to file names
                             d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                                  "checksum": files[filePath]['checksum'],
                                  "unencryptedChecksum": files[filePath]['unencryptedChecksum'],
                                  "fileTypeId": fileTypeId}
                             J[field].append(d)
+                    
+                        # check if chromosomes were recorded
+                        if len(contigs) != 0:
+                            # remove duplicate names
+                            contigs = list(set(contigs))
+                            # map chromosome names 
+                            if 'genomeId' not in D:
+                                # erase dict and add alias
+                                J = {}
+                                J["alias"] = D["alias"]
+                                return J
+                            else:
+                                # only GRCh37 and GRch38 are supported
+                                if D['genomeId'].lower() not in ['grch37', 'grch38']:
+                                    # erase dict and add alias
+                                    J = {}
+                                    J["alias"] = D["alias"]
+                                    return J
+                                else:
+                                    if D['genomeId'].lower() == 'grch37':
+                                        values = [chromoNames[i] + '.1' for i in contigs if i in chromoNames]
+                                    elif D['genomeId'].lower() == 'grch38':
+                                        values = [chromoNames[i] + '.2' for i in contigs if i in chromoNames]
+                                    # add chromosome reference info
+                                    J['chromosomeReferences'] = [{"value": i, "label": Enums['ReferenceChromosomes'][i]} for i in values if i in Enums['ReferenceChromosomes']]  
+                                    # replace None values with null to match enumeration
+                                    for i in range(len(J['chromosomeReferences'])):
+                                        if J['chromosomeReferences'][i]['label'] == 'None':
+                                            J['chromosomeReferences'][i]['label'] = ''
+                   
+                    
+                    
+                    
+                    
+                    
                     elif Object == 'runs':
                         # loop over file name
                         for filePath in files:
@@ -868,8 +967,6 @@ def FormatJson(D, Object, MyScript, MyPython):
                 elif field == 'sampleReferences':
                     # populate with sample accessions
                     J[field] = [{"value": accession.strip(), "label":""} for accession in D[field].split(';')]
-                elif field == 'chromosomeReferences':
-                    J[field] = [{"value": accession.strip(), "label": Enums[MapEnum[field]][accession.strip()]} for accession in D[field].split(';')]
                 elif field == 'contacts':
                     J[field] = [json.loads(contact.replace("'", "\"")) for contact in D[field].split(';')]
                 
@@ -1498,9 +1595,21 @@ def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Table, Associat
                 
                 # check if status can be updated
                 if UpdateStatus == True and Error == '':
-                    # update satus start --> ready
-                    cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
-                    conn.commit()
+                    # update runs and experiments status only if studyId and sampleId are present
+                    if Table in ['Experiments', 'Runs']:
+                        # make a list of sampleId
+                        try:
+                            cur.execute('SELECT {0}.sampleId FROM {0} WHERE {0}.egaBox=\"{1}\" AND {0}.alias=\"{2}\"'.format(Table, Box, alias))
+                            samples = cur.fetchall()[0][0].split(';')
+                        except:
+                            samples = []
+                        if len(samples) != 0:
+                            # check if all samples have accession Ids 
+                            HasAccessions = list(set(list(map(lambda x:x.startswith("EGAN"), samples))))
+                            if len(HasAccessions) == 1 and HasAccessions[0] == True:
+                                # update satus start --> ready
+                                cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                                conn.commit()
     conn.close()    
 
     
