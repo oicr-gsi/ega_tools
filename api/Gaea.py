@@ -716,7 +716,7 @@ def CheckTableInformation(CredentialFile, MetadataDataBase, SubDataBase, Table, 
 
 
 # use this function to extract the chromosome names from the vcf
-def ExtractContigNamesFromVcf(file):
+def GetContigNamesFromVcfHeader(file):
     '''
     (str) -> list
     
@@ -748,6 +748,37 @@ def ExtractContigNamesFromVcf(file):
     # remove duplicate names
     chromos = list(set(chromos))
            
+    return chromos        
+
+
+def ExtractContigNamesFromVcf(file):
+    '''
+    (str) -> list
+    
+    Take the path to a vcf file (compressed or not) and return a list of contigs
+    specified in the vcf body
+    '''
+    
+    # get the chromosomes
+    contigs = set()
+    if file[-4:] == '.vcf':
+        infile = open(file)
+    elif file[-7:] == '.vcf.gz':
+        infile = gzip.open(file, 'rt')
+    # read vcf file  
+    for line in infile:
+        # skip header
+        if not line.startswith('#'):
+            line = line.rstrip().split('\t')
+            contigs.add(line[0])
+    infile.close()
+    # make a list of contigs
+    chromos = list(contigs)
+    for i in range(len(chromos)):
+        if '_' in chromos[i]:
+            chromos[i] = chromos[i][:chromos[i].index('_')]
+    # remove duplicate names
+    chromos = list(set(chromos))
     return chromos        
 
 # use this function to format the analysis json
@@ -871,6 +902,8 @@ def FormatJson(D, Object, MyScript, MyPython):
                             # chromosomeReferences is optional for bam but required for vcf
                             if files[filePath]["fileTypeId"].lower() == 'vcf':
                                  # make a list of contigs from the vcf header
+                                 contigs.extend(GetContigNamesFromVcfHeader(filePath))
+                                 # if contig names not in VCF header, extract contigs from VCF file
                                  contigs.extend(ExtractContigNamesFromVcf(filePath))
                             # create dict with file info, add path to file names
                             d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
