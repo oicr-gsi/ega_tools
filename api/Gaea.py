@@ -903,8 +903,9 @@ def FormatJson(D, Object, MyScript, MyPython):
                             if files[filePath]["fileTypeId"].lower() == 'vcf':
                                  # make a list of contigs from the vcf header
                                  contigs.extend(GetContigNamesFromVcfHeader(filePath))
-                                 # if contig names not in VCF header, extract contigs from VCF file
-                                 contigs.extend(ExtractContigNamesFromVcf(filePath))
+                                 if len(contigs) == 0:
+                                     # if contig names not in VCF header, extract contigs from VCF file
+                                     contigs.extend(ExtractContigNamesFromVcf(filePath))
                             # create dict with file info, add path to file names
                             d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                                  "checksum": files[filePath]['checksum'],
