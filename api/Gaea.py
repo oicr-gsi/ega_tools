@@ -810,7 +810,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                "genomeId": "ReferenceGenomes", "fileTypeId": "AnalysisFileTypes", "runFileTypeId": "FileTypes"}
 
     # map chromosome names for vcf
-    chromoNames = {'chr1': 'CM000663', 'chr2': 'CM000664', 'chr3': 'CM000665',
+    chromoTonames = {'chr1': 'CM000663', 'chr2': 'CM000664', 'chr3': 'CM000665',
                    'chr4': 'CM000666', 'chr5': 'CM000667', 'chr6': 'CM000668',
                    'chr7': 'CM000669', 'chr8': 'CM000670', 'chr9': 'CM000671',
                    'chr10': 'CM000672', 'chr11': 'CM000673', 'chr12': 'CM000674',
@@ -818,6 +818,10 @@ def FormatJson(D, Object, MyScript, MyPython):
                    'chr16': 'CM000678', 'chr17': 'CM000679', 'chr18': 'CM000680',
                    'chr19': 'CM000681', 'chr20': 'CM000682', 'chr21': 'CM000683',
                    'chr22': 'CM000684', 'chrX': 'CM000685', 'chrY': 'CM000686'}
+    # reverse dictionary
+    namesTochromo = {}
+    for i in chromoTonames:
+        namesTochromo[chromoTonames[i]] = i
 
     # loop over required json keys
     for field in JsonKeys:
@@ -894,20 +898,12 @@ def FormatJson(D, Object, MyScript, MyPython):
                                     return J
                                 else:
                                     if D['genomeId'].lower() == 'grch37':
-                                        values = [chromoNames[i] + '.1' for i in contigs if i in chromoNames]
+                                        suffix = '.1'
                                     elif D['genomeId'].lower() == 'grch38':
-                                        values = [chromoNames[i] + '.2' for i in contigs if i in chromoNames]
+                                        suffix = '.2'
+                                    values = [chromoTonames[i] + suffix for i in contigs if i in chromoTonames]
                                     # add chromosome reference info
-                                    J['chromosomeReferences'] = [{"value": i, "label": Enums['ReferenceChromosomes'][i]} for i in values if i in Enums['ReferenceChromosomes']]  
-                                    # replace None values with null to match enumeration
-                                    for i in range(len(J['chromosomeReferences'])):
-                                        if J['chromosomeReferences'][i]['label'] == 'None':
-                                            J['chromosomeReferences'][i]['label'] = ''
-                   
-                    
-                    
-                    
-                    
+                                    J['chromosomeReferences'] = [{"value": Enums['ReferenceChromosomes'][i], "label": namesTochromo[i.replace(suffix, '')]} for i in values if i in Enums['ReferenceChromosomes']]  
                     
                     elif Object == 'runs':
                         # loop over file name
@@ -2633,8 +2629,10 @@ def GrabEgaEnums(args):
                     assert i['value'] not in Enum
                     Enum[i['value']] = i['tag']
             elif 'reference_chromosomes' in args.url:
-                # grab value : label
-                Enum[i['value']] = str(i['label'])
+                # grab value : tag
+                # note that tags are defined by combination of value and group
+                # values (chromosomes) are assigned to multiple tags
+                Enum[i['value']] = i['tag']
             else:
                 assert i['value'] not in Enum
                 Enum[i['value']] = i['tag']
