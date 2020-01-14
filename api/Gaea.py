@@ -2673,9 +2673,12 @@ def GrabEgaEnums(args):
                     Enum[i['value']] = i['tag']
             elif 'reference_chromosomes' in args.url:
                 # grab value : tag
-                # note that tags are defined by combination of value and group
-                # values (chromosomes) are assigned to multiple tags
-                Enum[i['value']] = i['tag']
+                # group corresponds to tag in reference_genomes. currently, does not suppot patches
+                # group = 15 --> tag = 15 in reference_genomes = GRCH37
+                # group = 1 --> tag = 1 in reference_genomes = GRCH38
+                if i['group'] in ['1', '15']:
+                    assert i['value'] not in Enum
+                    Enum[i['value']] = i['tag']
             else:
                 assert i['value'] not in Enum
                 Enum[i['value']] = i['tag']
