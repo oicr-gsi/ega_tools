@@ -1643,6 +1643,10 @@ def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Table, Associat
                                 # update satus start --> ready
                                 cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
                                 conn.commit()
+                    else:
+                        # update satus start --> ready
+                        cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                        conn.commit()
     conn.close()    
 
     
