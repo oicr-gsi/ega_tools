@@ -777,6 +777,8 @@ def ExtractContigNamesFromVcf(file):
     for i in range(len(chromos)):
         if '_' in chromos[i]:
             chromos[i] = chromos[i][:chromos[i].index('_')]
+        if not chromos[i].lower().startswith('chr'):
+            chromos[i] = 'chr' + chromos[i]
     # remove duplicate names
     chromos = list(set(chromos))
     return chromos        
@@ -849,6 +851,7 @@ def FormatJson(D, Object, MyScript, MyPython):
                    'chr16': 'CM000678', 'chr17': 'CM000679', 'chr18': 'CM000680',
                    'chr19': 'CM000681', 'chr20': 'CM000682', 'chr21': 'CM000683',
                    'chr22': 'CM000684', 'chrX': 'CM000685', 'chrY': 'CM000686'}
+                      
     # reverse dictionary
     namesTochromo = {}
     for i in chromoTonames:
@@ -1640,6 +1643,10 @@ def AddAccessions(CredentialFile, MetadataDataBase, SubDataBase, Table, Associat
                                 # update satus start --> ready
                                 cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
                                 conn.commit()
+                    else:
+                        # update satus start --> ready
+                        cur.execute('UPDATE {0} SET {0}.Status=\"ready\" WHERE {0}.alias=\"{1}\" AND {0}.egaBox=\"{2}\"'.format(Table, alias, Box)) 
+                        conn.commit()
     conn.close()    
 
     
@@ -2664,9 +2671,12 @@ def GrabEgaEnums(args):
                     Enum[i['value']] = i['tag']
             elif 'reference_chromosomes' in args.url:
                 # grab value : tag
-                # note that tags are defined by combination of value and group
-                # values (chromosomes) are assigned to multiple tags
-                Enum[i['value']] = i['tag']
+                # group corresponds to tag in reference_genomes. currently, does not suppot patches
+                # group = 15 --> tag = 15 in reference_genomes = GRCH37
+                # group = 1 --> tag = 1 in reference_genomes = GRCH38
+                if i['group'] in ['1', '15']:
+                    assert i['value'] not in Enum
+                    Enum[i['value']] = i['tag']
             else:
                 assert i['value'] not in Enum
                 Enum[i['value']] = i['tag']

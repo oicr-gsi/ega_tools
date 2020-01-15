@@ -844,14 +844,11 @@ def AddAnalysesInfo(args):
                         extension = filePath[filePath.rfind('.'):].lower()
                         if extension == '.gz':
                             fileTypeId = filePath[-6:].replace('.gz', '')
+                        elif extension == '.tsv':
+                            fileTypeId = 'tab'
                         else:
                             fileTypeId = extension.replace('.', '')
-                        assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf, and bai'
-                        # check that file type Id is also in the filename
-                        if 'gz' in extension:
-                            assert D[alias]['files'][filePath]['fileName'][-6:].replace('.gz', '') == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
-                        else:
-                            assert D[alias]['files'][filePath]['fileName'][-3:] == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
+                        assert fileTypeId in ['bam', 'bai', 'vcf', 'tab'], 'valid fileTypeId are bam, vcf, bai and tab'
                         # add fileTypeId to dict
                         assert 'fileTypeId' not in D[alias]['files'][filePath] 
                         D[alias]['files'][filePath]['fileTypeId'] = fileTypeId
