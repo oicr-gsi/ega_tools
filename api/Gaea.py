@@ -744,6 +744,8 @@ def GetContigNamesFromVcfHeader(file):
         contig = chromos[i].split(',')[0].split('=')[-1]
         if '_' in contig:
             contig = contig[:contig.index('_')]
+        if not contig.lower().startswith('chr'):
+            contig = 'chr' + contig
         chromos[i] = contig
     # remove duplicate names
     chromos = list(set(chromos))
