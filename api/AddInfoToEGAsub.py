@@ -846,7 +846,7 @@ def AddAnalysesInfo(args):
                             fileTypeId = filePath[-6:].replace('.gz', '')
                         else:
                             fileTypeId = extension.replace('.', '')
-                        assert fileTypeId in ['bam', 'bai', 'vcf'], 'valid file extensions are bam, vcf, and bai'
+                        assert fileTypeId in ['bam', 'bai', 'vcf', 'tab'], 'valid file extensions are bam, vcf, bai and tab'
                         # check that file type Id is also in the filename
                         if 'gz' in extension:
                             assert D[alias]['files'][filePath]['fileName'][-6:].replace('.gz', '') == fileTypeId, '{0} should be part of the file name'.format(fileTypeId)
