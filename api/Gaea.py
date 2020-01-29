@@ -785,6 +785,36 @@ def ExtractContigNamesFromVcf(file):
     chromos = list(set(chromos))
     return chromos        
 
+
+def ExtractContigNamesFromTSV(file):
+    '''
+    (str) -> list
+    
+    Take the path to a tsv file (compressed or not) and return a list of contigs
+    '''
+    
+    # get the chromosomes
+    chromos = []
+    if file[-4:] == '.tsv':    
+        infile = open(file)    
+    elif file[-7:] == '.tsv.gz':
+        infile = gzip.open(file, 'rt')
+    # read file
+    for line in infile:
+        line = line.rstrip()
+        if line != '':
+            line = line.split('\t')
+            line = list(map(lambda x: x.strip(), line))
+            contig = line[0]
+            if 'chr' not in contig.lower():
+                contig = 'chr' + contig
+            else:
+                contig = contig.lower()
+            chromos.append(contig)
+    infile.close()
+    return chromos
+    
+    
 # use this function to format the analysis json
 def FormatJson(D, Object, MyScript, MyPython):
     '''
@@ -904,13 +934,16 @@ def FormatJson(D, Object, MyScript, MyPython):
                             else:
                                 fileTypeId = Enums[MapEnum['fileTypeId']][files[filePath]["fileTypeId"].lower()]
                             # check if analysis object is bam or vcf
-                            # chromosomeReferences is optional for bam but required for vcf
+                            # chromosomeReferences is optional for bam but required for vcf and tab
                             if files[filePath]["fileTypeId"].lower() == 'vcf':
                                  # make a list of contigs from the vcf header
                                  contigs.extend(GetContigNamesFromVcfHeader(filePath))
                                  if len(contigs) == 0:
                                      # if contig names not in VCF header, extract contigs from VCF file
                                      contigs.extend(ExtractContigNamesFromVcf(filePath))
+                            elif files[filePath]["fileTypeId"].lower() == 'tab':
+                                # make a list of contigs 
+                                contigs.extend(ExtractContigNamesFromTSV(filePath))
                             # create dict with file info, add path to file names
                             d = {"fileName": os.path.join(D['StagePath'], files[filePath]['encryptedName']),
                                  "checksum": files[filePath]['checksum'],
@@ -2807,16 +2840,43 @@ def SubmitMetadata(args):
         RegisterObjects(args.credential, args.subdb, args.table, args.box, args.object, args.portal)
 
 
-# use this function to edit status to ReEncrypt
-def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
+def FindFileTypeId(d, L, analysis_enums):
     '''
-    (file, str, str, str, str) -> None
-    Edit Alias status in Table for Box from SUBMITTED to ReEncrypt using the 
-    file with credentials to connect to DataBase and create a working directory
-    if it doesn't already exist
+    (dict, list, dict) -> dict
+
+    Take the dictionary with analysis file info, the list of dictionaries
+    with submitted file info and a dictionary of analysis_file_types enumerations
+    and return a dictionary mapping files to fileTypeId value
+    '''
+
+        
+    # reverse dict {tag: value}
+    tags = {}
+    for i in analysis_enums:
+        tags[analysis_enums[i]] = i
+    
+    # create a dict o map files to fileTypeId
+    file_type = {}
+    
+    # loop over file paths in d
+    for i in d:
+        # loop over list of dicts with submitted file info
+        for j in L:
+            # map file type Id to file path by comapring checksums
+            if d[i]['checksum'] == j['checksum']:
+                fileTypeId = j['fileTypeId']
+                file_type[i] = tags[fileTypeId]
+    return file_type
+    
+
+def AddMissingWorkingDir(CredentialFile, DataBase, Table, Alias, Box):
+    '''
+    (file, str, str, str, str, str, str) -> None
+    Create working directory in file system if doesn't already exist for a given alias
+    with SUBMITTED status and record in submission database
     '''
     
-    # 1. create working directories if they don't exist
+    # create working directory if doesn't exist and record in submission database
     
     # connect to db
     conn = EstablishConnection(CredentialFile, DataBase)
@@ -2840,23 +2900,52 @@ def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
             WorkingDir = GetWorkingDirectory(UID, WorkingDir = '/scratch2/groups/gsi/general/EGA_Submissions')
             os.makedirs(WorkingDir)
     
+  
+# use this function to edit status to ReEncrypt
+def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box, analysis_enums):
+    '''
+    (file, str, str, str, str, str, dict) -> None
+    Connect to Database using the credential file and edit Alias status in Table
+    for Box from SUBMITTED to encrypt, create a working directory if it doesn't
+    already exist and reformat the file json
+    '''
+    
+    # connect to db
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+        
+    # 1. create working directories if they don't exist
+    AddMissingWorkingDir(CredentialFile, DataBase, Table, Alias, Box)
+
     # 2. check that working directory exist. update Status --> encrypt and reformat file json if no error or keep status and record message
     try:
-        cur.execute('SELECT {0}.alias, {0}.files, {0}.WorkingDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.Status=\"SUBMITTED\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
+        cur.execute('SELECT {0}.alias, {0}.egaAccessionId, {0}.files, {0}.json, {0}.WorkingDirectory FROM {0} WHERE {0}.alias=\"{1}\" AND {0}.Status=\"SUBMITTED\" AND {0}.egaBox=\"{2}\"'.format(Table, Alias, Box))
         Data = cur.fetchall()[0]
     except:
         Data = []
     if len(Data) != 0:
         Error = []
-        alias, files, WorkingDir = Data[0], json.loads(Data[1].replace("'", "\"")), GetWorkingDirectory(Data[2])
-        # reformat file json
-        NewFiles = {}
-        for file in files:
-            fileTypeId, fileName, filePath = files[file]['fileTypeId'], files[file]['encryptedName'], files[file]['filePath']
-            assert fileName[-4:] == '.gpg'
-            fileName = fileName[:-4]
-            NewFiles[file] = {'filePath': filePath, 'fileName': fileName, 'fileTypeId': fileTypeId}
-        
+        alias, egaAccession, files, submission_json, WorkingDir = Data[0], Data[1], json.loads(Data[2].replace("'", "\"")), json.loads(Data[3].replace("'", "\"")), GetWorkingDirectory(Data[4])
+        # check if analysis of runs objects
+        if egaAccession.startswith('EGAZ'):
+            # analysis object, find file type for all files
+            file_types = FindFileTypeId(files, submission_json['files'], analysis_enums)
+            # reformat file json
+            NewFiles = {}
+            for file in files:
+                fileTypeId, fileName, filePath = file_types[file], files[file]['encryptedName'], files[file]['filePath']
+                assert fileName[-4:] == '.gpg'
+                fileName = fileName[:-4]
+                NewFiles[file] = {'filePath': filePath, 'fileName': fileName, 'fileTypeId': fileTypeId}
+        elif egaAccession.startswith('EGAR'):
+            # run object
+            # reformat file json
+            NewFiles = {}
+            for file in files:
+                fileName, filePath = files[file]['encryptedName'], files[file]['filePath']
+                assert fileName[-4:] == '.gpg'
+                fileName = fileName[:-4]
+                NewFiles[file] = {'filePath': filePath, 'fileName': fileName}
         if WorkingDir in ['', 'NULL', None, 'None']:
             Error.append('Working directory does not have a valid Id')
         if os.path.isdir(WorkingDir) == False:
@@ -2872,7 +2961,40 @@ def EditSubmittedStatus(CredentialFile, DataBase, Table, Alias, Box):
             conn.commit()
     conn.close()            
 
+
+
+def UpdateSubmittedStatus(CredentialFile, DataBase, Table, Box):
+    '''
+    (str, str, str, str) -> None
     
+    Connect to submission Database using CredentialFile and update Status to SUBMITTED
+    for all aliases in Table that are already registered in Box and have an egaAccessionId
+    but for which files needed to be re-uploaded. Status is updated from submit to SUBMITTED 
+    '''
+    
+    # connect to submission database
+    conn = EstablishConnection(CredentialFile, DataBase)
+    cur = conn.cursor()
+        
+    # update table        
+    try:
+        cur.execute('SELECT {0}.alias, {0}.egaAccessionId FROM {0} WHERE {0}.Status=\"submit\" AND {0}.submissionStatus=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(Table, Box))
+        # extract all information 
+        Data = cur.fetchall()
+    except:
+        # record error message
+        Data = []
+    
+    if len(Data) != 0:
+        for i in Data:
+            alias, accession = i[0], i[1]
+            # check that accession exists and object is already registered
+            if accession.startswith('EGA'):
+                # object already registered update status submit --> SUBMITTED 
+                cur.execute('UPDATE {0} SET {0}.Status=\"SUBMITTED\" WHERE {0}.alias=\"{1}\" AND {0}.egaAccessionId=\"{2}\" AND {0}.Status=\"submit\" AND {0}.submissionStatus=\"SUBMITTED\" AND {0}.egaBox=\"{3}\"'.format(Table, alias, accession, Box))  
+                conn.commit()
+    conn.close()
+
 # use this function to re-uploaded registered files
 def ReUploadRegisteredFiles(args):
     '''
@@ -2885,11 +3007,16 @@ def ReUploadRegisteredFiles(args):
     
     # check action to be performed
     if args.action == 'reupload':
-        # grab alias and EGA accessions from metadata database, create a dict {alias: accession}
-        Registered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.table)
-    
-        # get the list of aliases from file
-        # aliases cannot be mixed between analyses and runs object
+        # get analysis_file_types enumerations
+        Enums = ListEnumerations(args.myscript, args.mypython)
+        analysis_enums = Enums['AnalysisFileTypes']
+        
+        # grab alias and EGA accessions from metadata database, create a dict {alias: accession} for analysis objects
+        AnalysesRegistered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.analysistable)
+        # grab alias and EGA accessions from metadata database, create a dict {alias: accession} for run objects
+        RunsRegistered = ExtractAccessions(args.credential, args.metadatadb, args.box, args.runstable)
+        
+        # get the list of aliases, egaAccessionId from file
         if args.aliasfile:
             try:
                 infile = open(args.aliasfile)
@@ -2902,12 +3029,22 @@ def ReUploadRegisteredFiles(args):
     
         # change status of registered aliases to encrypt
         if len(Aliases) != 0:
-            for alias in Aliases:
-                # make sure the object is already registered
-                if alias in Registered:
-                    # change status SUBMITTED --> encrypt and create working directory if doesn't exist    
-                    EditSubmittedStatus(args.credential, args.subdb, args.table, alias, args.box)
-        
+            for i in Aliases:
+                i = list(map(lambda x: x.strip(), i.split()))
+                alias, egaAccession = i[0], i[1]
+                if egaAccession.startswith('EGAZ'):
+                    # analysis object
+                    # make sure the object is already registered
+                    if alias in AnalysesRegistered:
+                        # change status SUBMITTED --> encrypt and create working directory if doesn't exist    
+                        EditSubmittedStatus(args.credential, args.subdb, args.analysistable, alias, args.box, analysis_enums)
+                elif egaAccession.startswith('EGAR'):
+                    # runs object
+                    # make sure the object is already registered
+                    if alias in RunsRegistered:
+                        # change status SUBMITTED --> encrypt and create working directory if doesn't exist    
+                        EditSubmittedStatus(args.credential, args.subdb, args.runstable, alias, args.box, analysis_enums)
+            
             # the following is run through the main tool
             # 1. encrypt new files only if diskspace is available. update status encrypt --> encrypting
             # check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
@@ -2919,34 +3056,12 @@ def ReUploadRegisteredFiles(args):
         
             # 4. form json and store in db and update status --> submit
             # file objects with submit status already registered are filtered out and not submitted
-            
-            
     elif args.action == 'update':
-        # change status submit --> SUBMITTED when re-upload of registered file objects is done
-        # connect to db
-        conn = EstablishConnection(args.credential, args.subdb)
-        cur = conn.cursor()
-        
-        try:
-            cur.execute('SELECT {0}.alias, {0}.egaAccessionId FROM {0} WHERE {0}.Status=\"submit\" AND {0}.submissionStatus=\"SUBMITTED\" AND {0}.egaBox=\"{1}\"'.format(args.table, args.box))
-            # extract all information 
-            Data = cur.fetchall()
-        except:
-            # record error message
-            Data = []
-    
-        if len(Data) != 0:
-            for i in Data:
-                alias, accession = i[0], i[1]
-                # check that accession exists and object is already registered
-                if accession.startswith('EGA'):
-                    # object already registered update status submit --> SUBMITTED 
-                    cur.execute('UPDATE {0} SET {0}.Status=\"SUBMITTED\" WHERE {0}.alias=\"{1}\" AND {0}.egaAccessionId=\"{2}\" AND {0}.Status=\"submit\" AND {0}.submissionStatus=\"SUBMITTED\" AND {0}.egaBox=\"{3}\"'.format(args.table, alias, accession, args.box))  
-                    conn.commit()
-        conn.close()
-        
-        
-  
+        # change status submit --> SUBMITTED when re-upload of files for analysis objects is done
+        UpdateSubmittedStatus(args.credential, args.subdb, args.analysistable, args.box)
+        # change status submit --> SUBMITTED when re-upload of files for runs objects is done
+        UpdateSubmittedStatus(args.credential, args.subdb, args.runstable, args.box)
+
 # use this function to list files on the staging servers
 def FileInfoStagingServer(args):
     '''
@@ -2995,7 +3110,6 @@ if __name__ == '__main__':
 
     # form analyses to EGA       
     FormJsonParser = subparsers.add_parser('FormJson', help ='Form Analyses json for submission to EGA', parents = [parent_parser])
-    #FormJsonParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     FormJsonParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     FormJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
     FormJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
@@ -3015,7 +3129,6 @@ if __name__ == '__main__':
 
     # check encryption
     CheckEncryptionParser = subparsers.add_parser('CheckEncryption', help='Check that encryption is done for a given alias', parents = [parent_parser])
-    #CheckEncryptionParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     CheckEncryptionParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckEncryptionParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckEncryptionParser.add_argument('-o', '--Object', dest='object', choices=['analyses', 'runs'], help='Object files to encrypt', required=True)
@@ -3024,7 +3137,6 @@ if __name__ == '__main__':
     
     # check upload
     CheckUploadParser = subparsers.add_parser('CheckUpload', help='Check that upload is done for a given alias', parents = [parent_parser])
-    #CheckUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     CheckUploadParser.add_argument('-t', '--Table', dest='table', default='Analyses', help='Database table. Default is Analyses')
     CheckUploadParser.add_argument('-a', '--Alias', dest='alias', help='Object alias', required=True)
     CheckUploadParser.add_argument('-j', '--Jobs', dest='jobnames', help='Colon-separated string of job names used for uploading all files under a given alias', required=True)
@@ -3034,7 +3146,6 @@ if __name__ == '__main__':
     
     # register analyses to EGA       
     RegisterObjectParser = subparsers.add_parser('RegisterObject', help ='Submit Analyses json to EGA', parents = [parent_parser])
-    #RegisterObjectParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
     RegisterObjectParser.add_argument('-t', '--Table', dest='table', help='Submission database table', required=True)
     RegisterObjectParser.add_argument('-o', '--Object', dest='object', choices=['samples', 'analyses', 'experiments', 'datasets', 'policies', 'studies', 'dacs', 'runs'], help='EGA object to register', required=True)
     RegisterObjectParser.add_argument('--Portal', dest='portal', default='https://ega.crg.eu/submitterportal/v1', help='EGA submission portal. Default is https://ega.crg.eu/submitterportal/v1')
@@ -3046,15 +3157,16 @@ if __name__ == '__main__':
     StagingServerParser.add_argument('-at', '--AnalysesTable', dest='analysestable', default='Analyses', help='Submission database table. Default is Analyses')
     StagingServerParser.add_argument('-st', '--StagingTable', dest='stagingtable', default='StagingServer', help='Submission database table. Default is StagingServer')
     StagingServerParser.add_argument('-ft', '--FootprintTable', dest='footprinttable', default='FootPrint', help='Submission database table. Default is FootPrint')
-    #StagingServerParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box of the staging server where files are uploaded')
     StagingServerParser.set_defaults(func=FileInfoStagingServer)
    
     # re-upload registered files that cannot be archived       
     ReUploadParser = subparsers.add_parser('ReUploadFiles', help ='Encrypt and re-upload files that are registered but cannot be archived', parents = [parent_parser])
     ReUploadParser.add_argument('-a', '--Action', dest='action', choices=['reupload', 'update'], help='Action to be performed: set status to encrypt if reupload or set status to SUBMITTED if update', required=True)
-    #ReUploadParser.add_argument('-b', '--Box', dest='box', choices=['ega-box-12', 'ega-box-137', 'ega-box-1269'], help='Box where samples will be registered', required=True)
-    ReUploadParser.add_argument('-t', '--Table', dest='table', help='Database table', required=True)
-    ReUploadParser.add_argument('--Alias', dest='aliasfile', help='File with aliases of files that need to be re-uploaded')
+    ReUploadParser.add_argument('-at', '--AnalysisTable', dest='analysistable', help='Analysis Database table', default='Analyses')
+    ReUploadParser.add_argument('-rt', '--RunsTable', dest='runstable', help='Runs Database table', default='Runs')
+    ReUploadParser.add_argument('--Alias', dest='aliasfile', help='Two-column tab-delimited file with aliases and egaAccessionId of files that need to be re-uploaded')
+    ReUploadParser.add_argument('--MyScript', dest='myscript', default= '/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/Gaea.py', help='Path the EGA submission script. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/Submission_Tools/Gaea.py')
+    ReUploadParser.add_argument('--MyPython', dest='mypython', default='/.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6', help='Path the python version. Default is /.mounts/labs/PDE/Modules/sw/python/Python-3.6.4/bin/python3.6')
     ReUploadParser.set_defaults(func=ReUploadRegisteredFiles)
 
     # get arguments from the command line
