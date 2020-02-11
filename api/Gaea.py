@@ -812,6 +812,7 @@ def ExtractContigNamesFromTSV(file):
                 contig = contig.lower()
             chromos.append(contig)
     infile.close()
+    chromos = list(set(chromos))
     return chromos
     
     
@@ -976,7 +977,6 @@ def FormatJson(D, Object, MyScript, MyPython):
                                     values = [chromoTonames[i] + suffix for i in contigs if i in chromoTonames]
                                     # add chromosome reference info
                                     J['chromosomeReferences'] = [{"value": Enums['ReferenceChromosomes'][i], "label": namesTochromo[i.replace(suffix, '')]} for i in values if i in Enums['ReferenceChromosomes']]  
-                    
                     elif Object == 'runs':
                         # loop over file name
                         for filePath in files:
