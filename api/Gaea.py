@@ -363,7 +363,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                         submissionStatus = ObjectCreation.json()['response']['result'][0]['status']
                     except:
                         # record error message
-                        RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot create an object', 'Error') 
+                        error = ObjectCreation.json()['header']['userMessage']
+                        RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot create an object: {0}'.format(error), 'Error') 
                     else:
                         # store submission json and status (DRAFT) in db table
                         RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], submissionStatus, 'Status') 
@@ -374,7 +375,8 @@ def RegisterObjects(CredentialFile, DataBase, Table, Box, Object, Portal):
                             ObjectStatus = ObjectValidation.json()['response']['result'][0]['status']
                             errorMessages = CleanUpError(ObjectValidation.json()['response']['result'][0]['validationErrorMessages'])
                         except:
-                            RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain validation status', 'Error')
+                            error = ObjectValidation.json()['header']['userMessage'] + ';' + ObjectValidation.json()['header']['developerMessage']
+                            RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], 'Cannot obtain validation status: {0}'.format(error), 'Error')
                         else:
                             # record error messages
                             RecordMessage(CredentialFile, DataBase, Table, Box, J["alias"], errorMessages, 'Error')
