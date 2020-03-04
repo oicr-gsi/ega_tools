@@ -456,11 +456,21 @@ def DownloadMetadata(args):
     cur.execute('SHOW TABLES')
     dbTables = [i[0] for i in cur]
        
+    conn.close()
+    
+    
+    
     # make a list of table names parallel to Columns list and to object list
     TableNames =  ['Studies', 'Runs', 'Samples', 'Experiments', 'Datasets', 'Analyses', 'Policies', 'Dacs', 'Datasets_RunsAnalysis', 'Analyses_Samples']
     
     # create or update table
     for i in range(len(TableNames)):
+        # connect to the database
+        conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd,
+                               db = DbName, charset = "utf8", port=3306,
+                               unix_socket='/var/run/mysqld/mysqld.sock')
+        cur = conn.cursor()
+                
         # create table if doesn't exist
         if TableNames[i] not in dbTables:
             if TableNames[i] not in ['Datasets_RunsAnalysis', 'Analyses_Samples']:
@@ -482,8 +492,15 @@ def DownloadMetadata(args):
                 cur.execute('DELETE FROM {0} WHERE {0}.egaBox=\"{1}\"'.format(TableNames[i], args.box))
                 conn.commit()
             print('deleting rows for {0} in {1}'.format(args.box, TableNames[i]))
+        
+        conn.close()
     
+       
     
+    # connect to the database
+    conn = pymysql.connect(host = DbHost, user = DbUser, password = DbPasswd,
+                           db = DbName, charset = "utf8", port=3306,
+                           unix_socket='/var/run/mysqld/mysqld.sock')
     # open new cursor to instert data into tables
     cur = conn.cursor()
     
@@ -524,6 +541,9 @@ def DownloadMetadata(args):
             conn.commit()
     print('Inserting data into Analyses_Samples table')
     for erz_id in AnalysisToSample:
+        # the same samples could be linked to the same study multiple times
+        # remove duplicate sample Ids
+        AnalysisToSample[erz_id] = list(set(AnalysisToSample[erz_id]))
         for ers_id in AnalysisToSample[erz_id]:
             cur.execute('INSERT INTO Analyses_Samples (analysisId, sampleId, egaBox) VALUES {0}'.format((erz_id, ers_id, args.box)))
             conn.commit()
