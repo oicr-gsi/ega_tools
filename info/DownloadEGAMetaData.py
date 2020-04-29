@@ -305,6 +305,12 @@ def DownloadMetadata(args):
 
     URL = "https://ega.crg.eu/submitterportal/v1"
 
+    #URL = "https://ega-archive.org/submission-api/v1"
+
+
+    
+
+
     LogInCmd = "curl -X POST " + URL + "/login -d username=" + UserName + " --data-urlencode password=\"" + MyPassWord + "\"" + " -d loginType=\"submitter\""
     # extract data from call and convert str to dict
     LogData = subprocess.check_output(LogInCmd, shell=True)
@@ -316,6 +322,10 @@ def DownloadMetadata(args):
 
     # make a list of objects of interest
     Objects = ["studies", "runs", "samples", "experiments", "datasets", "analyses", "policies", "dacs"]
+
+    #URL = "https://ega-archive.org/metadata/v2"
+
+
 
     # make a parallel list of dicts for each object in list Objects
     MetaData = []
