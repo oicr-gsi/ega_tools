@@ -161,7 +161,15 @@ def DownloadMetadata(Username, Password, URL, Object, Count, chunk_size):
     CloseAPIConnection(Token, URL)
     
     # make a list of accession Id
-    accessions = [i['egaAccessionId'] for i in L]
+    if Object != 'experiments':
+        accessions = [i['egaAccessionId'] for i in L]
+    else:
+        accessions = []
+        for i in L:
+            if i['egaAccessionId'] != None:
+                accessions.append(i['egaAccessionId'])
+            else:
+                accessions.extend(i['egaAccessionIds'])
     assert len(accessions) == Count[Object]
     return L
    
@@ -216,7 +224,12 @@ def ExtractInfo(Metadata, Object):
         # loop over relevant keys
         for j in Info:
             if d[j] == None:
-                m[j] = d[j]
+                # ebiId is sometimes assigned to None upon submission
+                # assign a random string, gets replaced once EGA updates
+                if j == 'ebiId':
+                    m[j] = str(uuid.uuid4())
+                else:
+                    m[j] = d[j]
             elif type(d[j]) == list:
                 if len(d[j]) == 0:
                     m[j] = None
@@ -234,10 +247,6 @@ def ExtractInfo(Metadata, Object):
                 elif j == 'submitterId':
                     m['egaBox'] = d[j]
                     m[j] = d[j]
-                # ebiId is sometimes assigned to None upon submission
-                # assign a random string, gets replaced once EGA updates
-                elif j == 'ebiId' and d[j] == None:
-                    m[j] = str(uuid.uuid4())
                 elif j == 'egaAccessionId':
                     # if egaAccessionId is None, it can be retrieved from the list of Ids
                     if d[j] == None and 'egaAccessionIds' in d:
@@ -549,18 +558,27 @@ def InstertInfoLinktable(CredentialFile, TableName, D, box):
     conn.close()
 
 
-def GetUniqueRecords(L):
+def GetUniqueRecords(L, Object):
     '''
-    (list) -> list
+    (list, str) -> list
     
     Return the list of unique dictionaries with metadata.
     A single record is kept when duplicate entries with same egAccessionId   
     '''
 
     D = {}
-    for i in L:
-        accession = i['egaAccessionId']
-        D[accession] = i
+    # experiment egaAccessionId can be either egaAccessionId or egaAccessionIds
+    if Object != 'experiments':
+        for i in L:
+            accession = i['egaAccessionId']
+            D[accession] = i
+    else:
+        for i in L:
+            if i['egaAccessionId'] != None:
+                accession = i['egaAccessionId']
+            else:
+                accession = i['egaAccessionIds'][0]
+            D[accession] = i
     K = [D[i] for i in D]
     return K
 
@@ -586,7 +604,7 @@ def CollectMetadata(CredentialFile, box, Object, chunk_size, URL="https://ega-ar
         print('downloaded {0} metadata from the API'.format(Object))
    
         # keep records with unique accessions
-        L = GetUniqueRecords(M)
+        L = GetUniqueRecords(M, Object)
         if len(L) != len(M):
             print('removed {0} duplicate records'.format(Object))
                
