@@ -133,7 +133,7 @@ def GetUpperLimit(Count, chunk_size):
         u = i + 1
     return u    
 
-
+    
 def DownloadMetadata(Username, Password, URL, Object, Count, chunk_size):
     '''
     (str, str, str, str, dict, int) -> list
@@ -144,9 +144,6 @@ def DownloadMetadata(Username, Password, URL, Object, Count, chunk_size):
     
     URL = FormatURL(URL)
     
-    # connect to API
-    Token = ConnectToAPI(Username, Password, URL)
-    headers = {'X-Token': Token}
     # collect all objects  
     L = []
     
@@ -155,10 +152,14 @@ def DownloadMetadata(Username, Password, URL, Object, Count, chunk_size):
     
     # download objects in chuncks of chunk_size
     for i in range(0, right):
+        # connect to API
+        Token = ConnectToAPI(Username, Password, URL)
+        headers = {'X-Token': Token}
+        #print(i, right, Count[Object], Token)
         response = requests.get(URL + Object + '?status=SUBMITTED&skip={0}&limit={1}'.format(i, chunk_size), headers=headers)
         L.extend(response.json()['response']['result'])
-    # close connection
-    CloseAPIConnection(Token, URL)
+        # close connection
+        CloseAPIConnection(Token, URL)
     
     # make a list of accession Id
     if Object != 'experiments':
@@ -172,8 +173,8 @@ def DownloadMetadata(Username, Password, URL, Object, Count, chunk_size):
                 accessions.extend(i['egaAccessionIds'])
     assert len(accessions) == Count[Object]
     return L
-   
-    
+
+
 def RelevantInfo():
     '''
     () -> dict
