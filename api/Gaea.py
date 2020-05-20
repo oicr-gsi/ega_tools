@@ -1807,12 +1807,12 @@ def CheckEgaAccessionId(CredentialFile, SubDataBase, MetDataBase, Object, Table,
 
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, filePaths, fileNames, KeyRing, OutDir, Queue, Mem, MyScript):
+def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, filePaths, fileNames, KeyRing, OutDir, Mem, MyScript):
     '''
     (file, str, str, str, str, str, list, list, str, str, str, int, str) -> list
     Take the file with Credential to connect to db, a given alias for Object
     for Box in Table, lists with file paths and names, the path to the encryption
-    keys, the directory where encrypted and cheksums are saved, the queue and 
+    keys, the directory where encrypted and cheksums are saved, and 
     memory allocated to run the jobs and return a list of exit codes specifying
     if the jobs were launched successfully or not
     '''
@@ -1865,18 +1865,18 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, file
                     JobName1 = 'Md5sum.original.{0}'.format(alias + '__' + fileNames[i])
                     # check if 1st file in list
                     if i == 0:
-                        QsubCmd1 = "qsub -b y -q {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(Queue, Mem, JobName1, logDir, BashScript1)
+                        QsubCmd1 = "qsub -b y -P gsi -l h_vmem={0}g -N {1} -e {2} -o {2} \"bash {3}\"".format(Mem, JobName1, logDir, BashScript1)
                     else:
                         # launch job when previous job is done
-                        QsubCmd1 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName1, logDir, BashScript1)
+                        QsubCmd1 = "qsub -b y -P gsi -hold_jid {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(JobNames[-1], Mem, JobName1, logDir, BashScript1)
                     job1 = subprocess.call(QsubCmd1, shell=True)
                                    
                     JobName2 = 'Encrypt.{0}'.format(alias + '__' + fileNames[i])
-                    QsubCmd2 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName1, Mem, JobName2, logDir, BashScript2)
+                    QsubCmd2 = "qsub -b y -P gsi -hold_jid {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(JobName1, Mem, JobName2, logDir, BashScript2)
                     job2 = subprocess.call(QsubCmd2, shell=True)
                             
                     JobName3 = 'Md5sum.encrypted.{0}'.format(alias + '__' + fileNames[i])
-                    QsubCmd3 = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobName2, Mem, JobName3, logDir, BashScript3)
+                    QsubCmd3 = "qsub -b y -P gsi -hold_jid {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(JobName2, Mem, JobName3, logDir, BashScript3)
                     job3 = subprocess.call(QsubCmd3, shell=True)
                             
                     # store job names and exit codes
@@ -1893,7 +1893,7 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, file
         # launch qsub directly, collect job names and exit codes
         JobName = 'CheckEncryption.{0}'.format(alias)
         # launch job when previous job is done
-        QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
+        QsubCmd = "qsub -b y -P gsi -hold_jid {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(JobNames[-1], Mem, JobName, logDir, BashScript)
         job = subprocess.call(QsubCmd, shell=True)
         # store the exit code (but not the job name)
         JobExits.append(job)          
@@ -1903,13 +1903,13 @@ def EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, file
 
 
 # use this function to encrypt files and update status to encrypting
-def EncryptFiles(CredentialFile, DataBase, Table, Object, Box, KeyRing, Queue, Mem, DiskSpace, MyScript):
+def EncryptFiles(CredentialFile, DataBase, Table, Object, Box, KeyRing, Mem, DiskSpace, MyScript):
     '''
     (file, str, str, str, str, str, str, int, str, str) -> None
     Take a file with credentials to connect to Database, encrypt files of aliases
     of Object (analyses or runs) only if DiskSpace (in TB) is available in scratch
     after encryption and update file status to encrypting if encryption and md5sum
-    jobs are successfully launched using the specified queue and memory
+    jobs are successfully launched using required memory 
     '''
     
     # create a list of aliases for encryption 
@@ -1963,7 +1963,7 @@ def EncryptFiles(CredentialFile, DataBase, Table, Object, Box, KeyRing, Queue, M
                     conn.close()
 
                     # encrypt and run md5sums on original and encrypted files and check encryption status
-                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, filePaths, fileNames, KeyRing, WorkingDir, Queue, Mem, MyScript)
+                    JobCodes = EncryptAndChecksum(CredentialFile, DataBase, Table, Box, alias, Object, filePaths, fileNames, KeyRing, WorkingDir, Mem, MyScript)
                     # check if encription was launched successfully
                     if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
                         # store error message, reset status encrypting --> encrypt
@@ -2073,13 +2073,12 @@ def CheckEncryption(CredentialFile, DataBase, Table, Box, Alias, Object, JobName
         conn.close()
 
 # use this script to launch qsubs to encrypt the files and do a checksum
-def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, Object, Box, Queue, Mem, UploadMode, MyScript, **KeyWordParams):
+def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase, Table, Object, Box, Mem, UploadMode, MyScript, **KeyWordParams):
     '''
     (str, dict, str, str, str, str, str, str, str, str, str, str, str, dict) -> list
     Take a files dictionary with file information for a given alias in Box, the file with 
     DataBase credentials, the Table names, the directory StagePath where to upload
-    the files in UploadMode, the directory FileDir where the command scripts are saved, the queue
-    name, memory and path to script to launch the jobs and return a list of
+    the files in UploadMode, the directory FileDir where the command scripts are saved, name, memory and path to script to launch the jobs and return a list of
     exit codes used for uploading the encrypted and md5 files 
     '''
     
@@ -2119,7 +2118,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             newfile.write(Cmd.format(UserName, MyPassword, StagePath))    
         # launch job directly for the 1st file only
         JobName = 'MakeDestinationDir.{0}'.format(alias)
-        QsubCmd = "qsub -b y -q {0} -N {1} -e {2} -o {2} \"bash {3}\"".format(Queue, JobName, logDir, BashScript)
+        QsubCmd = "qsub -b y -P gsi -N {0} -e {1} -o {1} \"bash {2}\"".format(JobName, logDir, BashScript)
         if JobName not in JobNames:
             job = subprocess.call(QsubCmd, shell=True)
             # record job name but not exit code.
@@ -2146,7 +2145,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
             # launch job directly
             JobName = 'Upload.{0}'.format(alias + '__' + fileName)
             # hold until previous job is done
-            QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
+            QsubCmd = "qsub -b y -P gsi -hold_jid {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(JobNames[-1], Mem, JobName, logDir, BashScript)
             job = subprocess.call(QsubCmd, shell=True)
             # store job exit code and name
             JobExits.append(job)
@@ -2175,7 +2174,7 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     # launch qsub directly, collect job names and exit codes
     JobName = 'CheckUpload.{0}'.format(alias)
     # launch job when previous job is done
-    QsubCmd = "qsub -b y -q {0} -hold_jid {1} -l h_vmem={2}g -N {3} -e {4} -o {4} \"bash {5}\"".format(Queue, JobNames[-1], Mem, JobName, logDir, BashScript)
+    QsubCmd = "qsub -b y -P gsi -hold_jid {0} -l h_vmem={1}g -N {2} -e {3} -o {3} \"bash {4}\"".format(JobNames[-1], Mem, JobName, logDir, BashScript)
     job = subprocess.call(QsubCmd, shell=True)
     # store the exit code (but not the job name)
     JobExits.append(job)          
@@ -2183,12 +2182,12 @@ def UploadAliasFiles(alias, files, StagePath, FileDir, CredentialFile, DataBase,
     return JobExits
 
 # use this function to upload the files
-def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, Box, Queue, Mem, UploadMode, Max, MaxFootPrint, MyScript, **KeyWordParams):
+def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, Box, Mem, UploadMode, Max, MaxFootPrint, MyScript, **KeyWordParams):
     '''
     (file, str, str, str, str, int, int, str) -> None
     Take the file with credentials to connect to the database and to EGA,
-    and upload files of aliases with upload status using specified
-    Queue, Memory and UploadMode and update status to uploading. 
+    and upload files of aliases with upload status using specified Memory and 
+    UploadMode and update status to uploading. 
     '''
     
     
@@ -2253,7 +2252,7 @@ def UploadObjectFiles(CredentialFile, DataBase, Table, Object, FootPrintTable, B
             conn.close()
             
             # upload files
-            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, Object, Box, Queue, Mem, UploadMode, MyScript, **KeyWordParams)
+            JobCodes = UploadAliasFiles(alias, files, StagePath, WorkingDir, CredentialFile, DataBase, Table, Object, Box, Mem, UploadMode, MyScript, **KeyWordParams)
                         
             # check if upload launched properly for all files under that alias
             if not (len(set(JobCodes)) == 1 and list(set(JobCodes))[0] == 0):
@@ -2792,14 +2791,14 @@ def CreateJson(args):
                    
             ## encrypt new files only if diskspace is available. update status encrypt --> encrypting
             ## check that encryption is done, store md5sums and path to encrypted file in db, update status encrypting -> upload or reset encrypting -> encrypt
-            EncryptFiles(args.credential, args.subdb, args.table, args.object, args.box, args.keyring, args.queue, args.memory, args.diskspace, args.myscript)
+            EncryptFiles(args.credential, args.subdb, args.table, args.object, args.box, args.keyring, args.memory, args.diskspace, args.myscript)
         
             ## upload files and change the status upload -> uploading 
             ## check that files have been successfully uploaded, update status uploading -> uploaded or rest status uploading -> upload
             if args.object == 'analyses':
-                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript, attributes = args.attributes)
+                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript, attributes = args.attributes)
             elif args.object == 'runs':
-                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.queue, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
+                UploadObjectFiles(args.credential, args.subdb, args.table, args.object, args.footprint, args.box, args.memory, args.uploadmode, args.max, args.maxfootprint, args.myscript)
             
             ## remove files with uploaded status. does not change status. keep status uploaded --> uploaded
             RemoveFilesAfterSubmission(args.credential, args.subdb, args.table, args.box, args.remove)
@@ -2816,7 +2815,7 @@ def CreateJson(args):
             # update status valid -> submit if no error or leep status --> and record errorMessage
             AddJsonToTable(args.credential, args.subdb, args.table, args.box, args.object, args.myscript, args.mypython)
 
-        
+
 # use this function to submit object metadata 
 def SubmitMetadata(args):
     '''
@@ -3069,8 +3068,7 @@ def FileInfoStagingServer(args):
     # summarize data into footprint table
     AddFootprintData(args.credential, args.subdb, args.stagingtable, args.footprinttable, args.box)
     
-    
-    
+
 if __name__ == '__main__':
 
     # create top-level parser
@@ -3108,7 +3106,6 @@ if __name__ == '__main__':
     FormJsonParser.add_argument('-p', '--Projects', dest='projects', default='AnalysesProjects', help='DataBase table. Default is AnalysesProjects')
     FormJsonParser.add_argument('-a', '--Attributes', dest='attributes', default='AnalysesAttributes', help='DataBase table. Default is AnalysesAttributes')
     FormJsonParser.add_argument('-k', '--Keyring', dest='keyring', default='/.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg', help='Path to the keys used for encryption. Default is /.mounts/labs/gsiprojects/gsi/Data_Transfer/Release/EGA/publickeys/public_keys.gpg')
-    FormJsonParser.add_argument('-q', '--Queue', dest='queue', default='production', help='Queue for encrypting files. Default is production')
     FormJsonParser.add_argument('-u', '--UploadMode', dest='uploadmode', default='aspera', choices=['lftp', 'aspera'], help='Use lftp of aspera for uploading files. Use aspera by default')
     FormJsonParser.add_argument('-d', '--DiskSpace', dest='diskspace', default=15, type=int, help='Free disk space (in Tb) after encyption of new files. Default is 15TB')
     FormJsonParser.add_argument('-f', '--FootPrint', dest='footprint', default='FootPrint', help='Database Table with footprint of registered and non-registered files. Default is Footprint')
